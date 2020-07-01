@@ -31,8 +31,9 @@ class AllIssues:
         return issues_per_repo
 
     def _print_repo_issue_with_last_event(self, pr=False):
+        issue_per_repo = self._issues_per_repo(pr)
         for repo in self.repos:
-            issues = self._issues_per_repo.get(repo.name, pr)
+            issues = issue_per_repo.get(repo.name, pr)
             if not issues:
                 sys.stderr.write('no issues for %s\n' % repo.name)
                 continue
