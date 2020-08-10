@@ -23,7 +23,7 @@ def parse_input(input_file):
 
 def process_eva_assemblies(eva_data, dbsnp_data):
     """
-    This method marks EVA assemblies as included exclude them based if they match any of the following rules.
+    This method marks EVA assemblies as included or excluded. Will exclude them if they match any of the following rules.
      - A different assembly exists in dbSNP data for the same species (taxid)
      - The assembly used in EVA is from a different species.
      - Multiple EVA assemblies exists and this one is either not the one supported by Ensembl or has fewer variants.
@@ -58,7 +58,7 @@ def process_eva_assemblies(eva_data, dbsnp_data):
         if len(assemblies_left) > 1:
             # We cannot release both assemblies so select the one associated with which supported by Ensembl.
             # If none are supported then release the one that has the most variants
-            ensembl_assocaited_assembly = [
+            ensembl_associated_assembly = [
                 local_assembly
                 for local_assembly in assemblies_left
                 if eva_data[taxid][local_assembly].get('Ensembl Assembly From Taxid') == local_assembly
@@ -93,7 +93,7 @@ def process_dbsnp_assemblies(eva_data, dbsnp_data):
 
 def write_output(output_file, eva_data, dbsnp_data):
     output_headers = [
-        'Source', 'Assembly', 'Taxid', 'number Of Study', 'Number Of Variants', 
+        'Source', 'Assembly', 'Taxid', 'Number Of Studies', 'Number Of Variants', 
         'Taxid From Assembly', 'Scientific Name From Assembly', 'Ensembl Assembly From Assembly', 
         'Taxid From Taxid', 'Scientific Name From Taxid', 'Ensembl Assembly From Taxid',
         'Decision to include', 'Reason'
