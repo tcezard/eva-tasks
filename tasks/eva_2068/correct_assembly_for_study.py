@@ -7,7 +7,7 @@ from ebi_eva_common_pyutils.mongo_utils import get_mongo_connection_handle
 
 
 def get_SHA1(variant_rec):
-    """Calculate the SHA1 digest from the refee the """
+    """Calculate the SHA1 digest from the ref, study, contig, start, ref, and alt attributes of the variant"""
     h = hashlib.sha1()
     keys = ['seq', 'study', 'contig', 'start', 'ref', 'alt']
     h.update('_'.join([str(variant_rec[key]) for key in keys]).encode())
@@ -15,6 +15,9 @@ def get_SHA1(variant_rec):
 
 
 def correct(mongo_user, mongo_password, mongo_host, study, reference_source, reference_dest):
+    """
+    Connect to mongodb and retrieve all variants the should be updated, Check their key and update them in bulk.
+    """
     with get_mongo_connection_handle(
             username=mongo_user,
             password=mongo_password,
@@ -36,7 +39,6 @@ def correct(mongo_user, mongo_password, mongo_host, study, reference_source, ref
             record_checked += 1
 
         print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
-
         result_insert = sve_collection.bulk_write(requests=insert_statements, ordered=False)
         print('There was %s new documents inserted' % result_insert.inserted_count)
         result_drop = sve_collection.bulk_write(requests=drop_statements, ordered=False)
