@@ -1,7 +1,17 @@
 #!/usr/bin/env python
+import hashlib
 from argparse import ArgumentParser
 
+import pymongo
 from ebi_eva_common_pyutils.mongo_utils import get_mongo_connection_handle
+
+
+def get_SHA1(variant_rec):
+    """Calculate the SHA1 digest from the refee the """
+    h = hashlib.sha1()
+    keys = ['seq', 'study', 'contig', 'start', 'ref', 'alt']
+    h.update('_'.join([str(variant_rec[key]) for key in keys]).encode())
+    return h.hexdigest().upper()
 
 
 def correct(mongo_user, mongo_password, mongo_host, study, reference_source, reference_dest):
@@ -10,13 +20,27 @@ def correct(mongo_user, mongo_password, mongo_host, study, reference_source, ref
             password=mongo_password,
             host=mongo_host
     ) as accessioning_mongo_handle:
-        results = accessioning_mongo_handle["eva_accession_sharded"]["submittedVariantEntity"].update_many(
-            filter={'study': study, 'seq': reference_source},
-            update={"$set": {'seq': reference_dest}},
-            upsert=False
-        )
-        print(results.raw_result)
-        print('There was %s documents matching and %s documents updated' % (results.matched_count, results.modified_count))
+        sve_collection = accessioning_mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
+        cursor = sve_collection.find({'study':study, 'seq': reference_source})
+        insert_statements = []
+        drop_statements = []
+        record_checked = 0
+        for variant in cursor:
+            # Ensure that the variant we are changing has the expected SHA1
+            original_id = get_SHA1(variant)
+            assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (variant['_id'], original_id)
+            variant['seq'] = reference_dest
+            variant['_id'] = get_SHA1(variant)
+            insert_statements.append(pymongo.InsertOne(variant))
+            drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
+            record_checked += 1
+
+        print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
+
+        result_insert = sve_collection.bulk_write(requests=insert_statements, ordered=False)
+        print('There was %s new documents inserted' % result_insert.inserted_count)
+        result_drop = sve_collection.bulk_write(requests=drop_statements, ordered=False)
+        print('There was %s old documents dropped' % result_drop.deleted_count)
 
 
 def main():

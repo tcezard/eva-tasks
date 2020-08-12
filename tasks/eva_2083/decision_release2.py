@@ -63,8 +63,8 @@ def process_eva_assemblies(eva_data, dbsnp_data):
                 for local_assembly in assemblies_left
                 if eva_data[taxid][local_assembly].get('Ensembl Assembly From Taxid') == local_assembly
             ]
-            if ensembl_assocaited_assembly:
-                assembly_to_keep = ensembl_assocaited_assembly[0]
+            if ensembl_associated_assembly:
+                assembly_to_keep = ensembl_associated_assembly[0]
                 reason = 'Multiple EVA assemblies, can only choose one, so chose one that match Ensembl'
             else:
                 assembly_to_keep = sorted(
