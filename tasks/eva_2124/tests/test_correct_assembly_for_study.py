@@ -25,17 +25,17 @@ class TestCorrectAssembly(TestCase):
         connection_handle.close()
 
         original_document = {
-            '_id': '098B7F0FD7D5D99FD9B1514FBE4B5C5A8294D561',
-            'seq': 'GCA_000002325.1',
-            'tax': 7425,
-            'study': 'PRJEB33514',
-            'contig': 'CM000915.2',
-            'start': 51524,
-            'ref': 'T',
-            'alt': 'A',
-            'accession': 7123539069,
+            '_id': '16261B7E16FD9AC7CB79D640736000F3C9FE2122',
+            'seq': 'GCA_000181335.3',
+            'tax': 9685,
+            'study': 'PRJEB30080',
+            'contig': 'B1',
+            'start': 150039652,
+            'ref': 'C',
+            'alt': 'T',
+            'accession': 5015497292,
             'version': 1,
-            'createdDate': datetime.fromisoformat('2020-06-24T15:20:46.533')
+            'createdDate': datetime.fromisoformat('2018-12-05T14:18:37.842')
         }
 
         self.connection_handle = get_mongo_connection_handle(username=self.username, password=self.password,
@@ -48,11 +48,10 @@ class TestCorrectAssembly(TestCase):
         self.connection_handle.close()
 
     def test_correct(self):
-        correct(self.username, self.password, self.host,
-                study='PRJEB33514', reference_source='GCA_000002325.1',
-                reference_dest='GCA_000002325.2')
-        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.2'}))
-        self.assertEqual(variant['_id'], 'CB5637C29FD1A9C3FA64D0C1EE2FC8B9147DEC47')
-        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.1'}))
+        correct(self.username, self.password, self.host, study='PRJEB33514', reference_source='GCA_000002305.1')
+        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000181335.3'}))
+        self.assertEqual(variant['contig'], 'CM001381.2')
+        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one(
+            {'seq': 'GCA_000181335.3', 'contig': 'B1'}))
         self.assertIsNone(variant)
 
