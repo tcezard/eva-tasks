@@ -117,3 +117,14 @@ class TestCorrectAssembly(TestCase):
         variants = (self.connection_handle[self.eva_database][self.variant_collection].find({'seq': 'GCA_000002305.1'}))
         for variant in variants:
             self.assertTrue(variant['contig'] in ['CM000377.2', '21', 'CM000387.2'])
+
+    def test_chunk_size(self):
+        fixed = correct(self.username, self.password, self.host, studies=['PRJEB9799', 'PRJEB24630', 'PRJEB27771'],
+                        assembly_accession='GCA_000002305.1', chunk_size=1)
+        self.assertEqual(fixed, 2)
+        variants = (self.connection_handle[self.eva_database][self.variant_collection].find({'seq': 'GCA_000002305.1'}))
+        for variant in variants:
+            self.assertTrue(variant['contig'] in ['CM000377.2', 'CM000397.2', 'CM000387.2'])
+        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one(
+            {'seq': 'GCA_000181335.3', 'contig': '1'}))
+        self.assertIsNone(variant)

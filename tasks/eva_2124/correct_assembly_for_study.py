@@ -37,7 +37,7 @@ def get_genbank(synonym_dictionaries, contig):
     raise Exception('could not find synonym for contig {}'.format(contig))
 
 
-def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession):
+def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, chunk_size = 1000):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
@@ -54,6 +54,8 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession)
         drop_statements = []
         record_checked = 0
         already_genbanks = 0
+        total_inserted = 0
+        total_dropped = 0
         for variant in cursor:
             # Ensure that the variant we are changing has the expected SHA1
             original_id = get_SHA1(variant)
@@ -67,17 +69,30 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession)
                 insert_statements.append(pymongo.InsertOne(variant))
                 drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
             record_checked += 1
+            if len(insert_statements) >= chunk_size:
+                total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
+                                                             total_dropped, total_inserted)
 
+        if len(insert_statements) > 0:
+            total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
+                                                         total_dropped, total_inserted)
         print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
         print('{} of those documents had already a genbank contig. If the projects were all affected, '
               'that number should be 0, but even if it is not, there is nothing else to fix'.format(already_genbanks))
 
-        # TODO should we use several chunks? as I understand this, it will hold whole studies in a python list
-        result_insert = sve_collection.bulk_write(requests=insert_statements, ordered=False)
-        print('There was %s new documents inserted' % result_insert.inserted_count)
-        result_drop = sve_collection.bulk_write(requests=drop_statements, ordered=False)
-        print('There was %s old documents dropped' % result_drop.deleted_count)
-        return result_insert.inserted_count
+        print('There was %s new documents inserted' % total_inserted)
+        print('There was %s old documents dropped' % total_dropped)
+        return total_inserted
+
+
+def execute_bulk(drop_statements, insert_statements, sve_collection, total_dropped, total_inserted):
+    result_insert = sve_collection.bulk_write(requests=insert_statements, ordered=False)
+    total_inserted += result_insert.inserted_count
+    result_drop = sve_collection.bulk_write(requests=drop_statements, ordered=False)
+    total_dropped += result_drop.deleted_count
+    insert_statements.clear()
+    drop_statements.clear()
+    return total_inserted, total_dropped
 
 
 def main():
