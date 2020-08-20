@@ -1,25 +1,23 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
+from urllib.parse import quote_plus
 
 import pymongo
 
 
 def get_mongo_connection_handle(host, port=27017, username=None, password=None, authentication_database="admin", **kwargs) -> pymongo.MongoClient:
-    return pymongo.MongoClient(
-        host=host,
-        port=port,
-        username=username,
-        password=password,
-        authSource=authentication_database,
-        **kwargs
-    )
+    mongo_connection_uri = "mongodb://"
+    if username and password:
+        mongo_connection_uri += '%s:%s@' % (username, quote_plus(password))
+    mongo_connection_uri += '%s:%s/%s' % (host, port, authentication_database)
+    return pymongo.MongoClient(mongo_connection_uri)
 
 
 def check_mapping_weight(mongo_host, database_name, username, password, reference_accession):
     """
     Connect to mongodb and retrieve all variants the should be updated, Check their key and update them in bulk.
     """
-    with get_mongo_connection_handle(mongo_host) as accessioning_mongo_handle:
+    with get_mongo_connection_handle(mongo_host, username=username, password=password) as accessioning_mongo_handle:
         dbsnp_cve_collection = accessioning_mongo_handle[database_name]["dbsnpClusteredVariantEntity"]
         cursor = dbsnp_cve_collection.find({'mapWeight': {'$gt': 1}, 'asm': reference_accession})
         count_variants = 0
