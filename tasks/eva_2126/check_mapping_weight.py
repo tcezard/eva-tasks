@@ -1,13 +1,7 @@
 #!/usr/bin/env python
-import datetime
 from argparse import ArgumentParser
 
 import pymongo
-
-
-def datetime_converter(o):
-    if isinstance(o, datetime.datetime):
-        return o.__str__()
 
 
 def get_mongo_connection_handle(host, port=27017, username=None, password=None, authentication_database="admin", **kwargs) -> pymongo.MongoClient:
