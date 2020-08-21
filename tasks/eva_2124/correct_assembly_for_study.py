@@ -5,6 +5,7 @@ import pymongo
 from urllib.parse import quote_plus
 from tasks.eva_2124.load_synonyms import load_synonyms_for_assembly
 
+
 def get_SHA1(variant_rec):
     """Calculate the SHA1 digest from the seq, study, contig, start, ref, and alt attributes of the variant"""
     h = hashlib.sha1()
@@ -54,42 +55,72 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
             host=mongo_host
     ) as accessioning_mongo_handle:
         sve_collection = accessioning_mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
-        cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
         synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
+        assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
+        return do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size)
 
-        insert_statements = []
-        drop_statements = []
-        record_checked = 0
-        already_genbanks = 0
-        total_inserted = 0
-        total_dropped = 0
-        for variant in cursor:
-            # Ensure that the variant we are changing has the expected SHA1
-            original_id = get_SHA1(variant)
-            assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (variant['_id'], original_id)
+
+def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession):
+    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
+    already_genbanks = 0
+    replaceables = 0
+    unreplaceable_variants = 0
+    unreplaceable_contigs = set()
+    for variant in cursor:
+        try:
             genbank, was_already_genbank = get_genbank(synonym_dictionaries, variant['contig'])
             if was_already_genbank:
                 already_genbanks += 1
             else:
-                variant['contig'] = genbank
-                variant['_id'] = get_SHA1(variant)
-                insert_statements.append(pymongo.InsertOne(variant))
-                drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
-            record_checked += 1
-            if len(insert_statements) >= chunk_size:
-                total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
-                                                             total_dropped, total_inserted)
+                replaceables += 1
+        except Exception:
+            unreplaceable_variants += 1
+            unreplaceable_contigs.add(variant['contig'])
 
-        if len(insert_statements) > 0:
+    if len(unreplaceable_contigs) > 0:
+        raise Exception(
+            'Aborting replacement (no changes were done).'
+            ' With the provided assembly_report, the next {} contigs (present in {} variants) can not be replaced: {}'
+            .format(len(unreplaceable_contigs), unreplaceable_variants, unreplaceable_contigs))
+    else:
+        print("Check ok. {} variants' contigs will be changed to genbank, and {} have already genbank contigs.")
+
+
+def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size):
+    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
+    insert_statements = []
+    drop_statements = []
+    record_checked = 0
+    already_genbanks = 0
+    total_inserted = 0
+    total_dropped = 0
+    print("Performing updates...")
+    for variant in cursor:
+        # Ensure that the variant we are changing has the expected SHA1
+        original_id = get_SHA1(variant)
+        assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (
+            variant['_id'], original_id)
+        genbank, was_already_genbank = get_genbank(synonym_dictionaries, variant['contig'])
+        if was_already_genbank:
+            already_genbanks += 1
+        else:
+            variant['contig'] = genbank
+            variant['_id'] = get_SHA1(variant)
+            insert_statements.append(pymongo.InsertOne(variant))
+            drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
+        record_checked += 1
+        if len(insert_statements) >= chunk_size:
             total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
                                                          total_dropped, total_inserted)
-        print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
-        print('{} of those documents had already a genbank contig. If the projects were all affected, '
-              'that number should be 0, but even if it is not, there is nothing else to fix'.format(already_genbanks))
-
-        print('There was %s new documents inserted' % total_inserted)
-        print('There was %s old documents dropped' % total_dropped)
-        return total_inserted
+    if len(insert_statements) > 0:
+        total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
+                                                     total_dropped, total_inserted)
+    print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
+    print('{} of those documents had already a genbank contig. If the projects were all affected, '
+          'that number should be 0, but even if it is not, there is nothing else to fix'.format(already_genbanks))
+    print('There was %s new documents inserted' % total_inserted)
+    print('There was %s old documents dropped' % total_dropped)
+    return total_inserted
 
 
 def execute_bulk(drop_statements, insert_statements, sve_collection, total_dropped, total_inserted):
