@@ -87,7 +87,7 @@ class TestCorrectAssembly(TestCase):
 
     def test_correct(self):
         fixed = correct(None, None, self.host, studies=['PRJEB30080'],
-                        assembly_accession='GCA_000181335.3')
+                        assembly_accession='GCA_000181335.3', mongo_database='eva_accession_sharded')
         self.assertEqual(fixed, 1)
         variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000181335.3'}))
         self.assertEqual(variant['contig'], 'CM001381.2')
@@ -97,7 +97,7 @@ class TestCorrectAssembly(TestCase):
 
     def test_already_genbank(self):
         fixed = correct(None, None, self.host, studies=['PRJEB9799', 'PRJEB24630', 'PRJEB27771'],
-                        assembly_accession='GCA_000002305.1')
+                        assembly_accession='GCA_000002305.1', mongo_database='eva_accession_sharded')
         self.assertEqual(fixed, 2)
         variants = (self.connection_handle[self.eva_database][self.variant_collection].find({'seq': 'GCA_000002305.1'}))
         for variant in variants:
@@ -108,7 +108,7 @@ class TestCorrectAssembly(TestCase):
 
     def test_ignore_otherstudies(self):
         fixed = correct(None, None, self.host, studies=['PRJEB9799'],
-                        assembly_accession='GCA_000002305.1')
+                        assembly_accession='GCA_000002305.1', mongo_database='eva_accession_sharded')
         self.assertEqual(fixed, 1)
         variants = (self.connection_handle[self.eva_database][self.variant_collection].find({'seq': 'GCA_000002305.1'}))
         for variant in variants:
@@ -116,7 +116,7 @@ class TestCorrectAssembly(TestCase):
 
     def test_chunk_size(self):
         fixed = correct(None, None, self.host, studies=['PRJEB9799', 'PRJEB24630', 'PRJEB27771'],
-                        assembly_accession='GCA_000002305.1', chunk_size=1)
+                        assembly_accession='GCA_000002305.1', chunk_size=1, mongo_database='eva_accession_sharded')
         self.assertEqual(fixed, 2)
         variants = (self.connection_handle[self.eva_database][self.variant_collection].find({'seq': 'GCA_000002305.1'}))
         for variant in variants:
@@ -142,7 +142,7 @@ class TestCorrectAssembly(TestCase):
         self.connection_handle[self.eva_database][self.variant_collection].insert_one(unreplaceable_doc)
         try:
             fixed = correct(None, None, self.host, studies=['PRJEB9799', 'PRJEB24630', 'PRJEB27771'],
-                            assembly_accession='GCA_000002305.1')
+                            assembly_accession='GCA_000002305.1', mongo_database='eva_accession_sharded')
             self.fail("expected an exception but none was thrown")
         except Exception:
             variants = (self.connection_handle[self.eva_database][self.variant_collection].find(

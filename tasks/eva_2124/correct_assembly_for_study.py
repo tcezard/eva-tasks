@@ -45,7 +45,8 @@ def get_mongo_connection_handle_url(host, port=27017, username=None, password=No
     return pymongo.MongoClient(mongo_connection_uri)
 
 
-def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, assembly_report=None, chunk_size=1000):
+def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, mongo_database, assembly_report=None,
+            chunk_size=1000):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
@@ -54,7 +55,7 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
             password=mongo_password,
             host=mongo_host
     ) as accessioning_mongo_handle:
-        sve_collection = accessioning_mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
+        sve_collection = accessioning_mongo_handle[mongo_database]["submittedVariantEntity"]
         synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
         assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
         return do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size)
@@ -143,6 +144,8 @@ def main():
     argparse.add_argument('--mongo_user', help='user to connect to mongodb', required=False)
     argparse.add_argument('--mongo_password', help='password to connect to mongodb', required=False)
     argparse.add_argument('--mongo_host', help='host to connect to mongodb', required=True)
+    argparse.add_argument('--mongo_database', help='The DB where the submittedVariantEntity is stored',
+                          required=False, default='eva_accession_sharded')
     argparse.add_argument('--studies', help='The studies in the assembly to correct', required=True, nargs='+')
     argparse.add_argument('--assembly', help='The assembly accession of the entities that needs to be changed',
                           required=True)
@@ -150,7 +153,8 @@ def main():
                           required=False)
 
     args = argparse.parse_args()
-    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.assembly_report)
+    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.mongo_database,
+            args.assembly_report)
 
 
 if __name__ == "__main__":
