@@ -44,7 +44,7 @@ def get_mongo_connection_handle_url(host, port=27017, username=None, password=No
     return pymongo.MongoClient(mongo_connection_uri)
 
 
-def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, chunk_size=1000):
+def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, assembly_report=None, chunk_size=1000):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
@@ -55,7 +55,7 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
     ) as accessioning_mongo_handle:
         sve_collection = accessioning_mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
         cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
-        synonym_dictionaries = load_synonyms_for_assembly(assembly_accession)
+        synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
 
         insert_statements = []
         drop_statements = []
@@ -108,11 +108,13 @@ def main():
     argparse.add_argument('--mongo_password', help='password to connect to mongodb', required=False)
     argparse.add_argument('--mongo_host', help='host to connect to mongodb', required=True)
     argparse.add_argument('--studies', help='The studies in the assembly to correct', required=True, nargs='+')
-    argparse.add_argument('--assembly', help='the assembly accession of the entities that needs to be changed',
+    argparse.add_argument('--assembly', help='The assembly accession of the entities that needs to be changed',
                           required=True)
+    argparse.add_argument('--assembly-report', help='Use this assembly report instead of downloading the standard one',
+                          required=False)
 
     args = argparse.parse_args()
-    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly)
+    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.assembly_report)
 
 
 if __name__ == "__main__":
