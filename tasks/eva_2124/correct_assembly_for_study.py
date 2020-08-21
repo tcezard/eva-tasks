@@ -62,34 +62,40 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
 
 
 def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession):
-    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
-    already_genbanks = 0
-    replaceables = 0
+    cursor = sve_collection.aggregate([{'$match': {'seq': assembly_accession, 'study': {'$in': studies}}},
+                                       {'$group': {'_id': '$contig', 'count': {'$sum': 1}}}])
+    already_genbank_contigs = 0
+    already_genbank_variants = 0
+    replaceable_contigs = 0
+    replaceable_variants = 0
     unreplaceable_variants = 0
     unreplaceable_contigs = set()
-    for variant in cursor:
+    for contig in cursor:
         try:
-            genbank, was_already_genbank = get_genbank(synonym_dictionaries, variant['contig'])
+            genbank, was_already_genbank = get_genbank(synonym_dictionaries, contig['_id'])
             if was_already_genbank:
-                already_genbanks += 1
+                already_genbank_contigs += 1
+                already_genbank_variants += contig['count']
             else:
-                replaceables += 1
+                replaceable_contigs += 1
+                replaceable_variants += contig['count']
         except Exception:
-            unreplaceable_variants += 1
-            unreplaceable_contigs.add(variant['contig'])
+            unreplaceable_variants += contig['count']
+            unreplaceable_contigs.add(contig['_id'])
 
     if len(unreplaceable_contigs) > 0:
         raise Exception(
             'Aborting replacement (no changes were done).'
             ' With the provided assembly_report, the next {} contigs (present in {} variants) can not be replaced: {}'
             .format(len(unreplaceable_contigs), unreplaceable_variants, unreplaceable_contigs))
-    elif replaceables == 0:
-        raise Exception('All the variants were already genbank ({} variants). '
+    elif replaceable_contigs == 0:
+        raise Exception('All the variants were already genbank ({} variants, {} contigs). '
                         'Are you sure the assembly ({}) and studies ({}) are correct?'
-                        .format(already_genbanks, assembly_accession, studies))
+                        .format(already_genbank_variants, already_genbank_contigs, assembly_accession, studies))
     else:
-        print('Check ok. The contigs of {} variants will be changed to genbank, '
-              'and {} variants have already genbank contigs.'.format(replaceables, already_genbanks))
+        print('Check ok. {} contigs of {} variants will be changed to genbank, '
+              'and {} contigs of {} variants are already genbank contigs.'
+              .format(replaceable_contigs, replaceable_variants, already_genbank_contigs, already_genbank_variants))
 
 
 def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size):
