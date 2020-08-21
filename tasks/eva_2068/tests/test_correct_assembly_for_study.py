@@ -51,8 +51,8 @@ class TestCorrectAssembly(TestCase):
         correct(self.username, self.password, self.host,
                 study='PRJEB33514', reference_source='GCA_000002325.1',
                 reference_dest='GCA_000002325.2')
-        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.2'}))
+        variant = self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.2'})
         self.assertEqual(variant['_id'], 'CB5637C29FD1A9C3FA64D0C1EE2FC8B9147DEC47')
-        variant = (self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.1'}))
+        variant = self.connection_handle[self.eva_database][self.variant_collection].find_one({'seq': 'GCA_000002325.1'})
         self.assertIsNone(variant)
 
