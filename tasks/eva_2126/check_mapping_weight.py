@@ -16,9 +16,9 @@ def get_mongo_connection_handle(host, port=27017, username=None, password=None, 
 def check_mapping_weight(mongo_host, database_name, username, password, assembly_accession):
     """
     Connect to mongodb and retrieve all clustered variants of specific assembly that have high mapping weight (>1) to check
-    if they can be found multiple time. when they can't check that they fall in the two following categories:
-     - one or several clustered variants have been merged with another variant
-     - one or several submitted variants have been decluster (because its definition in dbsnp was inconsistant) leaving
+    if they can be found multiple times. When they can't, check that they fall in one of the following categories:
+     - One or several clustered variants have been merged with another variant
+     - One or several submitted variants have been declustered (because its definition in dbsnp was inconsistent) leaving
      a clustered variant without evidence
     """
     with get_mongo_connection_handle(mongo_host, username=username, password=password) as accessioning_mongo_handle:
