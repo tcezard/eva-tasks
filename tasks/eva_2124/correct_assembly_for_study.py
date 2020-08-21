@@ -82,8 +82,13 @@ def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, stu
             'Aborting replacement (no changes were done).'
             ' With the provided assembly_report, the next {} contigs (present in {} variants) can not be replaced: {}'
             .format(len(unreplaceable_contigs), unreplaceable_variants, unreplaceable_contigs))
+    elif replaceables == 0:
+        raise Exception('All the variants were already genbank ({} variants). '
+                        'Are you sure the assembly ({}) and studies ({}) are correct?'
+                        .format(already_genbanks, assembly_accession, studies))
     else:
-        print("Check ok. {} variants' contigs will be changed to genbank, and {} have already genbank contigs.")
+        print('Check ok. The contigs of {} variants will be changed to genbank, '
+              'and {} variants have already genbank contigs.'.format(replaceables, already_genbanks))
 
 
 def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size):
