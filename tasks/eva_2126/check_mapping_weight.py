@@ -23,7 +23,7 @@ def check_mapping_weight(mongo_host, database_name, username, password, assembly
     """
     with get_mongo_connection_handle(mongo_host, username=username, password=password) as accessioning_mongo_handle:
         dbsnp_cve_collection = accessioning_mongo_handle[database_name]["dbsnpClusteredVariantEntity"]
-        cursor = dbsnp_cve_collection.find({'asm': assembly_accession, 'mapWeight': {'$gt': 1}})
+        cursor = dbsnp_cve_collection.find({'asm': assembly_accession, 'mapWeight': {'$gt': 1}}, no_cursor_timeout=True)
         count_clustered_variants = 0
         list_variants_inconsistent = []
         inconsistent_recovered_merged = 0
@@ -36,22 +36,26 @@ def check_mapping_weight(mongo_host, database_name, username, password, assembly
 
         dbsnp_cve_op_collection = accessioning_mongo_handle[database_name]["dbsnpClusteredVariantOperationEntity"]
         dbsnp_sve_op_collection = accessioning_mongo_handle[database_name]["dbsnpSubmittedVariantOperationEntity"]
+        try:
+            for variant in list_variants_inconsistent:
+                merged_cve_operation = list(dbsnp_cve_op_collection.find({'accession': variant['accession'], 'eventType': 'MERGED'}))
+                updated_sve_operation = list(dbsnp_sve_op_collection.find({'inactiveObjects.rs': variant['accession'], 'eventType': 'UPDATED'}))
 
-        for variant in list_variants_inconsistent:
-            merged_cve_operation = list(dbsnp_cve_op_collection.find({'accession': variant['accession'], 'eventType': 'MERGED'}))
-            updated_sve_operation = list(dbsnp_sve_op_collection.find({'inactiveObjects.rs': variant['accession'], 'eventType': 'UPDATED'}))
-
-            if merged_cve_operation:
-                inconsistent_recovered_merged += 1
-            elif updated_sve_operation and any([op['reason'].startswith('Declustered:') for op in updated_sve_operation]):
-                inconsistent_recovered_declusted += 1
-            else:
-                print(
-                    "rs%s Should have more than 1 variant because mapWeight = %s" % (
-                    str(variant['accession']), variant['mapWeight'])
-                )
-                print("Found %s operation for clustered variants" % len(merged_cve_operation))
-                print("Found %s operation for submitted variants" % len(updated_sve_operation))
+                if merged_cve_operation:
+                    inconsistent_recovered_merged += 1
+                elif updated_sve_operation and any([op['reason'].startswith('Declustered:') for op in updated_sve_operation]):
+                    inconsistent_recovered_declusted += 1
+                else:
+                    print(
+                        "rs%s Should have more than 1 variant because mapWeight = %s" % (
+                        str(variant['accession']), variant['mapWeight'])
+                    )
+                    print("Found %s operation for clustered variants" % len(merged_cve_operation))
+                    print("Found %s operation for submitted variants" % len(updated_sve_operation))
+        except:
+            pass
+        finally:
+            cursor.close()
 
         print("Checked %s clustered variants" % count_clustered_variants)
         print("Found %s inconsistent variants" % len(list_variants_inconsistent))
