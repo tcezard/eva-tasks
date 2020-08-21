@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 import hashlib
 from argparse import ArgumentParser
-
 import pymongo
-from ebi_eva_common_pyutils.mongo_utils import get_mongo_connection_handle
+from urllib.parse import quote_plus
 from tasks.eva_2124.load_synonyms import load_synonyms_for_assembly
 
 def get_SHA1(variant_rec):
@@ -37,11 +36,19 @@ def get_genbank(synonym_dictionaries, contig):
     raise Exception('could not find synonym for contig {}'.format(contig))
 
 
-def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, chunk_size = 1000):
+def get_mongo_connection_handle_url(host, port=27017, username=None, password=None, authentication_database="admin") -> pymongo.MongoClient:
+    mongo_connection_uri = "mongodb://"
+    if username and password:
+        mongo_connection_uri += '%s:%s@' % (username, quote_plus(password))
+    mongo_connection_uri += '%s:%s/%s' % (host, port, authentication_database)
+    return pymongo.MongoClient(mongo_connection_uri)
+
+
+def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, chunk_size=1000):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
-    with get_mongo_connection_handle(
+    with get_mongo_connection_handle_url(
             username=mongo_user,
             password=mongo_password,
             host=mongo_host
@@ -97,15 +104,15 @@ def execute_bulk(drop_statements, insert_statements, sve_collection, total_dropp
 
 def main():
     argparse = ArgumentParser()
-    argparse.add_argument('--mongo_user', help='user to connect to mongodb', required=True)
-    argparse.add_argument('--mongo_password', help='password to connect to mongodb', required=True)
+    argparse.add_argument('--mongo_user', help='user to connect to mongodb', required=False)
+    argparse.add_argument('--mongo_password', help='password to connect to mongodb', required=False)
     argparse.add_argument('--mongo_host', help='host to connect to mongodb', required=True)
-    argparse.add_argument('--studies', help='The studies in the assembly to correct', required=True)
+    argparse.add_argument('--studies', help='The studies in the assembly to correct', required=True, nargs='+')
     argparse.add_argument('--assembly', help='the assembly accession of the entities that needs to be changed',
                           required=True)
 
     args = argparse.parse_args()
-    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies.split(','), args.assembly)
+    correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly)
 
 
 if __name__ == "__main__":
