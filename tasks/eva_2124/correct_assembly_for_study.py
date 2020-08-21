@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 from tasks.eva_2124.load_synonyms import load_synonyms_for_assembly
 
 def get_SHA1(variant_rec):
-    """Calculate the SHA1 digest from the ref, study, contig, start, ref, and alt attributes of the variant"""
+    """Calculate the SHA1 digest from the seq, study, contig, start, ref, and alt attributes of the variant"""
     h = hashlib.sha1()
     keys = ['seq', 'study', 'contig', 'start', 'ref', 'alt']
     h.update('_'.join([str(variant_rec[key]) for key in keys]).encode())
