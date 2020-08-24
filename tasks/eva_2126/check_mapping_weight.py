@@ -71,20 +71,23 @@ def check_variant_counts(mongo_host, database_name, username, password, assembly
         cursor = dbsnp_cve_collection.aggregate(
             [
                 {"$match": {"asm": assembly_accession}},
-                {"$group":{"_id": '$accession', "count": {"$sum": 1}, "variants": {"$push": {"contig": "$contig", "start": "$start", "mapWeight": "$mapWeight" } }}},
+                    {"$group":{"_id": '$accession', "count": {"$sum": 1}, "variants": {"$push": {"contig": "$contig", "start": "$start", "mapWeight": "$mapWeight"} }}},
                 {"$match": {"count": {"$gt": 1}}}
             ],
             allowDiskUse=True
         )
-        accession_checked = problematic_accession = 0
+        accession_checked = number_variants = problematic_accession = 0
         for accession_record in cursor:
             accession_checked += 1
+            number_variants += accession_record['count']
             map_weights = set([variant['mapWeight'] for variant in accession_record['variants']])
             if None in map_weights:
                 problematic_accession += 1
                 print("Accession %s has %s entries and no mapping weight entries" % (accession_record['_id'], accession_record['count']))
 
-    print("Checked %s variant with multiple copies and found %s without mapping weight" % (accession_checked, problematic_accession))
+    print("Checked %s accessions (%s variants) with multiple copies and found %s without mapping weight" % (
+        accession_checked, number_variants, problematic_accession
+    ))
 
 
 def main():
