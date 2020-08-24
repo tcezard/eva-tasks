@@ -63,6 +63,30 @@ def check_mapping_weight(mongo_host, database_name, username, password, assembly
         print("Found %s inconsistent variants that are due to declustering" % inconsistent_recovered_declusted)
 
 
+def check_variant_counts(mongo_host, database_name, username, password, assembly_accession):
+    """
+    """
+    with get_mongo_connection_handle(mongo_host, username=username, password=password) as accessioning_mongo_handle:
+        dbsnp_cve_collection = accessioning_mongo_handle[database_name]["dbsnpClusteredVariantEntity"]
+        cursor = dbsnp_cve_collection.aggregate(
+            [
+                {"$match": {"asm": assembly_accession}},
+                {"$group":{"_id": '$accession', "count": {"$sum": 1}, "variants": {"$push": {"contig": "$contig", "start": "$start", "mapWeight": "$mapWeight" } }}},
+                {"$match": {"count": {"$gt": 1}}}
+            ],
+            allowDiskUse=True
+        )
+        accession_checked = problematic_accession = 0
+        for accession_record in cursor:
+            accession_checked += 1
+            map_weights = set([variant['mapWeight'] for variant in accession_record['variants']])
+            if None in map_weights:
+                problematic_accession += 1
+                print("Accession %s has %s entries and no mapping weight entries" % (accession_record['_id'], accession_record['count']))
+
+    print("Checked %s variant with multiple copies and found %s without mapping weight" % (accession_checked, problematic_accession))
+
+
 def main():
     argparse = ArgumentParser()
     argparse.add_argument('--host', help='', required=True)
@@ -73,6 +97,7 @@ def main():
     args = argparse.parse_args()
 
     check_mapping_weight(args.host, args.database_name, args.username, args.password, args.assembly_accession)
+    check_variant_counts(args.host, args.database_name, args.username, args.password, args.assembly_accession)
 
 
 if __name__ == "__main__":
