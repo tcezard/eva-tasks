@@ -4,7 +4,7 @@ from unittest import TestCase
 import pymongo
 from ebi_eva_common_pyutils.mongo_utils import get_mongo_connection_handle
 
-from tasks.eva_2124.correct_assembly_for_study import correct, get_mongo_connection_handle_url
+from tasks.eva_2124.correct_contig_for_study import correct, get_mongo_connection_handle_url
 
 
 class TestCorrectAssembly(TestCase):

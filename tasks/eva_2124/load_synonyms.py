@@ -2,6 +2,7 @@ import os
 import wget
 from urllib.parse import urlparse
 from tasks.eva_2124.get_assembly_report_url import get_assembly_report_url
+import logging
 
 
 def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
@@ -15,9 +16,9 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
     if assembly_report_file is None:
         assembly_report_file = download_assembly_report(assembly_accession)
     else:
-        print('Using provided assembly report at {}'.format(assembly_report_file))
+        logging.info('Using provided assembly report at {}'.format(assembly_report_file))
 
-    print('Parsing assembly report ...')
+    logging.info('Parsing assembly report ...')
     by_name = dict()
     by_assigned_molecule = dict()
     by_genbank = dict()
@@ -48,19 +49,19 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
             if synonyms['ucsc'] is not None:
                 by_ucsc[columns[9]] = synonyms
 
-    print('Loaded chromosome synonyms for assembly {}'.format(assembly_accession))
+    logging.info('Loaded chromosome synonyms for assembly {}'.format(assembly_accession))
     return by_name, by_assigned_molecule, by_genbank, by_refseq, by_ucsc
 
 
 def download_assembly_report(assembly_accession):
-    print('Searching assembly report for {} ...'.format(assembly_accession))
+    logging.info('Searching assembly report for {} ...'.format(assembly_accession))
     url = get_assembly_report_url(assembly_accession)
     asm_report_file = os.path.basename(urlparse(url).path)
     downloaded_already = os.path.isfile(asm_report_file)
     if downloaded_already:
-        print('Assembly report was already downloaded, skipping download ...')
+        logging.info('Assembly report was already downloaded, skipping download ...')
     else:
-        print('Downloading assembly report ...')
+        logging.info('Downloading assembly report ...')
         download_file_from_ftp(url)
     return asm_report_file
 

@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 import pymongo
 from urllib.parse import quote_plus
 from tasks.eva_2124.load_synonyms import load_synonyms_for_assembly
+import logging
 
 
 def get_SHA1(variant_rec):
@@ -56,12 +57,14 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
             host=mongo_host
     ) as accessioning_mongo_handle:
         sve_collection = accessioning_mongo_handle[mongo_database]["submittedVariantEntity"]
+        logging.info("Loading synonyms...")
         synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
         assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
         return do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size)
 
 
 def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession):
+    logging.info("Checking that all contigs are replaceable...")
     cursor = sve_collection.aggregate([{'$match': {'seq': assembly_accession, 'study': {'$in': studies}}},
                                        {'$group': {'_id': '$contig', 'count': {'$sum': 1}}}])
     already_genbank_contigs = 0
@@ -93,7 +96,7 @@ def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, stu
                         'Are you sure the assembly ({}) and studies ({}) are correct?'
                         .format(already_genbank_variants, already_genbank_contigs, assembly_accession, studies))
     else:
-        print('Check ok. {} contigs of {} variants will be changed to genbank, '
+        logging.info('Check ok. {} contigs of {} variants will be changed to genbank, '
               'and {} contigs of {} variants are already genbank contigs.'
               .format(replaceable_contigs, replaceable_variants, already_genbank_contigs, already_genbank_variants))
 
@@ -106,7 +109,7 @@ def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession
     already_genbanks = 0
     total_inserted = 0
     total_dropped = 0
-    print("Performing updates...")
+    logging.info("Performing updates...")
     for variant in cursor:
         # Ensure that the variant we are changing has the expected SHA1
         original_id = get_SHA1(variant)
@@ -127,11 +130,11 @@ def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession
     if len(insert_statements) > 0:
         total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
                                                      total_dropped, total_inserted)
-    print('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
-    print('{} of those documents had already a genbank contig. If the projects were all affected, '
+    logging.info('Retrieved %s documents and checked matching Sha1 hash' % record_checked)
+    logging.info('{} of those documents had already a genbank contig. If the projects were all affected, '
           'that number should be 0, but even if it is not, there is nothing else to fix'.format(already_genbanks))
-    print('There was %s new documents inserted' % total_inserted)
-    print('There was %s old documents dropped' % total_dropped)
+    logging.info('There was %s new documents inserted' % total_inserted)
+    logging.info('There was %s old documents dropped' % total_dropped)
     return total_inserted
 
 
@@ -161,6 +164,7 @@ def main():
     args = argparse.parse_args()
     correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.mongo_database,
             args.assembly_report)
+    logging.info("Finished successfully.")
 
 
 if __name__ == "__main__":
