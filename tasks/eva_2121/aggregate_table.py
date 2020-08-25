@@ -8,7 +8,7 @@ import sys
 from argparse import ArgumentParser
 from collections import defaultdict
 
-total_number_variant = 0
+assigned_number_variant = 0
 eva_accession_path = ''
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)-15s %(levelname)s %(message)s')
@@ -56,10 +56,10 @@ def parse_input(input_file):
     return data_per_taxid, data_per_taxid_and_assembly
 
 
-def assign_tempmongo_host(number_variants):
-    global total_number_variant
-    total_number_variant += number_variants
-    instance_number = (total_number_variant // 180000000) + 1
+def assign_tempmongo_host_round_robin(number_variants, total_number_of_variant):
+    global assigned_number_variant
+    assigned_number_variant += number_variants
+    instance_number = int((assigned_number_variant // (total_number_of_variant / 10)) + 1)
     return 'tempmongo-' + str(instance_number)
 
 
@@ -86,7 +86,7 @@ def retrieve_assembly(scientific_name, assembly_accession, assembly_dir, downloa
     return fasta, report
 
 
-def download_assembly(scientific_name, assembly_accession, download_dir, eva_accession_path):
+def download_assembly(scientific_name, assembly_accession, download_dir):
     python = os.path.join(eva_accession_path, "python-import-automation/bin/python")
     genome_downloader = os.path.join(eva_accession_path, "eva-accession/eva-accession-import-automation/genome_downloader.py")
     private_json = os.path.join(eva_accession_path, "private-config.json")
@@ -101,7 +101,17 @@ def download_assembly(scientific_name, assembly_accession, download_dir, eva_acc
     return assembly_fasta, assembly_report
 
 
-def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_tsv):
+def count_variants(rows, only_variant_to_process=True):
+    """Sum variants in the rows provided."""
+    stay_unchanged = {row['Will stay unchanged'] for row in rows}
+    return sum([
+        int(row['Number Of Variants (submitted variants)'].replace(',', ''))
+        for row in rows
+        if not only_variant_to_process or ('no' in stay_unchanged and row['Source'] != 'DBSNP - filesystem')
+    ])
+
+
+def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_assemblies_tsv, output_taxonmomy_tsv):
     """
     """
     data_per_taxid, data_per_taxid_and_assembly = parse_input(input_file)
@@ -110,10 +120,16 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_tsv
     dbsnps_only = []
     eva_only = []
     mixture = []
+    taxid_to_tempmongo = {}
+    total_number_variant = 0
     for taxid in data_per_taxid:
         rows = data_per_taxid[taxid]
         sources = {row['Source'] for row in rows}
         stay_unchanged = {row['Will stay unchanged'] for row in rows}
+
+        number_variants = count_variants(rows)
+        total_number_variant += number_variants
+
         source = None
         if len(sources) == 1:
             source = sources.pop()
@@ -127,24 +143,51 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_tsv
             dbsnps_only.append(taxid)
         else:
             mixture.append(taxid)
-    with open(output_tsv, 'w') as open_output:
+
+    # Iterate a second time to assign a temp mongodb per taxonomy
+    with open(output_taxonmomy_tsv, 'w') as open_output:
+        headers = ['taxonomy_id', 'scientific_name', 'temp_mongo', 'to_copy', 'number_variants_to_process', 'number_variants']
+        print('\t'.join([str(o) for o in headers]), file=open_output)
+
+        for taxid in data_per_taxid:
+            rows = data_per_taxid[taxid]
+            scientific_name = {row['Scientific Name From Taxid'] for row in rows}.pop()
+            number_variants_to_process = count_variants(rows)
+            taxid_to_tempmongo[taxid] = assign_tempmongo_host_round_robin(number_variants_to_process,
+                                                                          total_number_variant)
+
+            if taxid in unchanged_taxid + only_unmapped_tax_id:
+                to_copy = 'no'
+                temp_mongo = ''
+            else:
+                to_copy = 'yes'
+                temp_mongo = taxid_to_tempmongo[taxid]
+
+            print('\t'.join([
+                str(taxid),
+                scientific_name,
+                temp_mongo,
+                to_copy,
+                str(number_variants_to_process),
+                str(count_variants(rows, False))
+            ]), file=open_output)
+
+    with open(output_assemblies_tsv, 'w') as open_output:
         headers = ['taxonomy_id', 'scientific_name', 'assembly', 'sources', 'fasta_path', 'report_path', 'temp_mongo',
-                   'number_variants', 'to_process']
+                   'to_process', 'number_variants_to_process', 'number_variants']
         print('\t'.join([str(o) for o in headers]), file=open_output)
         for taxid, assembly in data_per_taxid_and_assembly:
             rows = data_per_taxid_and_assembly[(taxid, assembly)]
-            scientific_name = {row['Scientific Name From Taxid'] for row in rows}
-            assert len(scientific_name) == 1
-            scientific_name = scientific_name.pop()
+            scientific_name = {row['Scientific Name From Taxid'] for row in rows}.pop()
             number_variants = sum([int(row['Number Of Variants (submitted variants)'].replace(',', '')) for row in rows])
 
-            if taxid in unchanged_taxid + only_unmapped_tax_id or assembly is 'Unmapped':
+            if taxid in unchanged_taxid + only_unmapped_tax_id or assembly == 'Unmapped':
                 to_process = 'no'
                 fasta, report, temp_mongo = '', '', ''
             else:
                 to_process = 'yes'
                 fasta, report = retrieve_assembly(scientific_name, assembly, assembly_dir, download_dir)
-                temp_mongo = assign_tempmongo_host(number_variants)
+                temp_mongo = taxid_to_tempmongo[taxid]
 
             out = [
                 taxid,
@@ -154,8 +197,9 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_tsv
                 fasta,
                 report,
                 temp_mongo,
+                to_process,
                 number_variants,
-                to_process
+                str(count_variants(rows, False))
             ]
             print('\t'.join([str(o) for o in out]), file=open_output)
 
@@ -165,8 +209,9 @@ def main():
     argparse.add_argument('--input', help='Path to the file containing the taxonomies and assemblies', required=True)
     argparse.add_argument('--assembly_dir', help='Path to the directory containing pre-downloaded species assemblies', required=True)
     argparse.add_argument('--download_dir', help='Path to the directory where additional containing species assemblies will be downloaded', required=True)
-    argparse.add_argument('--output_tsv', help='Path to the tsv file that will contain the list of species to process', required=True)
-    argparse.add_argument('--eva_accession_path', help='')
+    argparse.add_argument('--output_assemblies_tsv', help='Path to the tsv file that will contain the list of assemblies to process', required=True)
+    argparse.add_argument('--output_taxonomy_tsv', help='Path to the tsv file that will contain the list of species to process', required=True)
+    argparse.add_argument('--eva_accession_path', help='path to the directory that contain eva-accession code and private json file.')
 
     args = argparse.parse_args()
 
@@ -174,7 +219,7 @@ def main():
     if args.eva_accession_path:
         eva_accession_path = args.eva_accession_path
     
-    aggregate_list_of_species(args.input, args.assembly_dir, args.download_dir, args.output_tsv)
+    aggregate_list_of_species(args.input, args.assembly_dir, args.download_dir, args.output_assemblies_tsv, args.output_taxonomy_tsv)
 
 
 if __name__ == "__main__":
