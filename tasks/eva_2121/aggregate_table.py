@@ -59,7 +59,7 @@ def parse_input(input_file):
 def assign_tempmongo_host_round_robin(number_variants, total_number_of_variant):
     global assigned_number_variant
     assigned_number_variant += number_variants
-    instance_number = int((assigned_number_variant // (total_number_of_variant / 10)) + 1)
+    instance_number = int((assigned_number_variant // ((total_number_of_variant + 1) / 10)) + 1)
     return 'tempmongo-' + str(instance_number)
 
 
