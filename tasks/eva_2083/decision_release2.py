@@ -6,7 +6,7 @@ from collections import defaultdict
 
 def parse_input(input_file):
     """
-    Parse the intput with a dict reader and returns the row organised per EVA/dbSNP then taxonomy id then assembly id
+    Parse the input with a dict reader and returns the row organised per EVA/dbSNP then taxonomy id then assembly id
     """
     dbsnp_data = defaultdict(dict)
     eva_data = defaultdict(dict)
