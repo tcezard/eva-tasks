@@ -146,7 +146,8 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
 
     # Iterate a second time to assign a temp mongodb per taxonomy
     with open(output_taxonmomy_tsv, 'w') as open_output:
-        headers = ['taxonomy_id', 'scientific_name', 'temp_mongo', 'to_copy', 'number_variants_to_process', 'number_variants']
+        headers = ['taxonomy_id', 'scientific_name', 'tempmongo_instance', 'should_be_copied',
+                             'number_variants_to_process', 'total_num_variants']
         print('\t'.join([str(o) for o in headers]), file=open_output)
 
         for taxid in data_per_taxid:
@@ -173,8 +174,8 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
             ]), file=open_output)
 
     with open(output_assemblies_tsv, 'w') as open_output:
-        headers = ['taxonomy_id', 'scientific_name', 'assembly', 'sources', 'fasta_path', 'report_path', 'temp_mongo',
-                   'to_process', 'number_variants_to_process', 'number_variants']
+        headers = ['taxonomy_id', 'scientific_name', 'assembly', 'sources', 'fasta_path', 'report_path',
+                   'tempmongo_instance', 'should_be_process', 'number_variants_to_process', 'total_num_variants']
         print('\t'.join([str(o) for o in headers]), file=open_output)
         for taxid, assembly in data_per_taxid_and_assembly:
             rows = data_per_taxid_and_assembly[(taxid, assembly)]
