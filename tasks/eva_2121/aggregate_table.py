@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 
 assigned_number_variant = 0
+number_of_tempmongo_instances = 10
 eva_accession_path = ''
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)-15s %(levelname)s %(message)s')
@@ -59,7 +60,9 @@ def parse_input(input_file):
 def assign_tempmongo_host_round_robin(number_variants, total_number_of_variant):
     global assigned_number_variant
     assigned_number_variant += number_variants
-    instance_number = int((assigned_number_variant // ((total_number_of_variant + 1) / 10)) + 1)
+    instance_number = int(
+        (assigned_number_variant // ((total_number_of_variant + 1) / number_of_tempmongo_instances)) + 1
+    )
     return 'tempmongo-' + str(instance_number)
 
 
@@ -92,9 +95,12 @@ def download_assembly(scientific_name, assembly_accession, download_dir):
     private_json = os.path.join(eva_accession_path, "private-config.json")
 
     output_dir = os.path.join(download_dir, scientific_name.lower().replace(' ', '_'))
-    os.makedirs(output_dir, exist_ok=True)
-    command = "{} {} -p {} -a {} -o {}""".format(python, genome_downloader, private_json, assembly_accession, output_dir)
-    run_command_with_output('Retrieve assembly fasta and assembly report', command)
+    assembly_reports = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))
+    assembly_fasta = os.path.join(output_dir, assembly_accession, assembly_accession + ".fa")
+    if not len(assembly_reports) == 1 or not os.path.isfile(assembly_fasta):
+        os.makedirs(output_dir, exist_ok=True)
+        command = "{} {} -p {} -a {} -o {}""".format(python, genome_downloader, private_json, assembly_accession, output_dir)
+        run_command_with_output('Retrieve assembly fasta and assembly report', command)
 
     assembly_report = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))[0]
     assembly_fasta = os.path.join(output_dir, assembly_accession, assembly_accession + ".fa")
