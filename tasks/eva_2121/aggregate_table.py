@@ -30,7 +30,7 @@ def run_command_with_output(command_description, command, return_process_output=
             if return_process_output:
                 process_output += line + "\n"
         for line in iter(process.stderr.readline, ''):
-            line = str(line).rstrip()
+            line = line.rstrip()
             logger.error(line)
     if process.returncode != 0:
         logger.error(command_description + " failed! Refer to the error messages for details.")
