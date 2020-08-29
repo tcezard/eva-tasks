@@ -47,7 +47,7 @@ def get_mongo_connection_handle_url(host, port=27017, username=None, password=No
 
 
 def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, mongo_database, assembly_report=None,
-            chunk_size=1000):
+            chunk_size=1000, only_check=False):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
@@ -59,8 +59,9 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
         sve_collection = accessioning_mongo_handle[mongo_database]["submittedVariantEntity"]
         logging.info("Loading synonyms...")
         synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
-        assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
-        return do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size)
+        number_of_variants_to_replace = assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
+        if not only_check:
+            do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace)
 
 
 def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession):
@@ -99,9 +100,10 @@ def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, stu
         logging.info('Check ok. {} contigs of {} variants will be changed to genbank, '
               'and {} contigs of {} variants are already genbank contigs.'
               .format(replaceable_contigs, replaceable_variants, already_genbank_contigs, already_genbank_variants))
+    return replaceable_variants
 
 
-def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size):
+def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace):
     cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
     insert_statements = []
     drop_statements = []
@@ -127,6 +129,8 @@ def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession
         if len(insert_statements) >= chunk_size:
             total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
                                                          total_dropped, total_inserted)
+            logging.info('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
+            logging.info('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
     if len(insert_statements) > 0:
         total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
                                                      total_dropped, total_inserted)
@@ -160,10 +164,12 @@ def main():
                           required=True)
     argparse.add_argument('--assembly-report', help='Use this assembly report instead of downloading the standard one',
                           required=False)
+    argparse.add_argument('--only_check', help='Check that the variant contig names can be replaced using the assembly report',
+                          default=False, action='store_true')
 
     args = argparse.parse_args()
     correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.mongo_database,
-            args.assembly_report)
+            args.assembly_report, only_check=args.only_check)
     logging.info("Finished successfully.")
 
 
