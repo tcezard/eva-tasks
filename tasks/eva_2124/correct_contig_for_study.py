@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import hashlib
+import traceback
 from argparse import ArgumentParser
 import pymongo
 from urllib.parse import quote_plus
@@ -104,7 +105,7 @@ def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, stu
 
 
 def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace):
-    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession})
+    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession}, no_cursor_timeout=True)
     insert_statements = []
     drop_statements = []
     record_checked = 0
@@ -112,25 +113,32 @@ def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession
     total_inserted = 0
     total_dropped = 0
     logging.info("Performing updates...")
-    for variant in cursor:
-        # Ensure that the variant we are changing has the expected SHA1
-        original_id = get_SHA1(variant)
-        assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (
-            variant['_id'], original_id)
-        genbank, was_already_genbank = get_genbank(synonym_dictionaries, variant['contig'])
-        if was_already_genbank:
-            already_genbanks += 1
-        else:
-            variant['contig'] = genbank
-            variant['_id'] = get_SHA1(variant)
-            insert_statements.append(pymongo.InsertOne(variant))
-            drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
-        record_checked += 1
-        if len(insert_statements) >= chunk_size:
-            total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
-                                                         total_dropped, total_inserted)
-            logging.info('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
-            logging.info('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
+    try:
+        for variant in cursor:
+            # Ensure that the variant we are changing has the expected SHA1
+            original_id = get_SHA1(variant)
+            assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (
+                variant['_id'], original_id)
+            genbank, was_already_genbank = get_genbank(synonym_dictionaries, variant['contig'])
+            if was_already_genbank:
+                already_genbanks += 1
+            else:
+                variant['contig'] = genbank
+                variant['_id'] = get_SHA1(variant)
+                insert_statements.append(pymongo.InsertOne(variant))
+                drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
+            record_checked += 1
+            if len(insert_statements) >= chunk_size:
+                total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
+                                                             total_dropped, total_inserted)
+                logging.info('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
+                logging.info('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
+    except Exception as e:
+        print(traceback.format_exc())
+        raise e
+    finally:
+        cursor.close()
+
     if len(insert_statements) > 0:
         total_inserted, total_dropped = execute_bulk(drop_statements, insert_statements, sve_collection,
                                                      total_dropped, total_inserted)
