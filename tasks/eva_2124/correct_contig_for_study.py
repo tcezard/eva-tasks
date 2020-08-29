@@ -20,6 +20,9 @@ def get_genbank(synonym_dictionaries, contig):
     returns a tuple (genbank, was_already_genbank) or raises an exception if the contig was not found
     """
     by_name, by_assigned_molecule, by_genbank, by_refseq, by_ucsc = synonym_dictionaries
+    if contig in by_genbank:
+        return contig, True
+
     if contig in by_name:
         return by_name[contig]['genbank'], False
 
@@ -31,9 +34,6 @@ def get_genbank(synonym_dictionaries, contig):
 
     if contig in by_refseq and by_refseq[contig]['is_genbank_refseq_identical']:
         return by_refseq[contig]['genbank'], False
-
-    if contig in by_genbank:
-        return contig, True
 
     raise Exception('could not find synonym for contig {}'.format(contig))
 
