@@ -4,6 +4,11 @@ import pymongo
 from urllib.parse import quote_plus
 
 
+def same_variant_except_contig(variant1, variant2):
+    list_key = ['tax', 'study', 'start', 'ref', 'alt', 'version', 'seq']
+    return all([variant1[key] == variant2[key] for key in list_key]) and variant1['contig'] != variant2['contig']
+
+
 def find_duplicates_and_remove_them(mongo_user, mongo_password, mongo_host, mongo_database, assembly_accession,
                                     contig_list, study_list, dry_run):
     duplicates_to_remove_commands = []
@@ -13,18 +18,24 @@ def find_duplicates_and_remove_them(mongo_user, mongo_password, mongo_host, mong
             host=mongo_host
     ) as accessioning_mongo_handle:
         sve_collection = accessioning_mongo_handle[mongo_database]["submittedVariantEntity"]
-        cursor = sve_collection.find({
-            "seq": assembly_accession, "contig": {"$in": contig_list}, "study": {"$in": study_list}
-        })
-        for record in cursor:
-            variants_with_accessions = list(accessioning_mongo_handle[mongo_database]["submittedVariantEntity"].find({'accession': record['accession']}))
-            if len(variants_with_accessions) != 1:
-                print('Found %s duplicates for accession %s' % (len(variants_with_accessions), record['accession']) )
-            for variant in variants_with_accessions:
-                if variant['contig'] != record['contig']:
-                    duplicates_to_remove_commands.append(
-                        pymongo.DeleteOne({'contig': variant['contig'], 'accession': variant['accession']})
-                    )
+        try:
+            cursor = sve_collection.find({
+                "seq": assembly_accession, "contig": {"$in": contig_list}, "study": {"$in": study_list}
+            }, no_cursor_timeout=True)
+            for record in cursor:
+                variants_with_accessions = list(accessioning_mongo_handle[mongo_database]["submittedVariantEntity"].find({'accession': record['accession']}))
+                if len(variants_with_accessions) != 1:
+                    print('Found %s duplicates for accession %s' % (len(variants_with_accessions), record['accession']) )
+                for variant in variants_with_accessions:
+                    if same_variant_except_contig(variant, record):
+                        duplicates_to_remove_commands.append(
+                            pymongo.DeleteOne({'contig': variant['contig'], 'accession': variant['accession']})
+                        )
+        except Exception as e:
+            raise e
+        finally:
+            cursor.close()
+
         if dry_run:
             print("Will remove %s variants " % len(duplicates_to_remove_commands))
         else:
