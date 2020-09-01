@@ -153,7 +153,7 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
     # Iterate a second time to assign a temp mongodb per taxonomy
     with open(output_taxonmomy_tsv, 'w') as open_output:
         headers = ['taxonomy_id', 'scientific_name', 'tempmongo_instance', 'should_be_copied',
-                             'number_variants_to_process', 'total_num_variants']
+                   'number_variants_to_process', 'total_num_variants']
         print('\t'.join([str(o) for o in headers]), file=open_output)
 
         for taxid in data_per_taxid:
@@ -186,7 +186,6 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
         for taxid, assembly in data_per_taxid_and_assembly:
             rows = data_per_taxid_and_assembly[(taxid, assembly)]
             scientific_name = {row['Scientific Name From Taxid'] for row in rows}.pop()
-            number_variants = sum([int(row['Number Of Variants (submitted variants)'].replace(',', '')) for row in rows])
 
             if taxid in unchanged_taxid + only_unmapped_tax_id or assembly == 'Unmapped':
                 to_process = 'no'
@@ -205,7 +204,7 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
                 report,
                 temp_mongo,
                 to_process,
-                number_variants,
+                str(count_variants(rows, True)),
                 str(count_variants(rows, False))
             ]
             print('\t'.join([str(o) for o in out]), file=open_output)
