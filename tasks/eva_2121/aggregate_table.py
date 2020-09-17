@@ -3,42 +3,64 @@ import csv
 import glob
 import logging
 import os
-import subprocess
-import sys
 from argparse import ArgumentParser
 from collections import defaultdict
+from operator import itemgetter
+
+from ebi_eva_common_pyutils.logger import logging_config as log_cfg
 
 assigned_number_variant = 0
 number_of_tempmongo_instances = 10
 eva_accession_path = ''
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)-15s %(levelname)s %(message)s')
-logger = logging.getLogger(__name__)
+logger = log_cfg.get_logger(__name__)
 
 
-def run_command_with_output(command_description, command, return_process_output=False):
-    process_output = ""
+def parse_application_properties(app_prop):
+    properties_dict = { }
+    with open(app_prop) as open_file:
+        for line in open_file:
+            if not line.strip() or line.strip().startswith('#'):
+                continue
+            sp_line = line.strip().split('=')
+            properties_dict[sp_line[0]] = sp_line[1]
+    return properties_dict
 
-    logger.info("Starting process: " + command_description)
-    logger.info("Running command: " + command)
 
-    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True,
-                          shell=True) as process:
-        for line in iter(process.stdout.readline, ''):
-            line = str(line).rstrip()
-            logger.info(line)
-            if return_process_output:
-                process_output += line + "\n"
-        for line in iter(process.stderr.readline, ''):
-            line = line.rstrip()
-            logger.error(line)
-    if process.returncode != 0:
-        logger.error(command_description + " failed! Refer to the error messages for details.")
-        raise subprocess.CalledProcessError(process.returncode, process.args)
-    else:
-        logger.info(command_description + " - completed successfully")
-    if return_process_output:
-        return process_output
+def find_and_parse_properties_and_parse(properties_path):
+    property_files = glob.glob(os.path.join(properties_path, '*', 'release_phase1', '*', 'application.properties'))
+    property_files.extend(glob.glob(os.path.join(properties_path, '*', 'release_phase1', 'application.properties')))
+    all_properties_files_per_accession = defaultdict(list)
+    for property_file in property_files:
+        properties_dict = parse_application_properties(property_file)
+        all_properties_files_per_accession[properties_dict['parameters.assemblyAccession']].append({
+            'content': properties_dict,
+            'date_modified': os.path.getmtime(property_file),
+            'file_path': property_file
+        })
+
+    # now keep the most recent one
+    most_recent_per_accession = {}
+    for accession in all_properties_files_per_accession:
+        most_recent_per_accession[accession] = sorted(all_properties_files_per_accession[accession], key=itemgetter('date_modified'))[-1]
+    return most_recent_per_accession
+
+
+def resolve_fasta_and_report_path_from_release1(properties_path):
+    property_per_accession = find_and_parse_properties_and_parse(properties_path)
+    current_dir = os.getcwd()
+    paths_per_accession = {}
+    for accession in property_per_accession:
+        os.chdir(os.path.dirname(property_per_accession[accession]['file_path']))
+        fasta = os.path.abspath(property_per_accession[accession]['content']['parameters.fasta'])
+        report = property_per_accession[accession]['content']['parameters.assemblyReportUrl']
+        if report.startswith('file:'):
+            report = os.path.abspath(report[5:])
+        else:
+            report = None
+        paths_per_accession[accession] = (fasta, report)
+    os.chdir(current_dir)
+    return paths_per_accession
 
 
 def parse_input(input_file):
@@ -66,26 +88,45 @@ def assign_tempmongo_host_round_robin(number_variants, total_number_of_variant):
     return 'tempmongo-' + str(instance_number)
 
 
-def retrieve_assembly(scientific_name, assembly_accession, assembly_dir, download_dir):
-    fasta, report = None, None
+def look_for_assembly_file(assembly_path, scientific_name, assembly_accession, pattern):
     accession_dir = os.path.join(
-        assembly_dir,
+        assembly_path,
         scientific_name.lower().replace(' ', '_'),
         assembly_accession
     )
+    file_paths = glob.glob(os.path.join(accession_dir, pattern))
+    if len(file_paths) == 1:
+        logger.debug('Found a single file in %s with pattern %s: %s', accession_dir, pattern, file_paths[0])
+        return file_paths[0]
+    else:
+        logger.debug('Cannot find a single file in %s with pattern %s. Found %s', accession_dir, pattern, len(file_paths))
 
-    fastas = glob.glob(os.path.join(accession_dir, '*.fa'))
-    nucleotide_fastas = glob.glob(os.path.join(accession_dir, '*.fna'))
-    reports = glob.glob(os.path.join(accession_dir, '*_assembly_report.txt'))
-    if fastas and len(fastas) == 1:
-        fasta = fastas[0]
-    elif nucleotide_fastas and len(nucleotide_fastas) == 1:
-        fasta = nucleotide_fastas[0]
-    if reports and len(reports) == 1:
-        report = reports[0]
+
+def retrieve_assembly(scientific_name, assembly_accession, download_dir, assembly_search_paths):
+    fasta, report = None, None
+    for assembly_search_path in assembly_search_paths:
+
+        if not fasta:
+            fasta = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, assembly_accession + '_custom.fa')
+        if not fasta:
+            fasta = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, assembly_accession + '.fa')
+        if not fasta:
+            fasta = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, '*.fa')
+        if not fasta:
+            fasta = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, '*.fna')
+        if not report:
+            report = look_for_assembly_file(assembly_search_path, scientific_name, 'dbsnp_import', '*_custom_assembly_report.txt')
+        if not report:
+            report = look_for_assembly_file(assembly_search_path, scientific_name, 'dbsnp_import', '*_assembly_report_CUSTOM.txt')
+        if not report:
+            report = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, '*_assembly_report.txt')
 
     if fasta is None or report is None:
-        report, fasta = download_assembly(scientific_name, assembly_accession, download_dir)
+        fasta, report = download_assembly(scientific_name, assembly_accession, download_dir)
+    else:
+        logger.info('Found Assembly fasta and report for %s, %s', scientific_name, assembly_accession)
+        logger.info('fasta file: %s', fasta)
+        logger.info('report file: %s', report)
     return fasta, report
 
 
@@ -100,7 +141,7 @@ def download_assembly(scientific_name, assembly_accession, download_dir):
     if not len(assembly_reports) == 1 or not os.path.isfile(assembly_fasta):
         os.makedirs(output_dir, exist_ok=True)
         command = "{} {} -p {} -a {} -o {}""".format(python, genome_downloader, private_json, assembly_accession, output_dir)
-        run_command_with_output('Retrieve assembly fasta and assembly report', command)
+        #run_command_with_output('Retrieve assembly fasta and assembly report', command)
 
     assembly_report = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))[0]
     assembly_fasta = os.path.join(output_dir, assembly_accession, assembly_accession + ".fa")
@@ -117,7 +158,7 @@ def count_variants(rows, only_variant_to_process=True):
     ])
 
 
-def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_assemblies_tsv, output_taxonmomy_tsv):
+def aggregate_list_of_species(input_file, properties_path, assembly_dirs, download_dir, output_assemblies_tsv, output_taxonmomy_tsv):
     """
     """
     data_per_taxid, data_per_taxid_and_assembly = parse_input(input_file)
@@ -179,6 +220,8 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
                 str(count_variants(rows, False))
             ]), file=open_output)
 
+    path_per_assemblies = resolve_fasta_and_report_path_from_release1(properties_path)
+
     with open(output_assemblies_tsv, 'w') as open_output:
         headers = ['taxonomy_id', 'scientific_name', 'assembly', 'sources', 'fasta_path', 'report_path',
                    'tempmongo_instance', 'should_be_process', 'number_variants_to_process', 'total_num_variants']
@@ -192,7 +235,13 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
                 fasta, report, temp_mongo = '', '', ''
             else:
                 to_process = 'yes'
-                fasta, report = retrieve_assembly(scientific_name, assembly, assembly_dir, download_dir)
+                fasta, report = path_per_assemblies.get(assembly, (None, None))
+                if not fasta or not report:
+                    fasta, report = retrieve_assembly(scientific_name, assembly, download_dir, assembly_dirs)
+                else:
+                    logger.info('Found Assembly fasta and report for %s, %s In RELEASE1', scientific_name, assembly)
+                    logger.info('fasta file: %s', fasta)
+                    logger.info('report file: %s', report)
                 temp_mongo = taxid_to_tempmongo[taxid]
 
             out = [
@@ -213,19 +262,24 @@ def aggregate_list_of_species(input_file, assembly_dir, download_dir, output_ass
 def main():
     argparse = ArgumentParser()
     argparse.add_argument('--input', help='Path to the file containing the taxonomies and assemblies', required=True)
-    argparse.add_argument('--assembly_dir', help='Path to the directory containing pre-downloaded species assemblies', required=True)
+    argparse.add_argument('--properties_dir', help='Path to the directory where the release1 application.properties are stored', required=True)
+    argparse.add_argument('--assembly_dirs', help='Path to the directory containing pre-downloaded species assemblies', required=True, nargs='+')
     argparse.add_argument('--download_dir', help='Path to the directory where additional containing species assemblies will be downloaded', required=True)
     argparse.add_argument('--output_assemblies_tsv', help='Path to the tsv file that will contain the list of assemblies to process', required=True)
     argparse.add_argument('--output_taxonomy_tsv', help='Path to the tsv file that will contain the list of species to process', required=True)
     argparse.add_argument('--eva_accession_path', help='path to the directory that contain eva-accession code and private json file.')
+    argparse.add_argument('--debug', help='Set login level to debug', action='store_true', default=False)
 
     args = argparse.parse_args()
+    log_cfg.add_stdout_handler()
+    if args.debug:
+        log_cfg.set_log_level(level=logging.DEBUG)
 
     global eva_accession_path
     if args.eva_accession_path:
         eva_accession_path = args.eva_accession_path
     
-    aggregate_list_of_species(args.input, args.assembly_dir, args.download_dir, args.output_assemblies_tsv, args.output_taxonomy_tsv)
+    aggregate_list_of_species(args.input, args.properties_dir, args.assembly_dirs, args.download_dir, args.output_assemblies_tsv, args.output_taxonomy_tsv)
 
 
 if __name__ == "__main__":
