@@ -28,8 +28,8 @@ def parse_application_properties(app_prop):
 
 
 def find_and_parse_properties_and_parse(properties_path):
-    property_files = glob.glob(os.path.join(properties_path, '*', 'release_phase1', '*', 'application.properties'))
-    property_files.extend(glob.glob(os.path.join(properties_path, '*', 'release_phase1', 'application.properties')))
+    property_files = glob.glob(os.path.join(properties_path, '*', 'release*', '*', '*application.properties'))
+    property_files.extend(glob.glob(os.path.join(properties_path, '*', 'release*', '*application.properties')))
     all_properties_files_per_accession = defaultdict(list)
     for property_file in property_files:
         properties_dict = parse_application_properties(property_file)
@@ -42,7 +42,10 @@ def find_and_parse_properties_and_parse(properties_path):
     # now keep the most recent one
     most_recent_per_accession = {}
     for accession in all_properties_files_per_accession:
+        logger.debug('Out of the following files:\n' + '\n'.join([f['file_path'] for f in all_properties_files_per_accession[accession]]))
         most_recent_per_accession[accession] = sorted(all_properties_files_per_accession[accession], key=itemgetter('date_modified'))[-1]
+        logger.debug('Most recent is :' + most_recent_per_accession[accession]['file_path'])
+
     return most_recent_per_accession
 
 
@@ -141,6 +144,7 @@ def download_assembly(scientific_name, assembly_accession, download_dir):
     if not len(assembly_reports) == 1 or not os.path.isfile(assembly_fasta):
         os.makedirs(output_dir, exist_ok=True)
         command = "{} {} -p {} -a {} -o {}""".format(python, genome_downloader, private_json, assembly_accession, output_dir)
+        print(command)
         #run_command_with_output('Retrieve assembly fasta and assembly report', command)
 
     assembly_report = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))[0]
