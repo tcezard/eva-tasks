@@ -23,11 +23,11 @@ def parse_application_properties(app_prop):
             if not line.strip() or line.strip().startswith('#'):
                 continue
             sp_line = line.strip().split('=')
-            properties_dict[sp_line[0]] = sp_line[1]
+            properties_dict[sp_line[0].strip()] = sp_line[1].strip()
     return properties_dict
 
 
-def find_and_parse_properties_and_parse(properties_path):
+def find_and_parse_properties(properties_path):
     property_files = glob.glob(os.path.join(properties_path, '*', 'release*', '*', '*application.properties'))
     property_files.extend(glob.glob(os.path.join(properties_path, '*', 'release*', '*application.properties')))
     all_properties_files_per_accession = defaultdict(list)
