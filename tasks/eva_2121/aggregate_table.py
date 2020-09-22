@@ -33,6 +33,7 @@ def find_and_parse_properties(properties_path):
     all_properties_files_per_accession = defaultdict(list)
     for property_file in property_files:
         properties_dict = parse_application_properties(property_file)
+        # if os.path.isfile(properties_dict['parameters.assemblyReportUrl']):
         all_properties_files_per_accession[properties_dict['parameters.assemblyAccession']].append({
             'content': properties_dict,
             'date_modified': os.path.getmtime(property_file),
@@ -50,7 +51,7 @@ def find_and_parse_properties(properties_path):
 
 
 def resolve_fasta_and_report_path_from_release1(properties_path):
-    property_per_accession = find_and_parse_properties_and_parse(properties_path)
+    property_per_accession = find_and_parse_properties(properties_path)
     current_dir = os.getcwd()
     paths_per_accession = {}
     for accession in property_per_accession:
