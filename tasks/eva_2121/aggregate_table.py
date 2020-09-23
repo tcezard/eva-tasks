@@ -1,13 +1,19 @@
 #!/usr/bin/env python
 import csv
 import glob
+import json
 import logging
 import os
+import shutil
 from argparse import ArgumentParser
 from collections import defaultdict
 from operator import itemgetter
 
+import psycopg2
+from ebi_eva_common_pyutils.assembly import NCBIAssembly
+from ebi_eva_common_pyutils.config_utils import get_pg_metadata_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config as log_cfg
+from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 
 assigned_number_variant = 0
 number_of_tempmongo_instances = 10
@@ -106,7 +112,7 @@ def look_for_assembly_file(assembly_path, scientific_name, assembly_accession, p
         logger.debug('Cannot find a single file in %s with pattern %s. Found %s', accession_dir, pattern, len(file_paths))
 
 
-def retrieve_assembly(scientific_name, assembly_accession, download_dir, assembly_search_paths):
+def search_for_assembly_in_dir(scientific_name, assembly_accession, assembly_search_paths):
     fasta, report = None, None
     for assembly_search_path in assembly_search_paths:
 
@@ -125,32 +131,25 @@ def retrieve_assembly(scientific_name, assembly_accession, download_dir, assembl
         if not report:
             report = look_for_assembly_file(assembly_search_path, scientific_name, assembly_accession, '*_assembly_report.txt')
 
-    if fasta is None or report is None:
-        fasta, report = download_assembly(scientific_name, assembly_accession, download_dir)
-    else:
+    if fasta and report:
         logger.info('Found Assembly fasta and report for %s, %s', scientific_name, assembly_accession)
         logger.info('fasta file: %s', fasta)
         logger.info('report file: %s', report)
+
     return fasta, report
 
 
-def download_assembly(scientific_name, assembly_accession, download_dir):
-    python = os.path.join(eva_accession_path, "python-import-automation/bin/python")
-    genome_downloader = os.path.join(eva_accession_path, "eva-accession/eva-accession-import-automation/genome_downloader.py")
+def download_assembly(scientific_name, assembly_accession, download_dir, assembly_report=None):
     private_json = os.path.join(eva_accession_path, "private-config.json")
+    with open(private_json) as private_config_file_handle:
+        config = json.load(private_config_file_handle)
+        eutils_api_key = config['eutils_api_key']
 
-    output_dir = os.path.join(download_dir, scientific_name.lower().replace(' ', '_'))
-    assembly_reports = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))
-    assembly_fasta = os.path.join(output_dir, assembly_accession, assembly_accession + ".fa")
-    if not len(assembly_reports) == 1 or not os.path.isfile(assembly_fasta):
-        os.makedirs(output_dir, exist_ok=True)
-        command = "{} {} -p {} -a {} -o {}""".format(python, genome_downloader, private_json, assembly_accession, output_dir)
-        print(command)
-        #run_command_with_output('Retrieve assembly fasta and assembly report', command)
-
-    assembly_report = glob.glob(os.path.join(output_dir, assembly_accession, "*_assembly_report.txt"))[0]
-    assembly_fasta = os.path.join(output_dir, assembly_accession, assembly_accession + ".fa")
-    return assembly_fasta, assembly_report
+    assembly = NCBIAssembly(assembly_accession, scientific_name, download_dir, eutils_api_key)
+    if assembly_report:
+        shutil.copyfile(assembly_report, assembly.assembly_report_path)
+    assembly.download_or_construct()
+    return assembly.assembly_fasta_path, assembly.assembly_report_path
 
 
 def count_variants(rows, only_variant_to_process=True):
@@ -163,9 +162,43 @@ def count_variants(rows, only_variant_to_process=True):
     ])
 
 
-def aggregate_list_of_species(input_file, properties_path, assembly_dirs, download_dir, output_assemblies_tsv, output_taxonmomy_tsv):
-    """
-    """
+def prepare_location_of_report_and_fasta(path_per_assemblies_from_release1, assembly, scientific_name, download_dir,
+                                         assembly_dirs, release2_reference_folder):
+    # First check previous release for a suitable assembly
+    fasta, report = path_per_assemblies_from_release1.get(assembly, (None, None))
+
+    # If not found then search for existing assembly in different directories
+    if not report or not os.path.isfile(report):
+        fasta, report = search_for_assembly_in_dir(scientific_name, assembly, assembly_dirs)
+    else:
+        logger.info('Found Assembly fasta and report for %s, %s In RELEASE1', scientific_name, assembly)
+        logger.info('fasta file: %s', fasta)
+        logger.info('report file: %s', report)
+
+    # if the report is not there then download the fasta ans the report
+    if not report or not os.path.isfile(report):
+        fasta, report = download_assembly(scientific_name, assembly, download_dir)
+    # If the report is there then download the fasta based on the report
+    elif not fasta or not os.path.isfile(fasta):
+        fasta, report = download_assembly(scientific_name, assembly, download_dir, report)
+
+    assembly_folder = os.path.join(release2_reference_folder, scientific_name.lower().replace(' ', '_'), assembly)
+    os.makedirs(assembly_folder, exist_ok=True)
+    shutil.copyfile(fasta, os.path.join(assembly_folder, assembly + '.fa'))
+    shutil.copyfile(report, os.path.join(assembly_folder, assembly + '_assembly_report.txt'))
+    return os.path.join(assembly_folder, assembly + '.fa'), os.path.join(assembly_folder, assembly + '_assembly_report.txt')
+
+
+def get_dbsnp_database_name(pg_conn, scientific_name):
+    query = "select database_name from dbsnp_ensembl_species.import_progress where scientific_name='{}';"
+    database_names = list(set([database_name for database_name, in get_all_results_for_query(pg_conn, query.format(scientific_name))]))
+    assert len(database_names) < 2, "Species {} has more than one database associated: {}".format(scientific_name, database_names)
+    if database_names:
+        return database_names[0]
+
+
+def aggregate_list_of_species(input_file, properties_path, assembly_dirs, download_dir, release2_reference_folder,
+                              output_assemblies_tsv, output_taxonmomy_tsv, private_config_xml_file):
     data_per_taxid, data_per_taxid_and_assembly = parse_input(input_file)
     only_unmapped_tax_id = []
     unchanged_taxid = []
@@ -225,28 +258,31 @@ def aggregate_list_of_species(input_file, properties_path, assembly_dirs, downlo
                 str(count_variants(rows, False))
             ]), file=open_output)
 
-    path_per_assemblies = resolve_fasta_and_report_path_from_release1(properties_path)
+    path_per_assemblies_from_release1 = resolve_fasta_and_report_path_from_release1(properties_path)
+
+    pg_conn = psycopg2.connect(
+        get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file), user="evadev"
+    )
 
     with open(output_assemblies_tsv, 'w') as open_output:
         headers = ['taxonomy_id', 'scientific_name', 'assembly', 'sources', 'fasta_path', 'report_path',
-                   'tempmongo_instance', 'should_be_process', 'number_variants_to_process', 'total_num_variants']
+                   'tempmongo_instance', 'should_be_process', 'number_variants_to_process', 'total_num_variants',
+                   'dbsnp_database_name', 'release_version']
         print('\t'.join([str(o) for o in headers]), file=open_output)
         for taxid, assembly in data_per_taxid_and_assembly:
             rows = data_per_taxid_and_assembly[(taxid, assembly)]
             scientific_name = {row['Scientific Name From Taxid'] for row in rows}.pop()
+            dbsnps_database_name = get_dbsnp_database_name(pg_conn, scientific_name) or ''
 
             if taxid in unchanged_taxid + only_unmapped_tax_id or assembly == 'Unmapped':
                 to_process = 'no'
                 fasta, report, temp_mongo = '', '', ''
             else:
                 to_process = 'yes'
-                fasta, report = path_per_assemblies.get(assembly, (None, None))
-                if not fasta or not report:
-                    fasta, report = retrieve_assembly(scientific_name, assembly, download_dir, assembly_dirs)
-                else:
-                    logger.info('Found Assembly fasta and report for %s, %s In RELEASE1', scientific_name, assembly)
-                    logger.info('fasta file: %s', fasta)
-                    logger.info('report file: %s', report)
+                fasta, report = prepare_location_of_report_and_fasta(
+                    path_per_assemblies_from_release1, assembly, scientific_name,  download_dir,
+                    assembly_dirs, release2_reference_folder
+                )
                 temp_mongo = taxid_to_tempmongo[taxid]
 
             out = [
@@ -259,20 +295,25 @@ def aggregate_list_of_species(input_file, properties_path, assembly_dirs, downlo
                 temp_mongo,
                 to_process,
                 str(count_variants(rows, True)),
-                str(count_variants(rows, False))
+                str(count_variants(rows, False)),
+                '2',
+                dbsnps_database_name
             ]
             print('\t'.join([str(o) for o in out]), file=open_output)
 
+    pg_conn.close()
 
 def main():
     argparse = ArgumentParser()
     argparse.add_argument('--input', help='Path to the file containing the taxonomies and assemblies', required=True)
     argparse.add_argument('--properties_dir', help='Path to the directory where the release1 application.properties are stored', required=True)
-    argparse.add_argument('--assembly_dirs', help='Path to the directory containing pre-downloaded species assemblies', required=True, nargs='+')
-    argparse.add_argument('--download_dir', help='Path to the directory where additional containing species assemblies will be downloaded', required=True)
+    argparse.add_argument('--assembly_dirs',  help='Path to the directory containing pre-downloaded species assemblies', required=True, nargs='+')
+    argparse.add_argument('--download_dir', help='Path to the temporary directory where additional species assemblies will be downloaded', required=True,)
+    argparse.add_argument('--release2_reference_folder', help='Path to the directory where selected fasta and report will be copied', required=True)
     argparse.add_argument('--output_assemblies_tsv', help='Path to the tsv file that will contain the list of assemblies to process', required=True)
     argparse.add_argument('--output_taxonomy_tsv', help='Path to the tsv file that will contain the list of species to process', required=True)
     argparse.add_argument('--eva_accession_path', help='path to the directory that contain eva-accession code and private json file.')
+    argparse.add_argument("--private_config_xml_file", help="ex: /path/to/eva-maven-settings.xml", required=True)
     argparse.add_argument('--debug', help='Set login level to debug', action='store_true', default=False)
 
     args = argparse.parse_args()
@@ -282,9 +323,10 @@ def main():
 
     global eva_accession_path
     if args.eva_accession_path:
-        eva_accession_path = args.eva_accession_path
+            eva_accession_path = args.eva_accession_path
     
-    aggregate_list_of_species(args.input, args.properties_dir, args.assembly_dirs, args.download_dir, args.output_assemblies_tsv, args.output_taxonomy_tsv)
+    aggregate_list_of_species(args.input, args.properties_dir, args.assembly_dirs, args.download_dir, args.release2_reference_folder,
+                              args.output_assemblies_tsv, args.output_taxonomy_tsv, args.private_config_xml_file)
 
 
 if __name__ == "__main__":
