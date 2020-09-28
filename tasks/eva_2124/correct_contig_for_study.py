@@ -48,7 +48,7 @@ def get_mongo_connection_handle_url(host, port=27017, username=None, password=No
 
 
 def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession, mongo_database, assembly_report=None,
-            chunk_size=1000, only_check=False):
+            chunk_size=1000, only_check=False, contigs=None):
     """
     Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
     """
@@ -60,14 +60,17 @@ def correct(mongo_user, mongo_password, mongo_host, studies, assembly_accession,
         sve_collection = accessioning_mongo_handle[mongo_database]["submittedVariantEntity"]
         logging.info("Loading synonyms...")
         synonym_dictionaries = load_synonyms_for_assembly(assembly_accession, assembly_report)
-        number_of_variants_to_replace = assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession)
+        number_of_variants_to_replace = assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession, contigs)
         if not only_check:
-            do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace)
+            do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace, contigs)
 
 
-def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession):
+def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, studies, assembly_accession, contigs):
     logging.info("Checking that all contigs are replaceable...")
-    cursor = sve_collection.aggregate([{'$match': {'seq': assembly_accession, 'study': {'$in': studies}}},
+    pipeline_match_step = {'$match': {'seq': assembly_accession, 'study': {'$in': studies}}}
+    if contigs:
+        pipeline_match_step['$match']['contig'] = {'$in': contigs}
+    cursor = sve_collection.aggregate([pipeline_match_step,
                                        {'$group': {'_id': '$contig', 'count': {'$sum': 1}}}])
     already_genbank_contigs = 0
     already_genbank_variants = 0
@@ -104,8 +107,11 @@ def assert_all_contigs_can_be_replaced(sve_collection, synonym_dictionaries, stu
     return replaceable_variants
 
 
-def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace):
-    cursor = sve_collection.find({'study': {'$in': studies}, 'seq': assembly_accession}, no_cursor_timeout=True)
+def do_updates(sve_collection, synonym_dictionaries, studies, assembly_accession, chunk_size, number_of_variants_to_replace, contigs=None):
+    filter_criteria = {'study': {'$in': studies}, 'seq': assembly_accession}
+    if contigs:
+        filter_criteria['contig'] = {'$in': contigs}
+    cursor = sve_collection.find(filter_criteria, no_cursor_timeout=True)
     insert_statements = []
     drop_statements = []
     record_checked = 0
@@ -170,6 +176,7 @@ def main():
     argparse.add_argument('--studies', help='The studies in the assembly to correct', required=True, nargs='+')
     argparse.add_argument('--assembly', help='The assembly accession of the entities that needs to be changed',
                           required=True)
+    argparse.add_argument('--contigs', help='The contigs to modify. they should be provided as they appeared in the record', nargs='+')
     argparse.add_argument('--assembly-report', help='Use this assembly report instead of downloading the standard one',
                           required=False)
     argparse.add_argument('--only_check', help='Check that the variant contig names can be replaced using the assembly report',
@@ -177,7 +184,7 @@ def main():
 
     args = argparse.parse_args()
     correct(args.mongo_user, args.mongo_password, args.mongo_host, args.studies, args.assembly, args.mongo_database,
-            args.assembly_report, only_check=args.only_check)
+            args.assembly_report, only_check=args.only_check, contigs=args.contigs)
     logging.info("Finished successfully.")
 
 
