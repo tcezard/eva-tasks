@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
+from copy import deepcopy
+from datetime import datetime
+
 import pymongo
 
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
@@ -9,11 +12,14 @@ logger = log_cfg.get_logger(__name__)
 
 
 def inactive_object(variant):
+    inactive_variant = deepcopy(variant)
+    inactive_variant['hashedMessage'] = inactive_variant.pop('_id')
     return {
-        "eventType": "UPDATED",
+        "eventType": "DEPRECATED",
         "accession": variant['accession'],
         "reason": "Removed: The contig on which the variant was mapped is not accessioned by INSDC.",
-        "inactiveObjects": [variant]
+        "inactiveObjects": [inactive_variant],
+        "createdDate": datetime.now()  # "2018-07-30T13:21:59.333Z"
     }
 
 
