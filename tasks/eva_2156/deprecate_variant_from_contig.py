@@ -10,6 +10,8 @@ from ebi_eva_common_pyutils.logger import logging_config as log_cfg
 
 logger = log_cfg.get_logger(__name__)
 
+now = datetime.now()
+
 
 def inactive_object(variant):
     inactive_variant = deepcopy(variant)
@@ -19,13 +21,14 @@ def inactive_object(variant):
         "accession": variant['accession'],
         "reason": "Removed: The contig on which the variant was mapped is not accessioned by INSDC.",
         "inactiveObjects": [inactive_variant],
-        "createdDate": datetime.now()  # "2018-07-30T13:21:59.333Z"
+        "createdDate": now  # "2018-07-30T13:21:59.333Z"
     }
 
 
 def deprecate(settings_xml_file, study, assembly_accession, contigs=None):
     """
-    Connect to mongodb and retrieve all variants the should be updated, check their key and update them in bulk.
+    Connect to mongodb and retrieve all variants that needs to be deprecated.
+    Copy the variant in the operation collection and delete them from the submitted variant collections.
     """
     with pymongo.MongoClient(get_mongo_uri_for_eva_profile('production', settings_xml_file)) as accessioning_mongo_handle:
         sve_collection = accessioning_mongo_handle['eva_accession_sharded']["submittedVariantEntity"]
