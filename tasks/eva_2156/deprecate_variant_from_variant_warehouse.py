@@ -16,16 +16,21 @@ def deprecate(settings_xml_file, database_name, contigs=None):
     """
     with pymongo.MongoClient(get_mongo_uri_for_eva_profile('production', settings_xml_file)) as mongo_handle:
         variant_collection = mongo_handle[database_name]['variants_2_0']
+        deleted_variant_collection = mongo_handle[database_name]['to_delete_variants_2_0']
 
         cursor = variant_collection.find({'chr': {'$in': contigs}})
         drop_statements = []
+        insert_statements = []
         for variant in cursor:
+            insert_statements.append(pymongo.InsertOne(variant))
             drop_statements.append(pymongo.DeleteOne({'_id': variant['_id']}))
 
     logger.info('Found %s variant to remove', len(drop_statements))
-
+    result_insert = deleted_variant_collection.bulk_write(requests=insert_statements, ordered=False)
     result_drop = variant_collection.bulk_write(requests=drop_statements, ordered=False)
+    logger.info('There was %s new documents inserted in to_delete collection' % result_insert.inserted_count)
     logger.info('There was %s documents dropped from ' % result_drop.deleted_count)
+
     mongo_handle.close()
 
 
