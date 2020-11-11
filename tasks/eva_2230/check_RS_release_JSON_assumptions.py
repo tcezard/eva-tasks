@@ -70,6 +70,8 @@ def ensure_new_rs_not_in_eva_human_accession_db(mongo_connection_handle: MongoCl
 def is_rs_id_mapped_to_assembly(rs_record, eva_production_human_dbsnp_assembly):
     try:
         for placement in rs_record["primary_snapshot_data"]["placements_with_allele"]:
+            # Primary top-level placement (ptlp) is used to identify records that are mapped to this assembly
+            # See https://github.com/EBIvariation/eva-accession/blob/d3c849f15b6b63ebd97d4ac6f2d857e3b65d908f/eva-accession-import-dbsnp2/src/main/java/uk/ac/ebi/eva/accession/dbsnp2/batch/processors/JsonNodeToClusteredVariantProcessor.java#L74-L74
             if placement["is_ptlp"]:
                 for assembly_info in placement["placement_annot"]["seq_id_traits_by_assembly"]:
                     if assembly_info["assembly_accession"] == eva_production_human_dbsnp_assembly:
