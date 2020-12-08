@@ -2,12 +2,10 @@
 @Grab('com.xlson.groovycsv:groovycsv:1.3')
 import static com.xlson.groovycsv.CsvParser.parseCsv
 
-import org.springframework.data.mongodb.core.MongoTemplate
 import uk.ac.ebi.ampt2d.commons.accession.core.exceptions.AccessionMergedException
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.SubmittedVariantAccessioningConfiguration
 import uk.ac.ebi.eva.accession.core.configuration.ApplicationProperties
-import uk.ac.ebi.eva.accession.release.collectionNames.EvaCollectionNames
 import uk.ac.ebi.eva.accession.core.service.nonhuman.SubmittedVariantAccessioningService
 
 
@@ -17,12 +15,6 @@ class MainApp implements CommandLineRunner {
 
 	@Autowired
 	private SubmittedVariantAccessioningService svAccessioningService;
-
-	@Autowired
-	private MongoTemplate mongoTemplate;
-
-	@Autowired
-	private EvaCollectionNames collectionNames;
 
 	void run(String... args) {
 		def file = args[0]
