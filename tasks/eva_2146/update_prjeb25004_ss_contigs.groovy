@@ -56,14 +56,13 @@ class MainApp implements CommandLineRunner {
 
     private List<Long> ssIDBatch = new ArrayList<>()
 
-    private static Logger logger = LoggerFactory.getLogger(MainApp.class);
+    private static Logger logger = LoggerFactory.getLogger(MainApp.class)
 
     void run(String... args) {
         def reader = vcfReader()
         reader.open(new ExecutionContext())
         try {
             int variantCount = 0
-            int updateCount = 0
             while(true) {
                 Variant variant = reader.read()
                 if (variant == null) break
@@ -76,6 +75,8 @@ class MainApp implements CommandLineRunner {
                     ssIDBatch.clear()
                 }
             }
+            def (variantsToInsert, hashesToDelete) = getVariantsToOverwrite(ssIDBatch)
+            batchWrite(variantsToInsert, hashesToDelete)
         }
         catch (Exception ex) {
             ex.printStackTrace()
