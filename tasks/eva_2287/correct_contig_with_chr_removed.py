@@ -13,13 +13,9 @@ def get_SHA1(variant_rec):
     return h.hexdigest().upper()
 
 
-# def correct(mongo_user, mongo_password, mongo_host, mongo_database='GCA_002742125_1'):
 def correct(mongo_user, mongo_password, mongo_host, mongo_database='eva_accession_sharded'):
-    # with MongoClient(mongo_host, username=mongo_user, password=mongo_password) as mongo_handle:
-    with pymongo.MongoClient('localhost') as mongo_handle:
-        # sve_collection = mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
-        # sve_collection = mongo_handle["GCA_002742125_1"]["submittedVariantEntity"]
-        sve_collection = mongo_handle[mongo_database]["submittedVariantEntity"]
+    with pymongo.MongoClient(mongo_host, username=mongo_user, password=mongo_password) as mongo_handle:
+        sve_collection = mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
         filter_criteria = {'seq': 'GCA_002742125.1', 'study': 'PRJEB42582'}
         cursor = sve_collection.find(filter_criteria)
         insert_statements = []
@@ -41,8 +37,6 @@ def correct(mongo_user, mongo_password, mongo_host, mongo_database='eva_accessio
             total_dropped += result_drop.deleted_count
             logging.info('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
             logging.info('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
-            print('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
-            print('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
         except Exception as e:
             print(traceback.format_exc())
             raise e
@@ -57,5 +51,4 @@ if __name__ == "__main__":
     parser.add_argument('--mongo_password', help='password to connect to mongodb', required=False)
     parser.add_argument('--mongo_host', help='host to connect to mongodb', required=False)
     args = parser.parse_args()
-
     correct(args.mongo_user, args.mongo_password, args.mongo_host)
