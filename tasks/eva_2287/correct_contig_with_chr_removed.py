@@ -3,6 +3,7 @@ import argparse
 import pymongo
 import traceback
 import logging
+from ebi_eva_common_pyutils.config_utils import get_properties_from_xml_file
 
 
 def get_SHA1(variant_rec):
@@ -13,14 +14,18 @@ def get_SHA1(variant_rec):
     return h.hexdigest().upper()
 
 
-def correct(mongo_user, mongo_password, mongo_host, mongo_database='eva_accession_sharded'):
-    with pymongo.MongoClient(mongo_host, username=mongo_user, password=mongo_password) as mongo_handle:
-        sve_collection = mongo_handle["eva_accession_sharded"]["submittedVariantEntity"]
+def correct(private_config_xml_file, profile='production', mongo_database='eva_accession_sharded'):
+    properties = get_properties_from_xml_file(profile, private_config_xml_file)
+    mongo_username = properties['eva.mongo.user']
+    mongo_password = properties['eva.mongo.passwd']
+    mongo_host = str(str(properties['eva.mongo.host']).split(',')[0]).split(':')[0]
+    with pymongo.MongoClient(mongo_host, username=mongo_username, password=mongo_password) as mongo_handle:
+        sve_collection = mongo_handle[mongo_database]["submittedVariantEntity"]
         filter_criteria = {'seq': 'GCA_002742125.1', 'study': 'PRJEB42582'}
         cursor = sve_collection.find(filter_criteria)
         insert_statements = []
         drop_statements = []
-        number_of_variants_to_replace, number_of_variants_to_replace = 10, 10
+        number_of_variants_to_replace = 10
         total_inserted, total_dropped = 0, 0
         try:
             for variant in cursor:
@@ -47,8 +52,6 @@ def correct(mongo_user, mongo_password, mongo_host, mongo_database='eva_accessio
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get stats from variant warehouse', add_help=False)
-    parser.add_argument('--mongo_user', help='user to connect to mongodb', required=False)
-    parser.add_argument('--mongo_password', help='password to connect to mongodb', required=False)
-    parser.add_argument('--mongo_host', help='host to connect to mongodb', required=False)
+    parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
     args = parser.parse_args()
-    correct(args.mongo_user, args.mongo_password, args.mongo_host)
+    correct(args.private_config_xml_file)

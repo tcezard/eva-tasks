@@ -33,7 +33,7 @@ class TestCorrectChr(TestCase):
         self.connection_handle.close()
 
     def test_correct(self):
-        fixed = correct(None, None, self.host, self.database)
+        fixed = correct('../test/settings.xml', profile='localhost', mongo_database=self.database)
         self.assertEqual(fixed, 1)
         variant = (self.connection_handle[self.database][self.variant_collection].find_one(
             {'seq': 'GCA_002742125.1'}))
