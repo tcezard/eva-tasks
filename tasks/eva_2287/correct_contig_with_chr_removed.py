@@ -3,7 +3,7 @@ import argparse
 import pymongo
 import traceback
 import logging
-from ebi_eva_common_pyutils.config_utils import get_properties_from_xml_file
+from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 
 
 def get_SHA1(variant_rec):
@@ -15,11 +15,7 @@ def get_SHA1(variant_rec):
 
 
 def correct(private_config_xml_file, profile='production', mongo_database='eva_accession_sharded'):
-    properties = get_properties_from_xml_file(profile, private_config_xml_file)
-    mongo_username = properties['eva.mongo.user']
-    mongo_password = properties['eva.mongo.passwd']
-    mongo_host = str(str(properties['eva.mongo.host']).split(',')[0]).split(':')[0]
-    with pymongo.MongoClient(mongo_host, username=mongo_username, password=mongo_password) as mongo_handle:
+    with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
         sve_collection = mongo_handle[mongo_database]["submittedVariantEntity"]
         filter_criteria = {'seq': 'GCA_002742125.1', 'study': 'PRJEB42582'}
         cursor = sve_collection.find(filter_criteria)

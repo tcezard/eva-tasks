@@ -1,3 +1,5 @@
+from mock import patch
+
 from pymongo import MongoClient
 from unittest import TestCase
 from tasks.eva_2287.correct_contig_with_chr_removed import correct
@@ -32,7 +34,9 @@ class TestCorrectChr(TestCase):
         self.connection_handle[self.database][self.variant_collection].drop()
         self.connection_handle.close()
 
-    def test_correct(self):
+    @patch('tasks.eva_2287.correct_contig_with_chr_removed.get_mongo_uri_for_eva_profile')
+    def test_correct(self, mock_get_mongo_uri_for_eva_profile):
+        mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         fixed = correct('../test/settings.xml', profile='localhost', mongo_database=self.database)
         self.assertEqual(fixed, 1)
         variant = (self.connection_handle[self.database][self.variant_collection].find_one(
