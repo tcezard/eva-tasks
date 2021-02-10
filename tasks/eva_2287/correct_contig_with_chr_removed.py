@@ -28,7 +28,7 @@ def correct(private_config_xml_file, profile='production', mongo_database='eva_a
                 original_id = get_SHA1(variant)
                 assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (
                     variant['_id'], original_id)
-                variant['contig'] = 'chromosome11'
+                variant['contig'] = 'CM008482.1'
                 variant['_id'] = get_SHA1(variant)
                 insert_statements.append(pymongo.InsertOne(variant))
                 drop_statements.append(pymongo.DeleteOne({'_id': original_id}))

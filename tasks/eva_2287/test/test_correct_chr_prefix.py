@@ -41,8 +41,8 @@ class TestCorrectChr(TestCase):
         self.assertEqual(fixed, 1)
         variant = (self.connection_handle[self.database][self.variant_collection].find_one(
             {'seq': 'GCA_002742125.1'}))
-        self.assertEqual(variant['contig'], 'chromosome11')
-        self.assertEqual(variant['_id'], '55392EB026F670F15823A9BEF16DD45398371124')
+        self.assertEqual(variant['contig'], 'CM008482.1')
+        self.assertEqual(variant['_id'], '65656369EF7C856ADF57AEDAFD5E6075E8575D84')
         variant = (self.connection_handle[self.database][self.variant_collection].find_one(
             {'_id': '616766226DF5A3852B9FE4B266B641421CAF4BE6'}))
         self.assertIsNone(variant)
