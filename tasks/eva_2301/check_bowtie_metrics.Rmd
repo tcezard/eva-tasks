@@ -1,0 +1,76 @@
+---
+title: Compare distribution of bowtie alignment parameters between reads aligned correctly
+  (TP) or not (FP)
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+file=''
+data<-read.delim(file, col.names=c("name", "qual", "AS", "XS", "XN", "XM", "XG", "NM", "MD", "BD", "Type"))
+
+# Remove Filtered alignments
+data <- data[data$BD!="Filtered",]
+
+data$XS[is.nan(data$XS)] <- min(data$XS[! is.nan(data$XS)]) - 1
+data$AS[is.nan(data$AS)] <- min(data$AS[! is.nan(data$AS)]) - 1
+
+```
+
+
+## AS vs XS
+
+AS:i:<N>  
+Alignment score. Can be negative. Can be greater than 0 in --local mode (but not in --end-to-end mode). Only present if SAM record is for an aligned read.
+
+XS:i:<N> 
+Alignment score for the best-scoring alignment found other than the alignment reported. Can be negative. Can be greater than 0 in --local mode (but not in --end-to-end mode). Only present if the SAM record is for an aligned read and more than one alignment was found for the read. Note that, when the read is part of a concordantly-aligned pair, this score could be greater than AS:i.
+
+```{r}
+
+data %>% count(AS, XS, BD) -> count_AS_XS_BD
+
+complete_count <- complete(count_AS_XS_BD, AS=seq(min(count_AS_XS_BD$AS), max(count_AS_XS_BD$AS)), XS=seq(min(count_AS_XS_BD$XS), max(count_AS_XS_BD$XS)), BD)
+
+ggplot(complete_count, aes(x=AS, y=XS, fill=log(n))) + geom_tile() + facet_grid(~BD ) + scale_fill_gradient2(na.value="white")
+```
+
+## Check NM distribution
+
+NM:i:<N>
+The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
+
+
+Distribution of NM values
+
+
+```{r}
+
+ggplot(data, aes(NM)) + geom_histogram() + facet_grid(~BD ) + scale_y_log10()
+
+```
+
+
+```{r}
+
+data %>% 
+  count(AS, NM, BD) %>% 
+  complete( AS=seq(min(data$AS), max(data$AS)), NM=seq(min(data$NM), max(data$NM)), BD) -> complete_count
+
+ggplot(complete_count, aes(x=AS, y=NM, fill=log(n))) + geom_tile() + facet_grid(~BD ) + scale_fill_gradient2(na.value="white")
+
+```
+
+There is no clear differences between the two distribution. If anything the FP have fewer mismatches
+
+
+
