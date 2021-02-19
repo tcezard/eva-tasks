@@ -1,5 +1,5 @@
 ---
-title: Compare distribution of bowtie alignment parameters between reads aligned correctly
+title: Flank length 100 - Compare distribution of bowtie alignment parameters between reads aligned correctly
   (TP) or not (FP)
 output:
   html_document:
@@ -26,14 +26,56 @@ data$AS[is.nan(data$AS)] <- min(data$AS[! is.nan(data$AS)]) - 1
 
 ```
 
+## Metrics distribution
 
-## AS vs XS
+### NM
+NM:i:<N>
+The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
 
+```{r}
+
+ggplot(data, aes(NM)) + geom_histogram() + facet_grid(Type~BD ) + scale_y_log10()
+
+```
+
+### AS
 AS:i:<N>  
 Alignment score. Can be negative. Can be greater than 0 in --local mode (but not in --end-to-end mode). Only present if SAM record is for an aligned read.
 
+
+```{r}
+
+ggplot(data, aes(AS)) + geom_histogram() + facet_grid(Type~BD ) + scale_y_log10()
+
+```
+
+
+### XS
+
 XS:i:<N> 
 Alignment score for the best-scoring alignment found other than the alignment reported. Can be negative. Can be greater than 0 in --local mode (but not in --end-to-end mode). Only present if the SAM record is for an aligned read and more than one alignment was found for the read. Note that, when the read is part of a concordantly-aligned pair, this score could be greater than AS:i.
+
+```{r}
+
+ggplot(data, aes(XS)) + geom_histogram() + facet_grid(Type~BD ) + scale_y_log10()
+
+```
+
+
+
+### qual
+
+qual is the mapping quality
+
+```{r}
+
+ggplot(data, aes(qual)) + geom_histogram() + facet_grid(Type~BD ) + scale_y_log10()
+
+```
+
+
+## AS vs XS
+
 
 ```{r}
 
@@ -44,20 +86,7 @@ complete_count <- complete(count_AS_XS_BD, AS=seq(min(count_AS_XS_BD$AS), max(co
 ggplot(complete_count, aes(x=AS, y=XS, fill=log(n))) + geom_tile() + facet_grid(~BD ) + scale_fill_gradient2(na.value="white")
 ```
 
-## Check NM distribution
-
-NM:i:<N>
-The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
-
-
-Distribution of NM values
-
-
-```{r}
-
-ggplot(data, aes(NM)) + geom_histogram() + facet_grid(~BD ) + scale_y_log10()
-
-```
+## NM vs AS
 
 
 ```{r}
@@ -69,8 +98,6 @@ data %>%
 ggplot(complete_count, aes(x=AS, y=NM, fill=log(n))) + geom_tile() + facet_grid(~BD ) + scale_fill_gradient2(na.value="white")
 
 ```
-
-There is no clear differences between the two distribution. If anything the FP have fewer mismatches
 
 
 
