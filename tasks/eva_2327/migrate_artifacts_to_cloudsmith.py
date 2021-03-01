@@ -11,7 +11,8 @@ logger = logging_config.get_logger(__name__)
 
 
 def migrate_artifacts(python_path, cloudsmith_path, artifact_source_dir):
-    artifact_dirname_pattern = re.compile('[0-9]+\.[0-9]+.+')
+    # only consider directories with actual artifacts in them i.e., directories with version number names
+    artifact_dirname_pattern = re.compile('[0-9]+\.[0-9]+.*')
     for dir_path, _, file_names in os.walk(artifact_source_dir):
         if artifact_dirname_pattern.match(os.path.basename(dir_path)):
             # Snapshot JARs and POMs are named in a sorted fashion but we only need the latest snapshot
