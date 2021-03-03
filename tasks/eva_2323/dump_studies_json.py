@@ -1,6 +1,6 @@
 import json
 from argparse import ArgumentParser
-from functools import cached_property
+from cached_property import cached_property
 
 import psycopg2
 from ebi_eva_common_pyutils.config_utils import get_properties_from_xml_file
