@@ -1,5 +1,7 @@
 import json
 from argparse import ArgumentParser
+
+import requests
 from cached_property import cached_property
 
 import psycopg2
@@ -9,7 +11,7 @@ from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 
 class StudyDumper:
 
-    def __init__(self, properties_file, stage='development'):
+    def __init__(self, properties_file=None, stage='development'):
         self.properties_file = properties_file
         self.stage = stage
 
@@ -22,7 +24,7 @@ class StudyDumper:
         conn = psycopg2.connect(pg_url, user=pg_user, password=pg_pass)
         return conn
 
-    def dump(self):
+    def dump_from_database(self):
 
         query = (
             'SELECT p.project_accession, p.title, p.description, a.vcf_reference_accession, sa.taxonomy_id FROM project p '
@@ -43,21 +45,48 @@ class StudyDumper:
             entries.append({'fields': fields})
         return json.dumps(self.json_document(entries), indent=4)
 
+    def dump_from_api(self):
+        url = 'https://www.ebi.ac.uk/eva/webservices/rest/v1/meta/studies/all'
+        response = requests.get(url)
+        data = response.json()
+        entries = []
+
+        for study in data['response'][0]['result']:
+            fields = self.get_fields({
+                'id': study['id'],
+                'title': study['name'],
+                'description': study['description'],
+                'genome_accession': study['assemblyAccession'],
+                'taxonomy_id': study['taxonomyId'][0],
+                'scientific_name': study['speciesScientificName'],
+                'number_samples': study['numSamples']
+            })
+            cross_reference = []
+            for publication in study['publications']:
+                if publication and publication != '-':
+                    cross_reference.append({'dbname': 'PUBMED', 'dbkey': str(publication)})
+            cross_reference.append({'dbname': 'ENA', 'dbkey': study['id']})
+            entries.append(self.get_entry(fields, cross_reference))
+        return json.dumps(self.json_document(entries), indent=4)
+
     def get_fields(self, all_fields):
         return [
             {'name': f, 'value': all_fields[f]} for f in all_fields
         ]
 
-    def get_entry(self, fields, cross_references, hierarchical_field):
-        return {
-            'fields': fields,
-            'cross_references': cross_references,
-            'hierarchical_field': hierarchical_field
-        }
+    def get_entry(self, fields, cross_references=None, hierarchical_field=None):
+        entry = {}
+        if fields:
+            entry['fields'] = fields
+        if cross_references:
+            entry['cross_references'] = cross_references
+        if hierarchical_field:
+            entry['hierarchical_field'] = hierarchical_field
+        return entry
 
     def json_document(self, entries):
         return {
-            'name': 'EVA',
+            'name': 'EVA studies',
             'entry_count': len(entries),
             'entries': entries
         }
@@ -67,8 +96,10 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--property_file')
     args = parser.parse_args()
-
-    print(StudyDumper(args.property_file).dump())
+    if args.property_file:
+        print(StudyDumper(args.property_file).dump_from_database())
+    else:
+        print(StudyDumper().dump_from_api())
 
 
 if __name__ == "__main__":
