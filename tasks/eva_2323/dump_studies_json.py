@@ -11,7 +11,7 @@ from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 
 class StudyDumper:
 
-    def __init__(self, properties_file=None, stage='development'):
+    def __init__(self, properties_file=None, stage='production'):
         self.properties_file = properties_file
         self.stage = stage
 
@@ -24,7 +24,7 @@ class StudyDumper:
         conn = psycopg2.connect(pg_url, user=pg_user, password=pg_pass)
         return conn
 
-    def dump_from_database(self):
+    def dump_from_database(self, properties_file, stage):
 
         query = (
             'SELECT p.project_accession, p.title, p.description, a.vcf_reference_accession, sa.taxonomy_id FROM project p '
@@ -94,10 +94,13 @@ class StudyDumper:
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--property_file')
+    parser.add_argument('--property_file', help='The properties file containing the credential to connect to EVAPRO. '
+                                                'Without this option the REST API will be used')
+    parser.add_argument('--stage',  choices=['development', 'production'], default='production',
+                        help='The development of production server to be used for the database')
     args = parser.parse_args()
     if args.property_file:
-        print(StudyDumper(args.property_file).dump_from_database())
+        print(StudyDumper(args.property_file, args.stage).dump_from_database())
     else:
         print(StudyDumper().dump_from_api())
 
