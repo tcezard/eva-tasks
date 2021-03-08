@@ -24,7 +24,7 @@ class StudyDumper:
         conn = psycopg2.connect(pg_url, user=pg_user, password=pg_pass)
         return conn
 
-    def dump_from_database(self, properties_file, stage):
+    def dump_from_database(self):
 
         query = (
             'SELECT p.project_accession, p.title, p.description, a.vcf_reference_accession, sa.taxonomy_id FROM project p '
