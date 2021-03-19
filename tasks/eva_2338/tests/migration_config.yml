@@ -1,9 +1,0 @@
-migration-folder: /home/sundarvenkata/ownCloud/EVA2338/eva-tasks/tasks/eva_2338/tests/../resources
-python3-path: python3
-nextflow-binary-path: nextflow
-nextflow-config-path: /home/sundarvenkata/ownCloud/EVA2338/eva-tasks/tasks/eva_2338/tests/workflow.config
-script-path: /home/sundarvenkata/ownCloud/EVA2338/eva-tasks/tasks/eva_2338/tests/../../
-mongo-source-uri: mongodb://localhost:27017/admin
-mongo-source-secrets-file: /home/sundarvenkata/ownCloud/EVA2338/eva-tasks/tasks/eva_2338/tests/empty_secret_file 
-mongo-dest-uri: mongodb://localhost:27018/admin
-mongo-dest-secrets-file: /home/sundarvenkata/ownCloud/EVA2338/eva-tasks/tasks/eva_2338/tests/empty_secret_file
