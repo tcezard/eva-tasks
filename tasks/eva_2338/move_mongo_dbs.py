@@ -72,7 +72,7 @@ class MoveMongoDBs:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run the accession import process for a given species',
+    parser = argparse.ArgumentParser(description='Move a database from one MongoDB instance to another',
                                      formatter_class=argparse.RawTextHelpFormatter, add_help=False)
     parser.add_argument("--migration-config-file",
                         help="Full path to the migration configuration file (ex: /path/to/migration/config.yml)",

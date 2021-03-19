@@ -34,7 +34,7 @@ def prepare_dest_db(mongo_source_db: MongoDatabase, mongo_dest_db: MongoDatabase
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Dump data from a given MongoDB source',
+    parser = argparse.ArgumentParser(description='Prepare target database before loading',
                                      formatter_class=argparse.RawTextHelpFormatter, add_help=False)
     parser.add_argument("--mongo-source-uri",
                         help="Mongo Source URI (ex: mongodb://user:@mongos-source-host:27017/admin)", required=True)

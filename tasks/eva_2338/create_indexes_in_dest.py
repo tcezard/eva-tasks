@@ -26,7 +26,7 @@ def create_indexes(mongo_source: MongoDatabase, mongo_dest: MongoDatabase):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Dump data from a given MongoDB source',
+    parser = argparse.ArgumentParser(description='Create indexes in the target database',
                                      formatter_class=argparse.RawTextHelpFormatter, add_help=False)
     parser.add_argument("--mongo-source-uri",
                         help="Mongo Source URI (ex: mongodb://user:@mongos-source-host:27017/admin)", required=True)
