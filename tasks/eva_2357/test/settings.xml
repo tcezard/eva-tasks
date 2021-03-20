@@ -1,0 +1,12 @@
+<settings>
+    <profiles>
+        <profile>
+            <id>localhost</id>
+            <properties>
+                <eva.mongo.host>localhost,localhost2</eva.mongo.host>
+                <eva.mongo.user></eva.mongo.user>
+                <eva.mongo.passwd></eva.mongo.passwd>
+            </properties>
+        </profile>
+    </profiles>
+</settings>
