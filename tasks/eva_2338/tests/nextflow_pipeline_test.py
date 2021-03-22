@@ -21,7 +21,7 @@ mongo-dest-secrets-file: {dir_path}/empty_secret_file
         open(f"{dir_path}/migration_config.yml", "w").write(config_file_content)
         mover = MoveMongoDBs(migration_config_file=f"{dir_path}/migration_config.yml",
                              dbs_to_migrate_list=f"{dir_path}/dbs_to_migrate.txt",
-                             batch_number=1, resume_flag=False)
+                             batch_number="1", resume_flag=False)
 
         # Load data to source
         for db_name in mover.dbs_to_migrate:
