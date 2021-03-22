@@ -80,7 +80,7 @@ def main():
     parser.add_argument("--dbs-to-migrate-list",
                         help="Full path to file with list of databases to migrate (ex: /path/to/dbs/to/migrate.txt)",
                         required=True)
-    parser.add_argument("--batch", help="Migration batch (ex: 1)", type=int, required=True)
+    parser.add_argument("--batch", help="Migration batch (ex: 1)", required=True)
     parser.add_argument("--resume", help="Flag to indicate if migration job is to be resumed", action='store_true',
                         required=False)
     parser.add_argument('--help', action='help', help='Show this help message and exit')
