@@ -23,7 +23,10 @@ logging_config.add_stdout_handler()
 
 def dump_data_from_source(mongo_source: MongoDatabase, top_level_dump_dir):
     logger.info("Running mongodump from source...")
-    mongo_source.dump_data(dump_dir=os.path.join(top_level_dump_dir, mongo_source.db_name))
+    # Force table scan is performant for many workloads avoids cursor timeout issues
+    # See https://jira.mongodb.org/browse/TOOLS-845?focusedCommentId=988298&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-988298
+    mongo_source.dump_data(dump_dir=os.path.join(top_level_dump_dir, mongo_source.db_name),
+                           mongodump_args={"forceTableScan": ""})
 
 
 def main():
