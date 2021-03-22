@@ -20,7 +20,8 @@ logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
 # Keys are collection names, Values are a tuple of (shard keys, uniqueness flag)
-collections_shard_key_map = {"variants_2_0": (["chr", "start"], False), "files_2_0": (["sid", "fid", "fname"], True)}
+collections_shard_key_map = {"variants_2_0": (["chr", "start"], False), "files_2_0": (["sid", "fid", "fname"], True),
+                             "annotations_2_0": (["chr", "start"], False)}
 
 
 def prepare_dest_db(mongo_source_db: MongoDatabase, mongo_dest_db: MongoDatabase):
