@@ -25,18 +25,15 @@ mongo-dest-secrets-file: {dir_path}/empty_secret_file
 
         # Load data to source
         for db_name in mover.dbs_to_migrate:
-            source_db = MongoDatabase(mover.migration_config["mongo-source-uri"], db_name=db_name,
-                                      password_required=False)
+            source_db = MongoDatabase(mover.migration_config["mongo-source-uri"], db_name=db_name)
             source_db.drop()
             source_db.restore_data(dump_dir=f"{dir_path}/../resources/{db_name}")
 
         mover.move()
         # Check if source data made it to the destination
         for db_name in mover.dbs_to_migrate:
-            source_db = MongoDatabase(mover.migration_config["mongo-source-uri"], db_name=db_name,
-                                      password_required=False)
-            dest_db = MongoDatabase(mover.migration_config["mongo-dest-uri"], db_name=db_name,
-                                    password_required=False)
+            source_db = MongoDatabase(mover.migration_config["mongo-source-uri"], db_name=db_name)
+            dest_db = MongoDatabase(mover.migration_config["mongo-dest-uri"], db_name=db_name)
             for collection_name in source_db.get_collection_names():
                 self.assertEqual(source_db.mongo_handle[db_name][collection_name].count_documents(filter={}),
                                  dest_db.mongo_handle[db_name][collection_name].count_documents(filter={}))
