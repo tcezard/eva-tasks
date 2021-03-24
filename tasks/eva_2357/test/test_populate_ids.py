@@ -1,7 +1,7 @@
 from mock import patch
 from pymongo import MongoClient
 from unittest import TestCase
-from tasks.eva_2357.populate_ids import populate_ids
+from tasks.eva_2357.populate_ids import populate_ids, get_assembly_report_rows
 
 
 class TestCorrectChr(TestCase):
@@ -27,6 +27,10 @@ class TestCorrectChr(TestCase):
                 {
                     "fid": "ERZ795310",
                     "sid": "PRJEB30318",
+                },
+                {
+                    "fid": "ERZ111111",
+                    "sid": "PRJEB11111",
                 }
             ],
             "type": "SNV",
@@ -54,8 +58,23 @@ class TestCorrectChr(TestCase):
             "createdDate": "2019-07-08T07:42:41.492Z"
         }
 
+        submitted_variant2 = {
+            "_id": "EEA0111F7EBE1895A60E00B4495B3C607D9B4A36",
+            "seq": "GCA_000181335.4",
+            "tax": 9685,
+            "study": "PRJEB11111",
+            "contig": "CM001383.3",
+            "start": 76166296,
+            "ref": "C",
+            "alt": "T",
+            "accession": "2000",
+            "rs": "1000",
+            "version": 1,
+            "createdDate": "2020-07-08T07:42:41.492Z"
+        }
+
         self.connection_handle[self.accession_db][self.submitted_variants_collection].drop()
-        self.connection_handle[self.accession_db][self.submitted_variants_collection].insert_many([submitted_variant])
+        self.connection_handle[self.accession_db][self.submitted_variants_collection].insert_many([submitted_variant, submitted_variant2])
 
     def tearDown(self) -> None:
         self.connection_handle[self.variant_warehouse_db][self.variant_collection].drop()
@@ -68,4 +87,4 @@ class TestCorrectChr(TestCase):
         populate_ids('../test/settings.xml', profile='localhost', mongo_accession_db=self.accession_db)
         variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
             {'_id': 'NC_018728.3_76166296_C_T'}))
-        self.assertEqual(variant['ids'], ['ss1', 'ss5318166021'])
+        self.assertListEqual(variant['ids'], ['ss1', 'ss5318166021', 'rs1000', 'ss2000'])
