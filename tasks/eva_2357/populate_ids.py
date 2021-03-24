@@ -76,34 +76,44 @@ def get_ids(assembly, variant_query_result):
     return ss_hash_variant_id
 
 
-def get_db_name_and_assembly_accession(private_config_xml_file):
-    # metadata_handle = psycopg2.connect(get_pg_metadata_uri_for_eva_profile(
-    #     "development", private_config_xml_file), user="evadev")
-    return 'eva_fcatus_90', 'GCA_000181335.4'
-    # return 'eva_fcatus_80', 'GCA_000181335.3'
-    # return 'eva_cporcellus_30', 'GCA_000151735.1'
-    # return 'eva_cannuum_zunla1ref10', 'GCA_000710875.1'
-    # return 'eva_lsalmonis_lsalatlcanadafemalev1', 'GCA_000181255.1'
+def get_db_name_and_assembly_accession(databases):
+    db_assembly = {}
+    if databases:
+        with open(databases, 'r') as db_file:
+            for line in db_file:
+                db, assembly = line.split(',')
+                db_assembly[db] = assembly
+        return db_assembly
 
 
-def populate_ids(private_config_xml_file, profile='production', mongo_accession_db='eva_accession_sharded'):
-    # get species db name and assembly from evapro
-    db_name, assembly = get_db_name_and_assembly_accession(private_config_xml_file)
-
-    # query variants in variant warehouse
-    with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
-        variants_collection = mongo_handle[db_name]["variants_2_0"]
-        cursor = get_variant_warehouse_cursor(variants_collection)
-        update_statements = []
-        for variant in cursor:
-            for sve_hash, variant_id in get_ids(assembly, variant).items():
-                ss_accession, rs_accession = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hash)
-                update_statements.append(generate_update_statement(variant_id, ss_accession, rs_accession))
-        result_insert = variants_collection.bulk_write(requests=update_statements, ordered=False)
+def populate_ids(private_config_xml_file, databases, profile='production', mongo_accession_db='eva_accession_sharded'):
+    db_assembly = get_db_name_and_assembly_accession(databases)
+    for db_name, assembly in db_assembly.items():
+        # Query variants in variant warehouse
+        with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
+            variants_collection = mongo_handle[db_name]["variants_2_0"]
+            cursor = get_variant_warehouse_cursor(variants_collection)
+            update_statements = []
+            try:
+                for variant in cursor:
+                    # One variant in the variant warehouse can include more than one study, which means there can be
+                    # more than one submitted variant per variant warehouse variant
+                    for sve_hash, variant_id in get_ids(assembly, variant).items():
+                        ss_accession, rs_accession = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hash)
+                        update_statements.append(generate_update_statement(variant_id, ss_accession, rs_accession))
+            except Exception as e:
+                print(traceback.format_exc())
+                raise e
+            finally:
+                cursor.close() 
+        result_update = variants_collection.bulk_write(requests=update_statements, ordered=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get stats from variant warehouse', add_help=False)
     parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
+    parser.add_argument("--dbs-to-populate-list",
+                        help="Full path to file with list of pairs (database, assembly) to populate the ids field "
+                             "with SS and RS ids (ex: /path/to/dbs/to/populate.txt)", required=True)
     args = parser.parse_args()
-    populate_ids(args.private_config_xml_file)
+    populate_ids(args.private_config_xml_file, args.dbs_to_populate_list)
