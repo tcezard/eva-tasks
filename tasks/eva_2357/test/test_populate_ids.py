@@ -1,3 +1,5 @@
+import os
+
 from mock import patch
 from pymongo import MongoClient
 from unittest import TestCase
@@ -123,10 +125,22 @@ class TestCorrectChr(TestCase):
     def test_correct(self, mock_get_mongo_uri_for_eva_profile):
         logging.getLogger().setLevel(logging.DEBUG)
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
-        populate_ids('../test/settings.xml', '../test/databases.txt', profile='localhost',
-                     mongo_accession_db=self.accession_db)
+        settings = self.get_test_resource("settings.xml")
+        databases_file = self.get_test_resource("databases.txt")
+        self.assertEqual(1, populate_ids(settings, databases_file, profile='localhost',
+                                         mongo_accession_db=self.accession_db))
         variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
             {'_id': 'NC_018728.3_76166296_C_T'}))
         # The name for assertCountEqual more than just counting the elements, it checks both lists have the same
         # elements regardless of the order
         self.assertCountEqual(variant['ids'], ['ss1', 'ss5318166021', 'rs1000', 'ss2000'])
+
+    @staticmethod
+    def get_test_resource(resource_name):
+        """Gets full path to the test resource located in the same directory as the test module."""
+        # Full path to this module.
+        this_module = os.path.abspath(__file__)
+        # Full path to the directory where it is contained.
+        module_directory = os.path.dirname(this_module)
+        # Full path to the requested resource.
+        return os.path.join(module_directory, 'resources', resource_name)

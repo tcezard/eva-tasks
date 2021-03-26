@@ -183,6 +183,7 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
         logging.info(f"Updating database {db_name} variant warehouse with ss and rs ids")
         result_update = variants_collection.bulk_write(requests=update_statements, ordered=False)
         logging.info(f"{result_update.modified_count} variants modified in {db_name}")
+        return result_update.modified_count
 
 
 if __name__ == "__main__":
