@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import sys
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.logger import logging_config
 
@@ -21,17 +22,22 @@ logging_config.add_stdout_handler()
 
 # Keys are collection names, Values are a tuple of (shard keys, uniqueness flag)
 collections_shard_key_map = {"variants_2_0": (["chr", "start"], False), "files_2_0": (["sid", "fid", "fname"], True),
-                             "annotations_2_0": (["chr", "start"], False)}
+                             "annotations_2_0": (["chr", "start"], False),
+                             "populationStatistics": (["chr", "start", "ref", "alt", "sid", "cid"], True)}
 
 
 def prepare_dest_db(mongo_source_db: MongoDatabase, mongo_dest_db: MongoDatabase):
-    logger.info("Dropping target database if it already exists...")
-    mongo_dest_db.drop()
-    logger.info("Enabling sharding in the target database...")
-    mongo_dest_db.enable_sharding()
-    logger.info("Sharding collections in the target database...")
-    mongo_dest_db.shard_collections(collections_shard_key_map,
-                                    collections_to_shard=mongo_source_db.get_collection_names())
+    try:
+        logger.info("Dropping target database if it already exists...")
+        mongo_dest_db.drop()
+        logger.info("Enabling sharding in the target database...")
+        mongo_dest_db.enable_sharding()
+        logger.info("Sharding collections in the target database...")
+        mongo_dest_db.shard_collections(collections_shard_key_map,
+                                        collections_to_shard=mongo_source_db.get_collection_names())
+    except Exception as ex:
+        logger.error(f"Error while preparing destination database!\n{ex.__str__()}")
+        sys.exit(1)
 
 
 def main():

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import sys
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.logger import logging_config
 
@@ -22,7 +23,11 @@ logging_config.add_stdout_handler()
 
 def create_indexes(mongo_source: MongoDatabase, mongo_dest: MongoDatabase):
     logger.info(f"Creating indexes in the target database {mongo_dest.uri_with_db_name}....")
-    mongo_dest.create_index_on_collections(mongo_source.get_indexes())
+    try:
+        mongo_dest.create_index_on_collections(mongo_source.get_indexes())
+    except Exception as ex:
+        logger.error(f"Error while creating indexes!\n{ex.__str__()}")
+        sys.exit(1)
 
 
 def main():

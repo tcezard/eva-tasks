@@ -68,7 +68,9 @@ class MoveMongoDBs:
 
     def move(self):
         self.add_processes_to_pipeline()
-        self.db_move_pipeline.run_pipeline(resume=self.resume_flag)
+        # Running without backgrounding can sometimes cause the Nextflow process to stop
+        # See https://github.com/nextflow-io/nextflow/issues/937#issuecomment-630806451
+        self.db_move_pipeline.run_pipeline(resume=self.resume_flag, other_args={"bg": ""})
 
 
 def main():

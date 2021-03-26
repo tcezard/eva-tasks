@@ -14,6 +14,7 @@
 
 import argparse
 import os
+import sys
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.logger import logging_config
 
@@ -22,11 +23,16 @@ logging_config.add_stdout_handler()
 
 
 def dump_data_from_source(mongo_source: MongoDatabase, top_level_dump_dir):
-    logger.info("Running mongodump from source...")
-    # Force table scan is performant for many workloads avoids cursor timeout issues
-    # See https://jira.mongodb.org/browse/TOOLS-845?focusedCommentId=988298&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-988298
-    mongo_source.dump_data(dump_dir=os.path.join(top_level_dump_dir, mongo_source.db_name),
-                           mongodump_args={"forceTableScan": ""})
+    try:
+        logger.info("Running mongodump from source...")
+
+        # Force table scan is performant for many workloads avoids cursor timeout issues
+        # See https://jira.mongodb.org/browse/TOOLS-845?focusedCommentId=988298&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-988298
+        mongo_source.dump_data(dump_dir=os.path.join(top_level_dump_dir, mongo_source.db_name),
+                               mongodump_args={"forceTableScan": "", "numParallelCollections": "1"})
+    except Exception as ex:
+        logger.error(f"Error while dumping data from source!\n{ex.__str__()}")
+        sys.exit(1)
 
 
 def main():

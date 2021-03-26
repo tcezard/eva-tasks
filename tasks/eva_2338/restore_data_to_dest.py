@@ -14,6 +14,7 @@
 
 import argparse
 import os
+import sys
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.logger import logging_config
 
@@ -22,13 +23,17 @@ logging_config.add_stdout_handler()
 
 
 def restore_data_to_dest(mongo_dest: MongoDatabase, top_level_dump_dir):
-    dump_dir = os.path.join(top_level_dump_dir, mongo_dest.db_name)
-    logger.info(f"Loading data in target database from source dump {dump_dir}...")
-    # noIndexRestore - Do not restore indexes because MongoDB 3.2 does not have index compatibility with MongoDB 4.0
-    mongo_dest.restore_data(dump_dir=dump_dir,
-                            mongorestore_args={"noIndexRestore": "",
-                                               "numParallelCollections": 4,
-                                               "numInsertionWorkersPerCollection": 4})
+    try:
+        dump_dir = os.path.join(top_level_dump_dir, mongo_dest.db_name)
+        logger.info(f"Loading data in target database from source dump {dump_dir}...")
+        # noIndexRestore - Do not restore indexes because MongoDB 3.2 does not have index compatibility with MongoDB 4.0
+        mongo_dest.restore_data(dump_dir=dump_dir,
+                                mongorestore_args={"noIndexRestore": "",
+                                                   "numParallelCollections": 4,
+                                                   "numInsertionWorkersPerCollection": 4})
+    except Exception as ex:
+        logger.error(f"Error while restoring data to the destination database!\n{ex.__str__()}")
+        sys.exit(1)
 
 
 def main():
