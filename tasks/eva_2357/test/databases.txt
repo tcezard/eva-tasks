@@ -1,1 +1,1 @@
-eva_fcatus_90,GCA_000181335.4
+eva_fcatus_90,GCA_000181335.4,GCA_000181335.4_Felis_catus_9.0_assembly_report.txt
