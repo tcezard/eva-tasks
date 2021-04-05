@@ -1,0 +1,130 @@
+---
+title: "Analysis of COVID19 data portal variant calls from 22-03-2021"
+output:
+  word_document: default
+  html_notebook: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r echo=FALSE, results="hide", message=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+
+file <- '/Users/tcezard/PycharmProjects/eva-tasks/tasks/eva_2373/all_allele_freq.tsv'
+data<-read.delim(file, col.names=c("variant_id", "AF", "variantType", "Sample"))
+
+```
+
+## TLDR
+
+ - Large number of variants is unexpected
+ - Large number of variant with very low allele frequency
+ - INDELs is a major driver of those low frequency variants
+ - There are a fair number of variants (SNPs and INDELs) with low allele frequency that appear in many samples
+
+
+## Introduction
+
+The goal of this analysis is to assess the quality of the variant calls produced by the COVID-19 Data Portal in order to decide if EVA should apply some filtering before accession the variants. 
+The COVID-19 Data Portal's approach in this variant call is to provide the "raw" variant call and not apply any filter in order to allow as many analysis as possible. 
+The EVA as an archive does not assess the quality of the variants submitted and does not apply any filter. 
+However, after looking at the data, There might ground to filter the data and only accession part of the dataset.
+
+
+```{r echo=FALSE, results="hide", message=FALSE}
+data$gt.1 <- data$AF > .1
+data$gt.2 <- data$AF > .2
+
+data %>% group_by(variant_id) %>% mutate(n_occur=n()) -> data
+data$binned_occur <- cut(data$n_occur, breaks=c(0, 1, 2, 3, 40, 53206), labels=c("1", "2", "3", "4-40","40-53206") )
+
+data %>% group_by(variant_id) %>% summarize(count_gt.1 = sum(gt.1), count_gt.2 = sum(gt.2), max_AF=max(AF), variantType=dplyr::first(variantType), total=n()) %>% separate(variant_id, c("chr", "pos", "ref", "alt"), ":") -> data_per_variant
+data %>% group_by(Sample) %>% summarize(total=n()) -> data_per_sample
+data_per_variant$binned_occurence <- cut(data_per_variant$total, breaks=c(0, 1, 2, 3, 40, 53206), labels=c("1", "2", "3", "4-40","40-53206")  )
+data_per_variant$max_AF_cat <- cut(data_per_variant$max_AF, breaks=c(0, 0.2, 0.8, 1), labels=c('low AF', 'mid AF', 'high AF')  )
+nb_of_variant_call = sum(data_per_variant$total)
+
+```
+
+The first batch delivered on the 22nd of March 2021 contains a total of `r nb_of_variant_call` variant calls across `r nrow(data_per_sample)` samples. There are `r nrow(data_per_variant)` unique variants (`r sum(data_per_variant$variantType == "INDEL")` Indels and `r sum(data_per_variant$variantType == "SNP")` SNPs) with a median `r round(median(data_per_sample$total))` per samples.
+
+This number of variant seems unlikely for a genome of 30Kb.
+
+
+## Allele frequency (AF) distribution
+
+Each of the variant calls is associated with an AF determined by the variant caller by counting the number of time the base (or indel event) was seen in the reads divided by the coverage. We can plot the AF distribution and see that overall there are two groups of variant calls with either very low or very high AF. The number of variant with low AF is much higher than the one with high AF. This difference is more pronounced for Indels than for SNPs.
+
+```{r echo=FALSE, results="hide", message=FALSE}
+
+ggplot(data, aes(AF)) + geom_histogram( binwidth = 0.01) + xlab("Allele frequency") + ylab("Number of variant call in bin (0.01)") + facet_wrap(~variantType)
+
+nb_of_SNP_call_lt0.01 = sum(data$AF<0.01 & data$variantType=="SNP")
+nb_of_INDEL_call_lt0.01 = sum(data$AF<0.01 & data$variantType=="INDEL")
+
+nb_of_variant_call_gt0.2lt0.8 = sum(data$AF>0.2 & data$AF<0.8)
+```
+
+Note that the width of the bins is 0.01 so the first bin on the left are the allele frequencies lower than 1% and account for `r nb_of_SNP_call_lt0.01` SNPs  and `r nb_of_INDEL_call_lt0.01` INDELs or `r format(round(nb_of_SNP_call_lt0.01/nb_of_variant_call*100, 1), nsmall = 1)`% and `r format(round(nb_of_INDEL_call_lt0.01/nb_of_variant_call*100, 1), nsmall = 1)`% of the calls
+
+
+When looking over a log scale, we can see that there are variant calls that have AF between 0.2 and 0.8 `r nb_of_variant_call_gt0.2lt0.8` or `r format(round(nb_of_variant_call_gt0.2lt0.8/nb_of_variant_call*100, 1), nsmall = 1)`% 
+of the calls
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data, aes(AF)) + geom_histogram( binwidth = 0.01) + xlab("Allele frequency") + ylab("Number of variant call") + scale_y_log10() + facet_wrap(~variantType)
+```
+
+## Highest allele frequency
+
+Because a variant might have low AF in one Sample and a higher one in another, It makes sense to look at the highest AF per variant across all samples as a single high AF would justify to accession the variant. 
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data_per_variant, aes(max_AF)) + geom_histogram(binwidth = 0.01) + xlab("Max Allele frequency") + ylab("Number of variant") + facet_wrap(~variantType)
+```
+The distribution looks similar to the previous one and confirms that some of the variant have very low AF across all the samples where they were detected.
+
+## Variant frequency across samples
+
+Another way of assessing the robustness of the calls is to check if they are found in 1 or many samples. The goal here is to distinguish between low and high occuring variants so I grouped the number of occurence in bin of variable size (1, 2, 3, 4-40, 41-53202). I also created groups of allele frequencies using the maximum occuring allele frequency shown above (low AF:0-0.2, mid AF: 0.2-0.8, high AF: 0.8-1.0). 
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data_per_variant, aes(x=binned_occurence)) + geom_bar() + xlab("Number of samples") + ylab("Number of variants") + facet_grid(max_AF_cat ~ variantType)
+```
+
+The mid and high AF have the same pattern for SNPs and INDELs and the variant seems to be occuring relatively frequently. However in the low AF category the SNPs and INDELs have different patterns. The INDELs have a large number of variants with low AF that appear in only a few samples. There is also a group ov variant (both SNPs and INDELs) that appear in a large number of sample.
+
+## Frequent variants with low allele frequencies
+
+```{r}
+data_per_variant[data_per_variant$variantType=="INDEL" & data_per_variant$max_AF < 0.01 & data_per_variant$total>1000,]
+
+```
+
+## Effect of filtering
+
+``` {r}
+library(knitr)
+test <- function(x){x};
+filter <- c(0.05,0.1,0.2,0.3)
+filter_dt <- data_frame(
+  "AF filter threshold"=filter,
+  "Variant call removed"=sapply(filter, function(x){
+        paste(format(sum(data_per_variant[data_per_variant$max_AF<x,]$total), big.mark=",")," (",round(sum(sum(data_per_variant[data_per_variant$max_AF<x,]$total)) / sum(data_per_variant$total) *100, 0),"%)", sep="")
+
+    
+  }),
+  "Variant removed"=sapply(filter, function(x){
+    paste(format(sum(data_per_variant$max_AF<x), big.mark=",")," (",round(sum(data_per_variant$max_AF<x) / nrow(data_per_variant) *100, 0),"%)", sep="")}),
+  "SNP removed"=sapply(filter, function(x){paste(format(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="SNP"), big.mark=",")," (",round(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="SNP") / nrow(data_per_variant) *100, 0),"%)", sep="")}),
+  "INDEL removed"=sapply(filter, function(x){paste(format(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL"), big.mark=",")," (",round(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL") / nrow(data_per_variant) *100, 0),"%)", sep="")})
+  )
+  
+kable(filter_dt, align=rep('r', 3))
+```
+
