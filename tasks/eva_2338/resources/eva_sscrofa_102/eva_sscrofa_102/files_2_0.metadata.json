@@ -1,0 +1,1 @@
+{"options":{},"indexes":[{"v":1,"key":{"_id":1},"name":"_id_","ns":"eva_sscrofa_102.files_2_0"},{"v":1,"unique":true,"key":{"sid":1,"fid":1,"fname":1},"name":"unique_file","ns":"eva_sscrofa_102.files_2_0","background":true}]}
