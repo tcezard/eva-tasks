@@ -98,18 +98,18 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
 
 
 def get_genbank(synonym_dictionaries, contig):
-    """Returns a tuple (genbank, was_already_genbank) or raises an exception if the contig was not found"""
+    """Returns the genbank accession or raises an exception if the contig was not found"""
     by_name, by_assigned_molecule, by_genbank, by_refseq, by_ucsc = synonym_dictionaries
     if contig in by_genbank:
-        return contig, True
+        return contig
     if contig in by_name:
-        return by_name[contig]['genbank'], False
+        return by_name[contig]['genbank']
     if contig in by_assigned_molecule:
-        return by_assigned_molecule[contig]['genbank'], False
+        return by_assigned_molecule[contig]['genbank']
     if contig in by_ucsc:
-        return by_ucsc[contig]['genbank'], False
+        return by_ucsc[contig]['genbank']
     if contig in by_refseq and by_refseq[contig]['is_genbank_refseq_identical']:
-        return by_refseq[contig]['genbank'], False
+        return by_refseq[contig]['genbank']
     raise Exception(f"Could not find synonym for contig {contig}")
 
 
@@ -131,7 +131,7 @@ def get_ids(assembly, contig_synonym_dictionaries, variant_query_result):
         alt = variant_query_result['alt']
         id_variant_warehouse = variant_query_result['_id']
         try:
-            genbank_chr, was_already_genbank = get_genbank(contig_synonym_dictionaries, variant_query_result['chr'])
+            genbank_chr = get_genbank(contig_synonym_dictionaries, variant_query_result['chr'])
         except Exception as e:
             logger.info(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
             continue
