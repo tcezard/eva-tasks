@@ -6,6 +6,7 @@ import pymongo
 import traceback
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config
+from pymongo import WriteConcern
 
 logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
@@ -133,7 +134,7 @@ def get_ids(assembly, contig_synonym_dictionaries, variant_query_result):
         try:
             genbank_chr = get_genbank(contig_synonym_dictionaries, variant_query_result['chr'])
         except Exception as e:
-            logger.info(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
+            logger.warning(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
             continue
         sve_hash = get_SHA1(f"{assembly}_{study}_{genbank_chr}_{start}_{ref}_{alt}")
         hash_to_variant_id[sve_hash] = id_variant_warehouse
@@ -180,7 +181,8 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
             finally:
                 variants_cursor.close()
         logger.info(f"Updating database {db_name} variant warehouse with ss and rs ids")
-        result_update = variants_collection.bulk_write(requests=update_statements, ordered=False)
+        result_update = variants_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
+            .bulk_write(requests=update_statements, ordered=False)
         logger.info(f"{result_update.modified_count} variants modified in {db_name}")
         return result_update.modified_count
 
