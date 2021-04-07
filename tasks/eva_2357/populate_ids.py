@@ -7,24 +7,17 @@ from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 
 
 def generate_update_statement(hash_to_variant_ids, hash_to_accession_info):
-    variant_to_ids = {}
+    variant_to_ids = defaultdict(set)
     update_statements = []
     for sve_hash, accessions in hash_to_accession_info.items():
         ss_accession = f"ss{accessions.get('ss')}"
-        rs_accession = f"rs{accessions.get('rs')}" if accessions.get('rs') else accessions.get('rs')
+        rs_accession = f"rs{accessions.get('rs')}" if accessions.get('rs') else None
         variant_id = hash_to_variant_ids.get(sve_hash)
 
         # Group all the ids (ss and rs) by variant id
-        if variant_to_ids.get(variant_id):
-            variant_to_ids[variant_id].add(ss_accession)
-            if rs_accession:
-                variant_to_ids[variant_id].add(rs_accession)
-        else:
-            ids = set()
-            ids.add(ss_accession)
-            if rs_accession:
-                ids.add(rs_accession)
-            variant_to_ids[variant_id] = ids
+        variant_to_ids[variant_id].add(ss_accession)
+        if rs_accession:
+            variant_to_ids[variant_id].add(rs_accession)
 
     # Generate one update statement per variant_id
     for variant_id, ids in variant_to_ids.items():
@@ -39,7 +32,7 @@ def get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes):
     sve_collection = mongo_handle[mongo_accession_db]['submittedVariantEntity']
     sve_filter = {"_id": {"$in": list(sve_hashes)}}
     sve_projection = {"_id": 1, "accession": 1, "rs": 1}
-    cursor_accessioning = sve_collection.find(sve_filter, projection=sve_projection)
+    cursor_accessioning = sve_collection.find(sve_filter, projection=sve_projection, no_cursor_timeout=True)
     hash_to_accession_info = {}
     for sve in cursor_accessioning:
         sve_hash = sve.get("_id")
@@ -54,7 +47,7 @@ def get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes):
 
 def get_variants_from_variant_warehouse(variants_collection):
     projection = {"_id": 1, "files.sid": 1, "chr": 1, "start": 1, "ref": 1, "alt": 1, "type": 1}
-    return variants_collection.find({}, projection=projection)
+    return variants_collection.find({}, projection=projection, no_cursor_timeout=True)
 
 
 def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
@@ -76,7 +69,7 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
                 continue
 
             columns = line.strip().split('\t')
-            is_chromosome = columns[1] == 'assembled-molecule' and columns[3] == 'Chromosome'
+            is_chromosome = columns[1] == 'assembled-molecule' and columns[3].lower() == 'chromosome'
             synonyms = {'name': columns[0],
                         'assigned_molecule': columns[2] if is_chromosome else None,
                         'is_chromosome': is_chromosome,
@@ -120,11 +113,12 @@ def get_SHA1(variant_id):
     return hashlib.sha1(variant_id.encode()).hexdigest().upper()
 
 
-def get_ids(assembly, contig_synonym_dictionaries, variant_query_result, hash_to_variant_id):
+def get_ids(assembly, contig_synonym_dictionaries, variant_query_result):
     """
     Get a dictionary with the submitted variant hash as key and the variant id (chr_start_ref_alt) from the variant
     warehouse as value
     """
+    hash_to_variant_id = {}
     for file in variant_query_result['files']:
         study = file['sid']
         start = variant_query_result['start']
@@ -170,7 +164,7 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
                 for variant_query_result in variants_cursor:
                     # One variant in the variant warehouse can include more than one study, which means there can be
                     # more than one submitted variant per variant warehouse variant
-                    get_ids(assembly, contig_synonym_dictionaries, variant_query_result, hash_to_variant_id)
+                    hash_to_variant_id.update(get_ids(assembly, contig_synonym_dictionaries, variant_query_result))
                 sve_hashes = hash_to_variant_id.keys()
                 logging.info(f"Querying accessioning database for assembly {assembly}")
                 hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
