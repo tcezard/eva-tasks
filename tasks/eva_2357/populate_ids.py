@@ -51,9 +51,9 @@ def get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes):
     return hash_to_accession_info
 
 
-def get_variants_from_variant_warehouse(variants_collection):
+def get_variants_from_variant_warehouse(variants_collection, batch_size):
     projection = {"_id": 1, "files.sid": 1, "chr": 1, "start": 1, "ref": 1, "alt": 1, "type": 1}
-    return variants_collection.find({}, projection=projection, no_cursor_timeout=True)
+    return variants_collection.find({}, projection=projection, batch_size=batch_size, no_cursor_timeout=True)
 
 
 def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
@@ -151,6 +151,19 @@ def get_db_name_and_assembly_accession(databases):
         return db_assembly
 
 
+def update_variant_warehouse(mongo_handle, mongo_accession_db, variants_collection, hash_to_variant_id):
+    update_statements = []
+    sve_hashes = hash_to_variant_id.keys()
+    hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
+    update_statements.extend(generate_update_statement(hash_to_variant_id, hash_to_accession_info))
+    if update_statements:
+        result_update = variants_collection.with_options(
+            write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+            .bulk_write(requests=update_statements, ordered=False)
+        variants_modified_in_batch = result_update.modified_count if result_update else 0
+        return variants_modified_in_batch
+
+
 def populate_ids(private_config_xml_file, databases, profile='production', mongo_accession_db='eva_accession_sharded'):
     db_assembly = get_db_name_and_assembly_accession(databases)
     for db_name, info in db_assembly.items():
@@ -163,28 +176,39 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
         with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
             variants_collection = mongo_handle[db_name]["variants_2_0"]
             logger.info(f"Querying variants from variant warehouse, database {db_name}")
-            variants_cursor = get_variants_from_variant_warehouse(variants_collection)
+            batch_size = 1000
+            variants_cursor = get_variants_from_variant_warehouse(variants_collection, batch_size)
             hash_to_variant_id = {}
-            update_statements = []
             try:
+                count_variants = 0
+                modified_count = 0
+                batch_number = 0
                 for variant_query_result in variants_cursor:
                     # One variant in the variant warehouse can include more than one study, which means there can be
                     # more than one submitted variant per variant warehouse variant
                     hash_to_variant_id.update(get_ids(assembly, contig_synonym_dictionaries, variant_query_result))
-                sve_hashes = hash_to_variant_id.keys()
-                logger.info(f"Querying accessioning database for assembly {assembly}")
-                hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
-                update_statements.extend(generate_update_statement(hash_to_variant_id, hash_to_accession_info))
+                    count_variants += 1
+                    if count_variants == batch_size:
+                        batch_number += 1
+                        logger.info(f"Updating database {db_name} in the variant warehouse (batch {batch_number})")
+                        variants_modified_in_batch = update_variant_warehouse(mongo_handle, mongo_accession_db,
+                                                                              variants_collection, hash_to_variant_id)
+                        modified_count += variants_modified_in_batch
+                        logger.info(f"{variants_modified_in_batch} variants modified in batch {batch_number}")
+                        hash_to_variant_id.clear()
+                        count_variants = 0
+                if count_variants > 0:
+                    logger.info(f"Updating database {db_name} in the variant warehouse (batch {batch_number+1})")
+                    variants_modified_in_batch = update_variant_warehouse(mongo_handle, mongo_accession_db,
+                                                                          variants_collection, hash_to_variant_id)
+                    modified_count += variants_modified_in_batch
+                    logger.info(f"{variants_modified_in_batch} variants modified in batch {batch_number}")
             except Exception as e:
                 print(traceback.format_exc())
                 raise e
             finally:
                 variants_cursor.close()
-        logger.info(f"Updating database {db_name} variant warehouse with ss and rs ids")
-        result_update = variants_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
-            .bulk_write(requests=update_statements, ordered=False)
-        logger.info(f"{result_update.modified_count} variants modified in {db_name}")
-        return result_update.modified_count
+        return modified_count
 
 
 if __name__ == "__main__":
