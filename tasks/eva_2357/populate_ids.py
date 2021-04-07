@@ -1,9 +1,14 @@
 import hashlib
 import argparse
+from collections import defaultdict
+
 import pymongo
 import traceback
-import logging
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
+from ebi_eva_common_pyutils.logger import logging_config
+
+logging_config.add_stdout_handler()
+logger = logging_config.get_logger(__name__)
 
 
 def generate_update_statement(hash_to_variant_ids, hash_to_accession_info):
@@ -57,7 +62,7 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
     Example usage:
     genbank = by_name['1']['genbank']
     """
-    logging.info(f"Parsing assembly report {assembly_report_file}")
+    logger.info(f"Parsing assembly report {assembly_report_file}")
     by_name = dict()
     by_assigned_molecule = dict()
     by_genbank = dict()
@@ -88,7 +93,7 @@ def load_synonyms_for_assembly(assembly_accession, assembly_report_file=None):
             if synonyms['ucsc'] is not None:
                 by_ucsc[columns[9]] = synonyms
 
-    logging.info('Loaded chromosome synonyms for assembly {}'.format(assembly_accession))
+    logger.info('Loaded chromosome synonyms for assembly {}'.format(assembly_accession))
     return by_name, by_assigned_molecule, by_genbank, by_refseq, by_ucsc
 
 
@@ -128,7 +133,7 @@ def get_ids(assembly, contig_synonym_dictionaries, variant_query_result):
         try:
             genbank_chr, was_already_genbank = get_genbank(contig_synonym_dictionaries, variant_query_result['chr'])
         except Exception as e:
-            logging.info(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
+            logger.info(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
             continue
         sve_hash = get_SHA1(f"{assembly}_{study}_{genbank_chr}_{start}_{ref}_{alt}")
         hash_to_variant_id[sve_hash] = id_variant_warehouse
@@ -150,13 +155,13 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
     for db_name, info in db_assembly.items():
         assembly = info['assembly']
         asm_report = info['asm_report']
-        logging.info(f"Processing database {db_name} (assembly {assembly})")
+        logger.info(f"Processing database {db_name} (assembly {assembly})")
 
         contig_synonym_dictionaries = load_synonyms_for_assembly(assembly, asm_report)
 
         with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
             variants_collection = mongo_handle[db_name]["variants_2_0"]
-            logging.info(f"Querying variants from variant warehouse, database {db_name}")
+            logger.info(f"Querying variants from variant warehouse, database {db_name}")
             variants_cursor = get_variants_from_variant_warehouse(variants_collection)
             hash_to_variant_id = {}
             update_statements = []
@@ -166,7 +171,7 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
                     # more than one submitted variant per variant warehouse variant
                     hash_to_variant_id.update(get_ids(assembly, contig_synonym_dictionaries, variant_query_result))
                 sve_hashes = hash_to_variant_id.keys()
-                logging.info(f"Querying accessioning database for assembly {assembly}")
+                logger.info(f"Querying accessioning database for assembly {assembly}")
                 hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
                 update_statements.extend(generate_update_statement(hash_to_variant_id, hash_to_accession_info))
             except Exception as e:
@@ -174,9 +179,9 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
                 raise e
             finally:
                 variants_cursor.close()
-        logging.info(f"Updating database {db_name} variant warehouse with ss and rs ids")
+        logger.info(f"Updating database {db_name} variant warehouse with ss and rs ids")
         result_update = variants_collection.bulk_write(requests=update_statements, ordered=False)
-        logging.info(f"{result_update.modified_count} variants modified in {db_name}")
+        logger.info(f"{result_update.modified_count} variants modified in {db_name}")
         return result_update.modified_count
 
 
