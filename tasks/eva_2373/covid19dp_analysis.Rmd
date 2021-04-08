@@ -18,6 +18,8 @@ library(knitr)
 file <- '/Users/tcezard/PycharmProjects/eva-tasks/tasks/eva_2373/all_allele_freq.tsv'
 data<-read.delim(file, col.names=c("variant_id", "AF", "variantType", "Sample"))
 
+nb_sample = 53206
+
 ```
 
 ## TLDR
@@ -41,17 +43,20 @@ data$gt.1 <- data$AF > .1
 data$gt.2 <- data$AF > .2
 
 data %>% group_by(variant_id) %>% mutate(n_occur=n()) -> data
-data$binned_occur <- cut(data$n_occur, breaks=c(0, 1, 2, 3, 40, 53206), labels=c("1", "2", "3", "4-40","40-53206") )
+data$binned_occur <- cut(data$n_occur, breaks=c(0, 1, 2, 3, 40, nb_sample), labels=c("1", "2", "3", "4-40","41-53206") )
 
 data %>% group_by(variant_id) %>% summarize(count_gt.1 = sum(gt.1), count_gt.2 = sum(gt.2), max_AF=max(AF), variantType=dplyr::first(variantType), total=n()) %>% separate(variant_id, c("chr", "pos", "ref", "alt"), ":") -> data_per_variant
 data %>% group_by(Sample) %>% summarize(total=n()) -> data_per_sample
-data_per_variant$binned_occurence <- cut(data_per_variant$total, breaks=c(0, 1, 2, 3, 40, 53206), labels=c("1", "2", "3", "4-40","40-53206")  )
+data_per_variant$binned_occurence <- cut(data_per_variant$total, breaks=c(0, 1, 2, 3, 40, nb_sample), labels=c("1", "2", "3", "4-40","41-53206")  )
 data_per_variant$max_AF_cat <- cut(data_per_variant$max_AF, breaks=c(0, 0.2, 0.8, 1), labels=c('low AF', 'mid AF', 'high AF')  )
 nb_of_variant_call = sum(data_per_variant$total)
 
+
+data %>% group_by(Sample, variantType) %>% summarize(total=n()) -> data_per_sample
+
 ```
 
-The first batch delivered on the 22nd of March 2021 contains a total of `r nb_of_variant_call` variant calls across `r nrow(data_per_sample)` samples. There are `r nrow(data_per_variant)` unique variants (`r sum(data_per_variant$variantType == "INDEL")` Indels and `r sum(data_per_variant$variantType == "SNP")` SNPs) with a median `r round(median(data_per_sample$total))` per samples.
+The first batch delivered on the 22nd of March 2021 contains a total of `r nb_of_variant_call` variant calls across `r nb_sample` samples. There are `r nrow(data_per_variant)` unique variants (`r sum(data_per_variant$variantType == "INDEL")` Indels and `r sum(data_per_variant$variantType == "SNP")` SNPs) with a median `r round(median(data_per_sample$total))` per samples.
 
 This number of variant seems unlikely for a genome of 30Kb.
 
@@ -91,7 +96,7 @@ The distribution looks similar to the previous one and confirms that some of the
 
 ## Variant frequency across samples
 
-Another way of assessing the robustness of the calls is to check if they are found in 1 or many samples. The goal here is to distinguish between low and high occuring variants so I grouped the number of occurence in bin of variable size (1, 2, 3, 4-40, 41-53202). I also created groups of allele frequencies using the maximum occuring allele frequency shown above (low AF:0-0.2, mid AF: 0.2-0.8, high AF: 0.8-1.0). 
+Another way of assessing the robustness of the calls is to check if they are found in 1 or many samples. The goal here is to distinguish between low and high occurring variants so I grouped the number of occurrence in bin of variable size (1, 2, 3, 4-40, 41-53202). I also created groups of allele frequencies using the maximum occurring allele frequency shown above (low AF:0-0.2, mid AF: 0.2-0.8, high AF: 0.8-1.0). 
 
 ```{r echo=FALSE, results="hide", message=FALSE}
 ggplot(data_per_variant, aes(x=binned_occurence)) + geom_bar() + xlab("Number of samples") + ylab("Number of variants") + facet_grid(max_AF_cat ~ variantType)
@@ -101,30 +106,76 @@ The mid and high AF have the same pattern for SNPs and INDELs and the variant se
 
 ## Frequent variants with low allele frequencies
 
-```{r}
+```{r echo=FALSE, results="hide", message=FALSE}
 data_per_variant[data_per_variant$variantType=="INDEL" & data_per_variant$max_AF < 0.01 & data_per_variant$total>1000,]
+
+```
+
+
+## Distribution per sample
+
+```{r echo=FALSE, results="hide", message=FALSE}
+
+ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 10) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y")
+
+```
+
+
+Zooming in 
+
+
+```{r echo=FALSE, results="hide", message=FALSE}
+
+ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y")
 
 ```
 
 ## Effect of filtering
 
-``` {r}
-library(knitr)
+The simplest form of filtering would be to remove all variant that have a low allele frequency. Here we investigate the effect of filtering variants appearing bellow the specified threshold.
+
+```{r echo=FALSE, message=FALSE}
 test <- function(x){x};
 filter <- c(0.05,0.1,0.2,0.3)
-filter_dt <- data_frame(
+filter_dt <- tibble(
   "AF filter threshold"=filter,
   "Variant call removed"=sapply(filter, function(x){
         paste(format(sum(data_per_variant[data_per_variant$max_AF<x,]$total), big.mark=",")," (",round(sum(sum(data_per_variant[data_per_variant$max_AF<x,]$total)) / sum(data_per_variant$total) *100, 0),"%)", sep="")
-
-    
   }),
   "Variant removed"=sapply(filter, function(x){
     paste(format(sum(data_per_variant$max_AF<x), big.mark=",")," (",round(sum(data_per_variant$max_AF<x) / nrow(data_per_variant) *100, 0),"%)", sep="")}),
   "SNP removed"=sapply(filter, function(x){paste(format(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="SNP"), big.mark=",")," (",round(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="SNP") / nrow(data_per_variant) *100, 0),"%)", sep="")}),
-  "INDEL removed"=sapply(filter, function(x){paste(format(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL"), big.mark=",")," (",round(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL") / nrow(data_per_variant) *100, 0),"%)", sep="")})
-  )
-  
+  "INDEL removed"=sapply(filter, function(x){paste(format(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL"), big.mark=",")," (",round(sum(data_per_variant$max_AF<x & data_per_variant$variantType=="INDEL") / nrow(data_per_variant) *100, 0),"%)", sep="")}))
 kable(filter_dt, align=rep('r', 3))
+```
+
+
+
+```{r echo=FALSE, results="hide", message=FALSE}
+allele_freq_threshold = 0.1
+data %>% filter( AF > allele_freq_threshold ) -> data_filtered
+
+data_filtered %>% group_by(variant_id) %>% summarize(max_AF=max(AF), variantType=dplyr::first(variantType), total=n()) -> data_filtered_per_variant
+data_filtered %>% group_by(Sample, variantType) %>% summarize(total=n()) -> data_filtered_per_sample
+
+```
+
+### Allele frequency distribution
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data_filtered, aes(AF)) + geom_histogram( binwidth = 0.01) + xlab("Allele frequency") + ylab("Number of variant call in bin (0.01)") + facet_wrap(~variantType, scales = "free_y")
+```
+
+### Highest Allele frequency distribution
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data_filtered_per_variant, aes(max_AF)) + geom_histogram(binwidth = 0.01) + xlab("Max Allele frequency") + ylab("Number of variant") + facet_wrap(~variantType, scales = "free_y")
+```
+
+### Variant per sample distribution
+
+```{r echo=FALSE, results="hide", message=FALSE}
+ggplot(data_filtered_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0, 100)
+
 ```
 
