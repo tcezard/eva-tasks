@@ -126,7 +126,7 @@ Zooming in
 
 ```{r echo=FALSE, results="hide", message=FALSE}
 
-ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y")
+ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0,1000)
 
 ```
 
@@ -149,6 +149,7 @@ filter_dt <- tibble(
 kable(filter_dt, align=rep('r', 3))
 ```
 
+Removing all variants that are found at allele frequency bellow 0.1. In the subsequent section we look at the effect on some of the graph we were looking at before.
 
 
 ```{r echo=FALSE, results="hide", message=FALSE}
