@@ -1,11 +1,11 @@
 ---
 title: "Analysis of COVID19 data portal variant calls from 22-03-2021"
 output:
-  word_document: default
-  html_notebook: default
-  pdf_document: default
   html_document:
     df_print: paged
+  html_notebook: default
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r echo=FALSE, results="hide", message=FALSE}
@@ -116,7 +116,7 @@ data_per_variant[data_per_variant$variantType=="INDEL" & data_per_variant$max_AF
 
 ```{r echo=FALSE, results="hide", message=FALSE}
 
-ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 10) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y")
+ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 10) + ylab("Number of sample") + xlab("Number of variant") + facet_wrap( ~ variantType, scale="free_y")
 
 ```
 
@@ -126,7 +126,7 @@ Zooming in
 
 ```{r echo=FALSE, results="hide", message=FALSE}
 
-ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0,1000)
+ggplot(data_per_sample, aes(total)) + geom_histogram(binwidth = 2) + ylab("Number of sample") + xlab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0,1000)
 
 ```
 
@@ -176,7 +176,7 @@ ggplot(data_filtered_per_variant, aes(max_AF)) + geom_histogram(binwidth = 0.01)
 ### Variant per sample distribution
 
 ```{r echo=FALSE, results="hide", message=FALSE}
-ggplot(data_filtered_per_sample, aes(total)) + geom_histogram(binwidth = 2) + xlab("Number of sample") + ylab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0, 100)
+ggplot(data_filtered_per_sample, aes(total)) + geom_histogram(binwidth = 2) + ylab("Number of sample") + xlab("Number of variant") + facet_wrap( ~ variantType, scale="free_y") + xlim(0, 100)
 
 ```
 
