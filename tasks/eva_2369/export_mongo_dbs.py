@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import os
 import sys
 
 from ebi_eva_common_pyutils.logger import logging_config
