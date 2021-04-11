@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import os
 import sys
 
 from ebi_eva_common_pyutils.logger import logging_config
@@ -23,14 +22,14 @@ logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
 
-def dump_data_from_source(mongo_source: MongoDatabase, top_level_dump_dir):
+def archive_data_from_source(mongo_source: MongoDatabase, top_level_dump_dir):
     try:
         logger.info("Running mongodump from source...")
 
         # Force table scan is performant for many workloads avoids cursor timeout issues
         # See https://jira.mongodb.org/browse/TOOLS-845?focusedCommentId=988298&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-988298
-        mongo_source.dump_data(dump_dir=os.path.join(top_level_dump_dir, mongo_source.db_name),
-                               mongodump_args={"gzip": "", "forceTableScan": "", "numParallelCollections": "1"})
+        mongo_source.archive_data(archive_dir=top_level_dump_dir, archive_name=mongo_source.db_name,
+                                  mongodump_args={"gzip": "", "forceTableScan": "", "numParallelCollections": "1"})
     except Exception as ex:
         logger.error(f"Error while dumping data from source!\n{ex.__str__()}")
         sys.exit(1)
@@ -42,7 +41,7 @@ def get_databases_list_for_export(file_path):
         with open(file_path) as file_object:
             lines = file_object.readlines()
     except FileNotFoundError:
-        print('Could not find file with database list to export. Please check file path and name.')
+        logger.error('Could not find file with database list to export. Please check file path and name.')
     else:
         for line in lines:
             database_list.append(line.strip())
@@ -61,7 +60,7 @@ def main():
     parser.add_argument("--db-names-list-file",
                         help="Full path to the File containing list of Databases to migrate (ex: eva_hsapiens_grch37)",
                         required=True)
-    parser.add_argument("--dump-dir", help="Top-level directory where all dumps reside (ex: /path/to/dumps)",
+    parser.add_argument("--archive-dir", help="Top-level directory where all dumps reside (ex: /path/to/dumps)",
                         required=True)
     parser.add_argument('--help', action='help', help='Show this help message and exit')
 
@@ -70,8 +69,8 @@ def main():
     databases_list = get_databases_list_for_export(args.db_names_list_file)
 
     for db in databases_list:
-        dump_data_from_source(MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
-                                            db_name=db), top_level_dump_dir=args.dump_dir)
+        archive_data_from_source(MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
+                                               db_name=db), top_level_dump_dir=args.archive_dir)
 
 
 if __name__ == "__main__":
