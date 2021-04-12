@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import os
 import sys
 
 from ebi_eva_common_pyutils.logger import logging_config
@@ -29,8 +28,7 @@ def archive_data_from_source(mongo_source: MongoDatabase, top_level_archive_dir)
 
         # Force table scan is performant for many workloads avoids cursor timeout issues
         # See https://jira.mongodb.org/browse/TOOLS-845?focusedCommentId=988298&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-988298
-        mongo_source.archive_data(archive_dir=os.path.join(top_level_archive_dir, mongo_source.db_name),
-                                  archive_name=mongo_source.db_name,
+        mongo_source.archive_data(archive_dir=top_level_archive_dir, archive_name=mongo_source.db_name,
                                   mongodump_args={"gzip": "", "forceTableScan": "", "numParallelCollections": "1"})
     except Exception as ex:
         logger.error(f"Error while dumping data from source!\n{ex.__str__()}")
