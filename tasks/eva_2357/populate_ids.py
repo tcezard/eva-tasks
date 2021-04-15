@@ -15,15 +15,11 @@ logger = logging_config.get_logger(__name__)
 def generate_update_statement(hash_to_variant_ids, hash_to_accession_info):
     variant_to_ids = defaultdict(set)
     update_statements = []
+    
+    # Group ss and rs accessions by variant id (chr_start_ref_alt)
     for sve_hash, accessions in hash_to_accession_info.items():
-        ss_accession = f"ss{accessions.get('ss')}"
-        rs_accession = f"rs{accessions.get('rs')}" if accessions.get('rs') else None
         variant_id = hash_to_variant_ids.get(sve_hash)
-
-        # Group all the ids (ss and rs) by variant id
-        variant_to_ids[variant_id].add(ss_accession)
-        if rs_accession:
-            variant_to_ids[variant_id].add(rs_accession)
+        variant_to_ids[variant_id].update(accessions)
 
     # Generate one update statement per variant_id
     for variant_id, ids in variant_to_ids.items():
@@ -39,15 +35,15 @@ def get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes):
     sve_filter = {"_id": {"$in": list(sve_hashes)}}
     sve_projection = {"_id": 1, "accession": 1, "rs": 1}
     cursor_accessioning = sve_collection.find(sve_filter, projection=sve_projection, no_cursor_timeout=True)
-    hash_to_accession_info = {}
+    hash_to_accession_info = defaultdict(list)
     for sve in cursor_accessioning:
         sve_hash = sve.get("_id")
         ss_accession = sve.get('accession')
         rs_accession = sve.get('rs')
-        hash_to_accession_info[sve_hash] = {"ss": ss_accession}
+        hash_to_accession_info[sve_hash].append(f"ss{ss_accession}")
         # Get RS ID is variant is clustered
         if rs_accession:
-            hash_to_accession_info[sve_hash]['rs'] = rs_accession
+            hash_to_accession_info[sve_hash].append(f"rs{rs_accession}")
     return hash_to_accession_info
 
 
