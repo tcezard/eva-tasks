@@ -15,7 +15,7 @@ logger = logging_config.get_logger(__name__)
 def generate_update_statement(hash_to_variant_ids, hash_to_accession_info):
     variant_to_ids = defaultdict(set)
     update_statements = []
-    
+
     # Group ss and rs accessions by variant id (chr_start_ref_alt)
     for sve_hash, accessions in hash_to_accession_info.items():
         variant_id = hash_to_variant_ids.get(sve_hash)
@@ -115,26 +115,33 @@ def get_SHA1(variant_id):
     return hashlib.sha1(variant_id.encode()).hexdigest().upper()
 
 
-def get_ids(assembly, contig_synonym_dictionaries, variant_query_result):
+def get_hash_to_variant_id(assembly, contig_synonym_dictionaries, variant_query_result, fail_on_first_error):
     """
     Get a dictionary with the submitted variant hash as key and the variant id (chr_start_ref_alt) from the variant
     warehouse as value
     """
     hash_to_variant_id = {}
+    contigs_no_genbank = []
+    # One variant in the variant warehouse can include more than one study, which means there can be more than one
+    # submitted variant per variant warehouse variant
     for file in variant_query_result['files']:
         study = file['sid']
         start = variant_query_result['start']
         ref = variant_query_result['ref']
         alt = variant_query_result['alt']
         id_variant_warehouse = variant_query_result['_id']
+        chr = variant_query_result['chr']
         try:
-            genbank_chr = get_genbank(contig_synonym_dictionaries, variant_query_result['chr'])
+            genbank_chr = get_genbank(contig_synonym_dictionaries, chr)
         except Exception as e:
-            logger.warning(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
+            contigs_no_genbank.append(chr)
+            logger.error(f"{e} in variant {variant_query_result['chr']}_{start}_{ref}_{alt}")
+            if fail_on_first_error:
+                raise Exception(f"Contig {chr} don't have a genbank equivalent, check assembly report")
             continue
         sve_hash = get_SHA1(f"{assembly}_{study}_{genbank_chr}_{start}_{ref}_{alt}")
         hash_to_variant_id[sve_hash] = id_variant_warehouse
-    return hash_to_variant_id
+    return hash_to_variant_id, contigs_no_genbank
 
 
 def get_db_name_and_assembly_accession(databases):
@@ -160,7 +167,8 @@ def update_variant_warehouse(mongo_handle, mongo_accession_db, variants_collecti
         return variants_modified_in_batch
 
 
-def populate_ids(private_config_xml_file, databases, profile='production', mongo_accession_db='eva_accession_sharded'):
+def populate_ids(private_config_xml_file, databases, only_check, fail_on_first_error, profile='production',
+                 mongo_accession_db='eva_accession_sharded'):
     db_assembly = get_db_name_and_assembly_accession(databases)
     for db_name, info in db_assembly.items():
         assembly = info['assembly']
@@ -172,38 +180,52 @@ def populate_ids(private_config_xml_file, databases, profile='production', mongo
         with pymongo.MongoClient(get_mongo_uri_for_eva_profile(profile, private_config_xml_file)) as mongo_handle:
             variants_collection = mongo_handle[db_name]["variants_2_0"]
             logger.info(f"Querying variants from variant warehouse, database {db_name}")
-            batch_size = 1000
+            batch_size = 1
             variants_cursor = get_variants_from_variant_warehouse(variants_collection, batch_size)
-            hash_to_variant_id = {}
+            hash_to_variant_ids = {}
+            update_statements = []
             try:
                 count_variants = 0
-                modified_count = 0
                 batch_number = 0
                 for variant_query_result in variants_cursor:
-                    # One variant in the variant warehouse can include more than one study, which means there can be
-                    # more than one submitted variant per variant warehouse variant
-                    hash_to_variant_id.update(get_ids(assembly, contig_synonym_dictionaries, variant_query_result))
+                    hash_to_variant_id, contigs_no_genbank = get_hash_to_variant_id(assembly,
+                                                                                    contig_synonym_dictionaries,
+                                                                                    variant_query_result,
+                                                                                    fail_on_first_error)
+                    hash_to_variant_ids.update(hash_to_variant_id)
                     count_variants += 1
                     if count_variants == batch_size:
                         batch_number += 1
-                        logger.info(f"Updating database {db_name} in the variant warehouse (batch {batch_number})")
-                        variants_modified_in_batch = update_variant_warehouse(mongo_handle, mongo_accession_db,
-                                                                              variants_collection, hash_to_variant_id)
-                        modified_count += variants_modified_in_batch
-                        logger.info(f"{variants_modified_in_batch} variants modified in batch {batch_number}")
-                        hash_to_variant_id.clear()
+                        # Generate update statements
+                        logger.info(f"Generating update statements: database {db_name} (batch {batch_number})")
+                        sve_hashes = hash_to_variant_ids.keys()
+                        hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
+                        update_statements.extend(generate_update_statement(hash_to_variant_ids, hash_to_accession_info))
+
+                        hash_to_variant_ids.clear()
                         count_variants = 0
                 if count_variants > 0:
-                    logger.info(f"Updating database {db_name} in the variant warehouse (batch {batch_number+1})")
-                    variants_modified_in_batch = update_variant_warehouse(mongo_handle, mongo_accession_db,
-                                                                          variants_collection, hash_to_variant_id)
-                    modified_count += variants_modified_in_batch
-                    logger.info(f"{variants_modified_in_batch} variants modified in batch {batch_number}")
+                    logger.info(f"Generating update statements: database {db_name} (batch {batch_number+1})")
+                    sve_hashes = hash_to_variant_ids.keys()
+                    hash_to_accession_info = get_from_accessioning_db(mongo_handle, mongo_accession_db, sve_hashes)
+                    update_statements.extend(generate_update_statement(hash_to_variant_ids, hash_to_accession_info))
             except Exception as e:
                 print(traceback.format_exc())
                 raise e
             finally:
                 variants_cursor.close()
+
+            if len(contigs_no_genbank) > 0:
+                raise Exception(f"Contigs {contigs_no_genbank} don't have a genbank equivalent, check assembly report")
+
+            modified_count = 0
+            if not only_check and update_statements:
+                result_update = variants_collection.with_options(
+                    write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+                    .bulk_write(requests=update_statements, ordered=False)
+                modified_count = result_update.modified_count if result_update else 0
+                logger.info(f"{modified_count} variants modified in {db_name}")
+
         return modified_count
 
 
@@ -213,5 +235,9 @@ if __name__ == "__main__":
     parser.add_argument("--dbs-to-populate-list",
                         help="Full path to file with list of pairs (database, assembly) to populate the ids field "
                              "with SS and RS ids (ex: /path/to/dbs/to/populate.txt)", required=True)
+    parser.add_argument('--only_check', help='Check the contigs have a genbank equivalent in the assembly report',
+                        default=False, action='store_true')
+    parser.add_argument('--fail-on-first-error', help='Stop execution if one contig does not have a genbank equivalent',
+                        default=False, action='store_true')
     args = parser.parse_args()
-    populate_ids(args.private_config_xml_file, args.dbs_to_populate_list)
+    populate_ids(args.private_config_xml_file, args.dbs_to_populate_list, args.only_check, args.fail_on_first_error)

@@ -13,6 +13,7 @@ class TestCorrectChr(TestCase):
         self.port = 27017
         # Variant warehouse
         self.variant_warehouse_db = 'eva_fcatus_90'
+        self.variant_warehouse_db_errors = 'eva_fcatus_90_errors'
         self.variant_collection = 'variants_2_0'
 
         # Variant warehouse
@@ -78,8 +79,12 @@ class TestCorrectChr(TestCase):
 
         self.connection_handle[self.variant_warehouse_db][self.variant_collection].drop()
         self.connection_handle[self.variant_warehouse_db][self.variant_collection].insert_many([variant,
-                                                                                                variant_not_in_acc_db,
-                                                                                                variant_no_contig_synonym])
+                                                                                                variant_not_in_acc_db])
+
+        self.connection_handle[self.variant_warehouse_db_errors][self.variant_collection].drop()
+        self.connection_handle[self.variant_warehouse_db_errors][self.variant_collection].insert_many([variant,
+                                                                                                       variant_not_in_acc_db,
+                                                                                                       variant_no_contig_synonym])
 
         # Accessioning db
         submitted_variant = {
@@ -122,18 +127,42 @@ class TestCorrectChr(TestCase):
         self.connection_handle.close()
 
     @patch('tasks.eva_2357.populate_ids.get_mongo_uri_for_eva_profile')
-    def test_correct(self, mock_get_mongo_uri_for_eva_profile):
+    def test_populate_ids(self, mock_get_mongo_uri_for_eva_profile):
         logging.getLogger().setLevel(logging.DEBUG)
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases.txt")
-        self.assertEqual(1, populate_ids(settings, databases_file, profile='localhost',
-                                         mongo_accession_db=self.accession_db))
+        self.assertEqual(1, populate_ids(settings, databases_file, only_check=False, fail_on_first_error=False,
+                                         profile='localhost', mongo_accession_db=self.accession_db))
         variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
             {'_id': 'NC_018728.3_76166296_C_T'}))
         # The name for assertCountEqual more than just counting the elements, it checks both lists have the same
         # elements regardless of the order
         self.assertCountEqual(variant['ids'], ['ss1', 'ss5318166021', 'rs1000', 'ss2000'])
+
+    @patch('tasks.eva_2357.populate_ids.get_mongo_uri_for_eva_profile')
+    def test_populate_ids_fail(self, mock_get_mongo_uri_for_eva_profile):
+        logging.getLogger().setLevel(logging.DEBUG)
+        mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
+        settings = self.get_test_resource("settings.xml")
+        databases_file = self.get_test_resource("databases_errors.txt")
+        with self.assertRaises(Exception):
+            self.assertEqual(1, populate_ids(settings, databases_file, only_check=False, fail_on_first_error=False,
+                                             profile='localhost', mongo_accession_db=self.accession_db))
+
+    @patch('tasks.eva_2357.populate_ids.get_mongo_uri_for_eva_profile')
+    def test_populate_ids_only_check(self, mock_get_mongo_uri_for_eva_profile):
+        logging.getLogger().setLevel(logging.DEBUG)
+        mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
+        settings = self.get_test_resource("settings.xml")
+        databases_file = self.get_test_resource("databases.txt")
+        self.assertEqual(0, populate_ids(settings, databases_file, only_check=True, fail_on_first_error=False,
+                                         profile='localhost', mongo_accession_db=self.accession_db))
+        variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
+            {'_id': 'NC_018728.3_76166296_C_T'}))
+        # The name for assertCountEqual more than just counting the elements, it checks both lists have the same
+        # elements regardless of the order
+        self.assertCountEqual(variant['ids'], ['ss1'])
 
     @staticmethod
     def get_test_resource(resource_name):
