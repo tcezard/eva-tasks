@@ -1,4 +1,5 @@
 import argparse
+import getpass
 from os import path
 
 import pandas
@@ -9,8 +10,8 @@ logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
 
-def read_chunks_info(uri):
-    mongo_client = MongoClient(uri)
+def read_chunks_info(uri, mongo_password):
+    mongo_client = MongoClient(uri, password=mongo_password)
     config_db = mongo_client["config"]
     chunk_collection = config_db["chunks"]
 
@@ -112,7 +113,8 @@ def main():
 
     args = parser.parse_args()
 
-    result = read_chunks_info(args.mongo_source_uri)
+    mongo_password = getpass.getpass(prompt='Please Enter Mongo Source Password: ')
+    result = read_chunks_info(args.mongo_source_uri, mongo_password)
     write_chunk_info_to_csv(result, args.report_dir)
 
 
