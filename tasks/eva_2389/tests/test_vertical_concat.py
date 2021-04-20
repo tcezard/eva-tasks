@@ -8,7 +8,7 @@ from unittest import TestCase
 
 class TestVCFVerticalConcat(TestCase):
     # Tests require nextflow and bcftools installed locally and in PATH
-    def test_concat(self):
+    def test_concat_uninterrupted(self):
         with tempfile.TemporaryDirectory() as tempdir:
             vcf_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "resources")
             #   s0.vcf.gz   s1.vcf.gz   s2.vcf.gz   s3.vcf.gz   s4.vcf.gz
