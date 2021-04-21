@@ -26,21 +26,15 @@ from tasks.eva_2389 import vcf_vertical_concat
 logger = logging_config.get_logger(__name__)
 
 
-class PythonProcess:
+def get_python_process_command_string(python_program, args: dict, log_file: str):
     """
     Helper class to generate the command to run a Python program with command-line arguments
     """
-    def __init__(self, python_program, args: dict, log_file: str):
-        self.python_program = python_program
-        self.args = args
-        self.log_file = log_file
-
-    def __str__(self):
-        program_module_dir = os.path.dirname(inspect.getmodule(self.python_program).__file__)
-        program_name = self.python_program.__name__.split(".")[-1]
-        args_repr = " ".join([f"--{arg} {val}" for arg, val in self.args.items()])
-        return f"bash -c \"export PYTHONPATH='{program_module_dir}' && " \
-               f"{sys.executable} -m {program_name} {args_repr}\" 1>> {self.log_file} 2>&1"
+    program_module_dir = os.path.dirname(inspect.getmodule(python_program).__file__)
+    program_name = python_program.__name__.split(".")[-1]
+    args_repr = " ".join([f"--{arg} {val}" for arg, val in args.items()])
+    return f"bash -c \"export PYTHONPATH='{program_module_dir}' && " \
+           f"{sys.executable} -m {program_name} {args_repr}\" 1>> {log_file} 2>&1"
 
 
 def get_multistage_vertical_concat_pipeline(vcf_files, concat_processing_dir, concat_chunk_size, bcftools_binary,
@@ -76,14 +70,15 @@ def get_multistage_vertical_concat_pipeline(vcf_files, concat_processing_dir, co
         log_file_name = os.path.join(concat_processing_dir, f"{concat_stage_batch_name}.log")
         output_vcf_file = get_output_vcf_file_name(stage, batch, concat_processing_dir)
         process = NextFlowProcess(process_name=concat_stage_batch_name,
-                                  command_to_run=str(PythonProcess(vcf_vertical_concat,
-                                                                   {"files-to-concat-list": files_to_concat_list,
-                                                                    "concat-processing-dir": concat_processing_dir,
-                                                                    "output-vcf-file": output_vcf_file,
-                                                                    "bcftools-binary": bcftools_binary},
-                                                                   log_file=log_file_name
-                                                                   )
-                                                     )
+                                  command_to_run=str(get_python_process_command_string(
+                                      vcf_vertical_concat,
+                                      {"files-to-concat-list": files_to_concat_list,
+                                       "concat-processing-dir": concat_processing_dir,
+                                       "output-vcf-file": output_vcf_file,
+                                       "bcftools-binary": bcftools_binary},
+                                      log_file=log_file_name
+                                  )
+                                  )
                                   )
         curr_stage_processes.append(process)
         output_vcf_files_from_stage.append(output_vcf_file)
