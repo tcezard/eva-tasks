@@ -1,8 +1,8 @@
 import argparse
+import csv
 import getpass
 from os import path
 
-import pandas
 from ebi_eva_common_pyutils.logger import logging_config
 from pymongo import MongoClient
 
@@ -61,20 +61,24 @@ def read_chunks_info(uri, mongo_password):
 
             logger.info(f"reading collection info for db({database}) and collection({collection})")
             collection_info = mongo_client[database].command("collstats", collection)
-
             collection_size = int(collection_info["size"])
+            collection_size_gb = round(collection_size / 1024 / 1024 / 1024, 2)
+
             result[ns] = {
                 "database": database,
                 "collection": collection,
                 "collection_size": collection_size,
+                "collection_size_gb": collection_size_gb,
                 "shards": {}
             }
 
             shard_dict = collection_info["shards"]
             for shard_key in sorted(shard_dict.keys()):
                 shard_size = int(shard_dict[shard_key]["size"])
+                shard_size_gb = round(shard_size / 1024 / 1024 / 1024, 2)
                 result[ns]["shards"][shard_key] = {
-                    "shard_size": shard_size
+                    "shard_size": shard_size,
+                    "shard_size_gb": shard_size_gb
                 }
 
             result[ns]["shards"][curr_shard]["no_of_chunks"] = no_of_chunks
@@ -85,19 +89,23 @@ def read_chunks_info(uri, mongo_password):
 
 
 def write_chunk_info_to_csv(result_data, report_dir):
-    header = ['Database', 'Collection', 'Collection_Size', 'Shard', 'Shard_Size', 'No_Of_Chunks']
-    data = []
+    rows = [["Database", "Collection", "Collection_Size - Bytes", "Collection_Size - GB", "Shard", "Shard_Size - Bytes",
+             "Shard_Size - GB", "No_Of_Chunks"]]
+
     for key, value in result_data.items():
         database = value["database"]
         collection = value["collection"]
         collection_size = value["collection_size"]
+        collection_size_gb = value["collection_size_gb"]
         for shard_key in sorted(value["shards"].keys()):
             shard = value["shards"][shard_key]
-            data.append([database, collection, collection_size, shard_key, shard["shard_size"], shard["no_of_chunks"]])
+            print(database, collection, shard)
+            rows.append([database, collection, collection_size, collection_size_gb, shard_key,
+                         shard["shard_size"], shard["shard_size_gb"], shard["no_of_chunks"]])
 
-    logger.info("creating sharding report. writing data to csv file")
-    df = pandas.DataFrame(data, columns=header)
-    df.to_csv(path.join(report_dir, 'Shard_Report.csv'), index=False)
+    with open(path.join(report_dir, 'Shard_Report.csv'), 'w') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerows(rows)
 
 
 def main():
