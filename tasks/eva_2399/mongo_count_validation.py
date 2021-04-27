@@ -8,6 +8,7 @@ from ebi_eva_common_pyutils.config_utils import get_pg_metadata_uri_for_eva_prof
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.pg_utils import execute_query
+from retry import retry
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
@@ -27,11 +28,13 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
             logger.info(f"database {db} does not exit in either of mongo instances")
             continue
 
-        all_collections = set(source_collections).union(set(dest_collections))
+        all_collections = sorted(set(source_collections).union(set(dest_collections)))
 
         for coll in all_collections:
-            no_of_documents_in_src = mongo_source.mongo_handle[db][coll].count_documents({})
-            no_of_documents_in_dest = mongo_dest.mongo_handle[db][coll].count_documents({})
+            logger.info(f"fetching count for database {db} - collection {coll}")
+
+            no_of_documents_in_src = get_documents_count_for_collection(mongo_source, db, coll)
+            no_of_documents_in_dest = get_documents_count_for_collection(mongo_dest, db, coll)
 
             if (no_of_documents_in_src == 0) and (coll not in source_collections):
                 logger.info(f"collection {coll} does not exist in database {db} in mongo source")
@@ -51,17 +54,14 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
     return count_validation_res_list
 
 
-# TODO: values for parameters
-# @retry(exceptions=(ConnectionError, requests.RequestException), logger=logger,tries=4, delay=2, backoff=1.2, jitter=(1, 3))
+@retry(logger=logger, tries=3, delay=2)
 def get_documents_count_for_collection(mongo_server: MongoDatabase, db, coll):
     return mongo_server.mongo_handle[db][coll].count_documents({})
 
 
 def create_table_for_count_validation(private_config_xml_file):
-    # TODO :
-    # with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file), user="evadev") \
     with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file),
-                          user="postgres", password="password") as metadata_connection_handle:
+                          user="evadev") as metadata_connection_handle:
         query_create_table_for_count_validation = "create table if not exists {0} " \
                                                   "(database text, collection text, source_document_count bigint not null, " \
                                                   "destination_document_count bigint not null, report_time timestamp, " \
@@ -73,9 +73,8 @@ def create_table_for_count_validation(private_config_xml_file):
 
 def insert_count_validation_result_to_db(private_config_xml_file, count_validation_res_list):
     if len(count_validation_res_list) > 0:
-        # TODO :
         with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file),
-                              user="postgres", password="password") as metadata_connection_handle:
+                              user="evadev") as metadata_connection_handle:
             with metadata_connection_handle.cursor() as cursor:
                 psycopg2.extras.execute_values(cursor,
                                                "INSERT INTO {0} "
