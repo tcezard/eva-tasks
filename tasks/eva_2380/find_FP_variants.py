@@ -65,34 +65,6 @@ def get_variant_from_vcf(variant_ids, vcf_file):
     return variant_id_to_record
 
 
-def output_alignment_records(variant_id_to_assessment_result, bam_file):
-    base, ext = os.path.splitext(bam_file)
-    output_bam = base + '_annotated' + ext
-    output_csv = base + '_annotated.csv'
-    with pysam.AlignmentFile(bam_file, "rb") as bam_in, \
-            pysam.AlignmentFile(output_bam, "wb", template=bam_in) as bam_out, \
-            open(output_csv, 'w') as open_csv:
-        for sam_record in bam_in:
-            sp_name = sam_record.query_name.split('|')
-            rs_id = sp_name[4]
-            if rs_id in variant_id_to_assessment_result:
-                bd_tag, bvt_tag = variant_id_to_assessment_result[rs_id]
-                sam_record.set_tag('BD', bd_tag)
-                sam_record.set_tag('BT', bvt_tag)
-            else:
-                sam_record.set_tag('BD', 'Filtered')
-                sam_record.set_tag('BT', 'Unknown')
-            bam_out.write(sam_record)
-
-            print('\t'.join(
-                [sam_record.query_name, str(sam_record.mapping_quality)] +
-                [
-                    str(sam_record.get_tag(tag) if sam_record.has_tag(tag) else 'NaN')
-                    for tag in ['AS', 'XS', 'XN', 'XM', 'XG', 'NM', 'MD', 'BD', 'BT']
-                ]),
-                file=open_csv)
-
-
 def get_alignment_records(variant_ids, bam_file):
     print('Read alignment BAM: ' + bam_file, file=sys.stderr)
     variant_id_to_bam_records = defaultdict(list)
