@@ -138,7 +138,7 @@ def process_files(realigned_vcf_file, assessment_vcf_file, source_vcf, truth_vcf
 
         new_ref_left = fetch_bases(new_fasta, truth_var.chrom, truth_var.pos - flank_len, flank_len)
         new_ref = fetch_bases(new_fasta, truth_var.chrom, truth_var.pos, len(truth_var.ref))
-        new_ref_right = fetch_bases(old_fasta, truth_var.chrom, truth_var.pos + len(truth_var.ref), flank_len)
+        new_ref_right = fetch_bases(new_fasta, truth_var.chrom, truth_var.pos + len(truth_var.ref), flank_len)
 
         print(old_ref_left + "*" + old_ref + "*" + old_ref_right)
         print(new_ref_left + "*" + new_ref + "*" + new_ref_right)
