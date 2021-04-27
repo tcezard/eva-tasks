@@ -18,8 +18,6 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
     count_validation_res_list = []
 
     for db in database_list:
-        if len(count_validation_res_list) > 0:
-            break
         mongo_source.db_name = db
         mongo_dest.db_name = db
         source_collections = mongo_source.get_collection_names()
@@ -53,7 +51,14 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
     return count_validation_res_list
 
 
+# TODO: values for parameters
+# @retry(exceptions=(ConnectionError, requests.RequestException), logger=logger,tries=4, delay=2, backoff=1.2, jitter=(1, 3))
+def get_documents_count_for_collection(mongo_server: MongoDatabase, db, coll):
+    return mongo_server.mongo_handle[db][coll].count_documents({})
+
+
 def create_table_for_count_validation(private_config_xml_file):
+    # TODO :
     # with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file), user="evadev") \
     with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file),
                           user="postgres", password="password") as metadata_connection_handle:
@@ -68,6 +73,7 @@ def create_table_for_count_validation(private_config_xml_file):
 
 def insert_count_validation_result_to_db(private_config_xml_file, count_validation_res_list):
     if len(count_validation_res_list) > 0:
+        # TODO :
         with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file),
                               user="postgres", password="password") as metadata_connection_handle:
             with metadata_connection_handle.cursor() as cursor:
