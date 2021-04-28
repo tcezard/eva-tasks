@@ -31,22 +31,24 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
         all_collections = sorted(set(source_collections).union(set(dest_collections)))
 
         for coll in all_collections:
-            logger.info(f"fetching count for database {db} - collection {coll}")
+            logger.info(f"fetching count for collection ({coll}) in database ({db})")
 
-            no_of_documents_in_src = get_documents_count_for_collection(mongo_source, db, coll)
-            no_of_documents_in_dest = get_documents_count_for_collection(mongo_dest, db, coll)
-
-            if (no_of_documents_in_src == 0) and (coll not in source_collections):
-                logger.info(f"collection {coll} does not exist in database {db} in mongo source")
+            if coll not in source_collections:
+                logger.info(f"collection ({coll}) does not exist in database ({db}) in mongo source")
                 no_of_documents_in_src = -1
+            else:
+                no_of_documents_in_src = get_documents_count_for_collection(mongo_source, db, coll)
 
-            if (no_of_documents_in_dest == 0) and (coll not in dest_collections):
-                logger.info(f"collection {coll} does not exist in database {db} in dest source")
+            if coll not in dest_collections:
+                logger.info(f"collection ({coll}) does not exist in database ({db}) in mongo destination")
                 no_of_documents_in_dest = -1
+            else:
+                no_of_documents_in_dest = get_documents_count_for_collection(mongo_dest, db, coll)
 
             if no_of_documents_in_src != no_of_documents_in_dest and \
                     no_of_documents_in_src != -1 and no_of_documents_in_dest != -1:
-                logger.info(f"no of documents in collection {coll} of database {db} does not match")
+                logger.info(f"no of documents in collection ({coll}) of database ({db}) does not match : "
+                            f"source has ({no_of_documents_in_src}) documents whereas destination has ({no_of_documents_in_dest})")
 
             count_validation_res_list.append(
                 (db, coll, no_of_documents_in_src, no_of_documents_in_dest, datetime.now()))
