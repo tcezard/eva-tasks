@@ -17,6 +17,7 @@ mongo_migration_count_validation_table_name = "eva_tasks.mongo4_migration_count_
 
 def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo_dest: MongoDatabase, database_list):
     count_validation_res_list = []
+    report_timestamp = datetime.now()
 
     for db in database_list:
         mongo_source.db_name = db
@@ -54,7 +55,7 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
                     f"Both source and destination has same no of records ({no_of_documents_in_src}) in collection {coll} of database {db}")
 
             count_validation_res_list.append(
-                (db, coll, no_of_documents_in_src, no_of_documents_in_dest, datetime.now()))
+                [db, coll, no_of_documents_in_src, no_of_documents_in_dest, report_timestamp])
 
     return count_validation_res_list
 
@@ -85,10 +86,10 @@ def insert_count_validation_result_to_db(private_config_xml_file, count_validati
                                                "INSERT INTO {0} "
                                                "(database, collection, source_document_count, destination_document_count,report_time) "
                                                "VALUES %s".format(mongo_migration_count_validation_table_name),
-                                               count_validation_res_list)
+                                               [tuple(x) for x in count_validation_res_list])
 
 
-def get_databases_list_for_export(file_path):
+def get_databases_list_for_validation(file_path):
     database_list = []
     try:
         with open(file_path) as file_object:
@@ -130,7 +131,7 @@ def main():
 
     source_mongo = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file)
     dest_mongo = MongoDatabase(uri=args.mongo_dest_uri, secrets_file=args.mongo_dest_secrets_file)
-    database_list = get_databases_list_for_export(args.db_list)
+    database_list = get_databases_list_for_validation(args.db_list)
 
     create_table_for_count_validation(args.private_config_xml_file)
     count_validation_result = create_collection_count_validation_report(source_mongo, dest_mongo, database_list)
