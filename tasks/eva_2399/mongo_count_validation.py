@@ -25,7 +25,7 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
         dest_collections = mongo_dest.get_collection_names()
 
         if not source_collections and not dest_collections:
-            logger.info(f"database {db} does not exit in either of mongo instances")
+            logger.error(f"database {db} does not exist in either of mongo instances")
             continue
 
         all_collections = sorted(set(source_collections).union(set(dest_collections)))
@@ -34,21 +34,24 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
             logger.info(f"fetching count for collection ({coll}) in database ({db})")
 
             if coll not in source_collections:
-                logger.info(f"collection ({coll}) does not exist in database ({db}) in mongo source")
+                logger.error(f"collection ({coll}) does not exist in database ({db}) in mongo source")
                 no_of_documents_in_src = -1
             else:
                 no_of_documents_in_src = get_documents_count_for_collection(mongo_source, db, coll)
 
             if coll not in dest_collections:
-                logger.info(f"collection ({coll}) does not exist in database ({db}) in mongo destination")
+                logger.error(f"collection ({coll}) does not exist in database ({db}) in mongo destination")
                 no_of_documents_in_dest = -1
             else:
                 no_of_documents_in_dest = get_documents_count_for_collection(mongo_dest, db, coll)
 
             if no_of_documents_in_src != no_of_documents_in_dest and \
                     no_of_documents_in_src != -1 and no_of_documents_in_dest != -1:
-                logger.info(f"no of documents in collection ({coll}) of database ({db}) does not match : "
-                            f"source has ({no_of_documents_in_src}) documents whereas destination has ({no_of_documents_in_dest})")
+                logger.error(f"no of documents in collection ({coll}) of database ({db}) does not match : "
+                             f"source has ({no_of_documents_in_src}) documents whereas destination has ({no_of_documents_in_dest})")
+            elif no_of_documents_in_src == no_of_documents_in_dest:
+                logger.info(
+                    f"Both source and destination has same no of records ({no_of_documents_in_src}) in collection {coll} of database {db}")
 
             count_validation_res_list.append(
                 (db, coll, no_of_documents_in_src, no_of_documents_in_dest, datetime.now()))
@@ -56,7 +59,7 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, mongo
     return count_validation_res_list
 
 
-@retry(logger=logger, tries=3, delay=2)
+@retry(logger=logger, tries=3, delay=3, backoff=2)
 def get_documents_count_for_collection(mongo_server: MongoDatabase, db, coll):
     return mongo_server.mongo_handle[db][coll].count_documents({})
 
