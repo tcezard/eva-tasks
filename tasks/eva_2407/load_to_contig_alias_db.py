@@ -39,7 +39,6 @@ def call_admin_endpoint(assemblies, admin_credentials):
         request = urllib.request.Request(url, None, headers)
         try:
             with urllib.request.urlopen(request) as response:
-                print(f"Assembly {assembly} loaded into contig alias database")
                 logger.info(f"Assembly {assembly} loaded into contig alias database")
         except Exception:
             logger.error(f"Error loading assembly {assembly}")
@@ -48,7 +47,6 @@ def call_admin_endpoint(assemblies, admin_credentials):
 def load_data_to_contig_alias(private_config_xml_file, assembly_list):
     assemblies = assembly_list if assembly_list else get_assemblies_from_evapro(private_config_xml_file)
     admin_credentials = get_contig_alias_auth(private_config_xml_file)
-    print(f"Assemblies to be loaded into contig alias database: {assemblies}")
     logger.info(f"Assemblies to be loaded into contig alias database: {assemblies}")
     call_admin_endpoint(assemblies, admin_credentials)
 
