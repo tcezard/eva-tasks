@@ -161,7 +161,9 @@ def find_all_eva_studies(accession_counts, private_config_xml_file):
         )
         data = []
         for assembly, tax_id, study in filter_studies(get_all_results_for_query(pg_conn, query)):
-            taxid_from_ensembl, scientific_name, ensembl_assembly = retrieve_current_ensembl_assemblies(tax_id)
+            taxid_from_ensembl, scientific_name, ensembl_assembly_from_taxid = retrieve_current_ensembl_assemblies(tax_id)
+            _, _, ensembl_assembly_from_assembly = retrieve_current_ensembl_assemblies(assembly)
+
             count_ssid = 0
             if study in accession_counts:
                 assembly_from_mongo, taxid_from_mongo, project_accession, count_ssid = accession_counts.pop(study)
@@ -182,13 +184,16 @@ def find_all_eva_studies(accession_counts, private_config_xml_file):
                 'Scientific Name': scientific_name,
                 'Study': study,
                 'Number Of Variants (submitted variants)': count_ssid or 0,
-                'Target Assembly': ensembl_assembly
+                'Ensembl assembly from taxid': ensembl_assembly_from_taxid,
+                'Ensembl assembly from assembly': ensembl_assembly_from_assembly,
+                'Target Assembly': ensembl_assembly_from_taxid or ensembl_assembly_from_assembly
             })
     if len(accession_counts) > 0:
         logger.error('Accessioning database has studies (%s) absent from the metadata database', ', '.join(accession_counts))
     df = pd.DataFrame(data)
     df = df.groupby(
-        ['Source', 'Assembly', 'Taxid', 'Scientific Name', 'Target Assembly']
+        ['Source', 'Assembly', 'Taxid', 'Scientific Name', 'Ensembl assembly from taxid',
+         'Ensembl assembly from assembly', 'Target Assembly']
     ).agg(
         {'Study': 'count', 'Number Of Variants (submitted variants)': 'sum'}
     )
@@ -255,12 +260,18 @@ def parse_dbsnp_csv(input_file, accession_counts):
     df = df[df.Source != 'EVA']
     taxids = []
     scientific_names = []
-    ensembl_assemblies = []
+    ensembl_assemblies_from_taxid = []
+    ensembl_assemblies_from_assembly = []
+    target_assemblies = []
+
     for index, record in df.iterrows():
-        taxid, scientific_name, ensembl_assembly = retrieve_current_ensembl_assemblies(record['Taxid'])
+        taxid, scientific_name, ensembl_assembly_from_taxid = retrieve_current_ensembl_assemblies(record['Taxid'])
+        _, _, ensembl_assembly_from_assembly = retrieve_current_ensembl_assemblies(record['Assembly'])
         taxids.append(taxid)
         scientific_names.append(scientific_name)
-        ensembl_assemblies.append(ensembl_assembly)
+        ensembl_assemblies_from_taxid.append(ensembl_assembly_from_taxid)
+        ensembl_assemblies_from_assembly.append(ensembl_assembly_from_assembly)
+        target_assemblies.append(ensembl_assembly_from_taxid or ensembl_assembly_from_assembly)
         if record['Assembly'] != 'Unmapped':
             _, _, count = accession_counts[record['Assembly']]
             if count != int(record['Number Of Variants (submitted variants)'].replace(',', '')):
@@ -269,7 +280,9 @@ def parse_dbsnp_csv(input_file, accession_counts):
                     record['Number Of Variants (submitted variants)'], count, record['Assembly']
                 )
     df['Scientific Name'] = scientific_names
-    df['Target Assembly'] = ensembl_assemblies
+    df['Ensembl assembly from taxid'] = ensembl_assemblies_from_taxid
+    df['Ensembl assembly from assembly'] = ensembl_assemblies_from_assembly
+    df['Target Assembly'] = target_assemblies
     return df
 
 
@@ -308,7 +321,8 @@ def main():
     argparse.add_argument('--accession_counts', help='Path to the file that will contain counts per project id', required=True)
     args = argparse.parse_args()
     output_header = ['Source', 'Taxid', 'Scientific Name', 'Assembly', 'number Of Studies',
-                     'Number Of Variants (submitted variants)', 'Target Assembly']
+                     'Number Of Variants (submitted variants)', 'Ensembl assembly from taxid',
+                     'Ensembl assembly from assembly', 'Target Assembly']
 
     accession_counts = get_accession_counts_per_assembly(args.private_config_xml_file, 'dbSNP')
     df1 = parse_dbsnp_csv(args.input, accession_counts)
