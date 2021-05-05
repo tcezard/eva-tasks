@@ -291,7 +291,7 @@ def create_table_for_progress(private_config_xml_file):
                           user="evadev") as metadata_connection_handle:
         query_create_table = (
             'CREATE TABLE IF NOT EXISTS remapping_progress '
-            '(source TEXT, taxid TEXT, scientific_name TEXT, assembly_accession TEXT, number_of_study INTEGER NOT NULL,'
+            '(source TEXT, taxid INTEGER, scientific_name TEXT, assembly_accession TEXT, number_of_study INTEGER NOT NULL,'
             'number_submitted_variants BIGINT NOT NULL, release_number INTEGER, report_time TIMESTAMP DEFAULT NOW(), '
             'primary key(source, taxid, assembly_accession, release_number))'
         )

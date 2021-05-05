@@ -4,8 +4,6 @@ set -e
 
 INPUT=$1
 COUNT_VAR=${INPUT%.csv}_count_variants.txt
-COUNT_STUDY=${INPUT%.csv}_count_study.txt
-COUNT_ASSEMBLY=${INPUT%.csv}_count_assembly.txt
 
 # Remove the end of the timestamp to only keep the date
 # Then count the number of varant per study.
