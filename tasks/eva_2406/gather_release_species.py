@@ -122,18 +122,20 @@ def retrieve_species_name_from_assembly_accession(assembly_accession):
     return cache['assembly_to_species'].get(assembly_accession) or (None, None)
 
 
-def retrieve_current_ensembl_assemblies(source):
+def retrieve_current_ensembl_assemblies(taxid_or_assembly):
     """
     Retrieve the assembly accession currently supported by ensembl for the provided taxid or assembly accession
     In both case it looks up the associated species name in NCBI and using the species name returns the currently
     supported assembly for this species.
     """
-    logger.debug('Search for species name for %s', source)
+    logger.debug('Search for species name for %s', taxid_or_assembly)
     scientific_name = None
-    if source and str(source).isdigit():
-        taxid, scientific_name = retrieve_species_names_from_tax_id(source)
-    elif source:
-        taxid, scientific_name = retrieve_species_name_from_assembly_accession(source)
+    if taxid_or_assembly and str(taxid_or_assembly).isdigit():
+        # assume it is a taid
+        taxid, scientific_name = retrieve_species_names_from_tax_id(taxid_or_assembly)
+    elif taxid_or_assembly:
+        # assume it is an assembly accession
+        taxid, scientific_name = retrieve_species_name_from_assembly_accession(taxid_or_assembly)
     if scientific_name:
         logger.debug('Found %s', scientific_name)
         if scientific_name not in cache['scientific_name_to_ensembl']:
@@ -316,9 +318,13 @@ def insert_remapping_progress_to_db(private_config_xml_file, dataframe):
 def main():
     argparse = ArgumentParser()
     argparse.add_argument('--input', help='Path to the file containing the taxonomies and assemblies', required=True)
-    argparse.add_argument('--output', help='Path to the file that will contain the input plus annotation', required=True)
-    argparse.add_argument('--private_config_xml_file', help='Path to the file containing the ', required=True)
-    argparse.add_argument('--accession_counts', help='Path to the file that will contain counts per project id', required=True)
+    argparse.add_argument('--output', help='Path to the file that will contain the input plus annotation',
+                          required=True)
+    argparse.add_argument('--private_config_xml_file', required=True,
+                          help='Path to the file containing the username/passwords tp access '
+                               'production and development databases')
+    argparse.add_argument('--accession_counts', help='Path to the file that will contain counts per project id',
+                          required=True)
     args = argparse.parse_args()
     output_header = ['Source', 'Taxid', 'Scientific Name', 'Assembly', 'number Of Studies',
                      'Number Of Variants (submitted variants)', 'Ensembl assembly from taxid',
