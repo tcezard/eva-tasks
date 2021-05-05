@@ -29,10 +29,6 @@
 import argparse
 import os
 from ebi_eva_common_pyutils.command_utils import run_command_with_output
-from ebi_eva_common_pyutils.logger import logging_config
-
-logger = logging_config.get_logger(__name__)
-logging_config.add_stdout_handler()
 
 
 class VerticalConcatProcess:
