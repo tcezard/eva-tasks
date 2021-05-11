@@ -62,7 +62,8 @@ def insert_accession_counts_to_db(private_config_xml_file, accession_counts, sou
 
 
 def main():
-    argparse = ArgumentParser()
+    argparse = ArgumentParser(description='load a summarised count per study to load it into the metadata database in '
+                                          'the eva_stats schema')
     argparse.add_argument('--private_config_xml_file', help='Path to the file containing the ', required=True)
     argparse.add_argument('--accession_counts', help='Path to the file that contain counts per project id', required=True)
     argparse.add_argument('--source', help='Source of the study', choices=['EVA', 'dbSNP'], required=True)

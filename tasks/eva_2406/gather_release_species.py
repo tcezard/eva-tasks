@@ -159,6 +159,7 @@ def find_all_eva_studies(accession_counts, private_config_xml_file):
             'LEFT OUTER JOIN project_analysis pa ON p.project_accession=pa.project_accession '
             'LEFT OUTER JOIN analysis a ON pa.analysis_accession=a.analysis_accession '
             'LEFT OUTER JOIN project_taxonomy pt ON p.project_accession=pt.project_accession '
+            'WHERE p.ena_status=4 '   # Ensure that the project is public
             'ORDER BY pt.taxonomy_id, a.vcf_reference_accession'
         )
         data = []
@@ -316,15 +317,17 @@ def insert_remapping_progress_to_db(private_config_xml_file, dataframe):
 
 
 def main():
-    argparse = ArgumentParser()
+    argparse = ArgumentParser(
+        description='Gather the current set of studies from both EVA and dbSNP that can be remapped, clustered '
+                    'and released. The source of EVA studies is the metadata database and the source of dbSNP studies '
+                    "is last year's spreadsheet. The number of variants are populated from counts retrieved from "
+                    ' eva_stats.')
     argparse.add_argument('--input', help='Path to the file containing the taxonomies and assemblies', required=True)
     argparse.add_argument('--output', help='Path to the file that will contain the input plus annotation',
                           required=True)
     argparse.add_argument('--private_config_xml_file', required=True,
                           help='Path to the file containing the username/passwords tp access '
                                'production and development databases')
-    argparse.add_argument('--accession_counts', help='Path to the file that will contain counts per project id',
-                          required=True)
     args = argparse.parse_args()
     output_header = ['Source', 'Taxid', 'Scientific Name', 'Assembly', 'number Of Studies',
                      'Number Of Variants (submitted variants)', 'Ensembl assembly from taxid',
