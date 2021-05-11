@@ -16,14 +16,14 @@ def fetch_bases(fasta, contig, start, length):
     return new_ref
 
 
-def assessment_result_per_variants_from_vcf(vcf_file):
+def extract_FP_from_assessment_vcf(vcf_file):
     # Two samples in this VCF first the truth set then the query set
     print('Read Assessment VCF: ' + vcf_file, file=sys.stderr)
     assessment_result_per_variants = {}
     with pysam.VariantFile(vcf_file, 'r') as vcf_in:
         for vcf_record in vcf_in:
             try:
-                if vcf_record.samples['QUERY']['BD'] in ['FP']:
+                if vcf_record.samples['QUERY']['BD'] == 'FP':
                     key = (vcf_record.chrom, vcf_record.pos)
                     assessment_result_per_variants[key] = (vcf_record.samples['QUERY']['BD'], vcf_record.samples['QUERY']['BVT'])
             except KeyError:
@@ -78,7 +78,7 @@ def get_alignment_records(variant_ids, bam_file):
 
 
 def process_files(realigned_vcf_file, assessment_vcf_file, source_vcf, truth_vcf, bam_files, old_ref, new_ref):
-    assessment_result_per_variants = assessment_result_per_variants_from_vcf(assessment_vcf_file)
+    assessment_result_per_variants = extract_FP_from_assessment_vcf(assessment_vcf_file)
     variant_id_to_assessment_result, variant_id_to_alignment_result = get_variant_id(assessment_result_per_variants, realigned_vcf_file)
     variant_id_to_source_record = get_variant_from_vcf(variant_id_to_assessment_result, source_vcf)
     variant_id_to_truth_record = get_variant_from_vcf(variant_id_to_assessment_result, truth_vcf)
@@ -117,7 +117,9 @@ def process_files(realigned_vcf_file, assessment_vcf_file, source_vcf, truth_vcf
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
+    parser = ArgumentParser('Extract variants reported as FP by Hap.py and retrieve their '
+                            'rsid/record in the source/record in the truth/realigned variant/alignment in '
+                            'different bam files. It then format them for review.')
     parser.add_argument('--alignment_bams', nargs='+')
     parser.add_argument('--realigned_vcf')
     parser.add_argument('--assessment_vcf')
