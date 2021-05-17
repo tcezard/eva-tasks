@@ -11,6 +11,7 @@ import atexit
 
 import pandas as pd
 import psycopg2
+import psycopg2.extras
 import requests
 from ebi_eva_common_pyutils.config_utils import get_pg_metadata_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config
@@ -286,6 +287,7 @@ def parse_dbsnp_csv(input_file, accession_counts):
     df['Ensembl assembly from taxid'] = ensembl_assemblies_from_taxid
     df['Ensembl assembly from assembly'] = ensembl_assemblies_from_assembly
     df['Target Assembly'] = target_assemblies
+    df.replace(',', '', regex=True, inplace=True)
     return df
 
 
@@ -295,7 +297,9 @@ def create_table_for_progress(private_config_xml_file):
         query_create_table = (
             'CREATE TABLE IF NOT EXISTS remapping_progress '
             '(source TEXT, taxid INTEGER, scientific_name TEXT, assembly_accession TEXT, number_of_study INTEGER NOT NULL,'
-            'number_submitted_variants BIGINT NOT NULL, release_number INTEGER, report_time TIMESTAMP DEFAULT NOW(), '
+            'number_submitted_variants BIGINT NOT NULL, release_number INTEGER, `target_assembly_accession` TEXT, '
+            'report_time TIMESTAMP DEFAULT NOW(), progress_status TEXT, start_time TIMESTAMP, '
+            'completion_time TIMESTAMP, '
             'primary key(source, taxid, assembly_accession, release_number))'
         )
     execute_query(metadata_connection_handle, query_create_table)
@@ -310,7 +314,7 @@ def insert_remapping_progress_to_db(private_config_xml_file, dataframe):
                 query_insert = (
                     'INSERT INTO remapping_progress '
                     '(source, taxid, scientific_name, assembly_accession, number_of_study, '
-                    'number_submitted_variants, release_number) '
+                    'number_submitted_variants, target_assembly_accession, release_number) '
                     'VALUES %s'
                 )
                 psycopg2.extras.execute_values(cursor, query_insert, list_to_remap)
@@ -340,9 +344,13 @@ def main():
     df = pd.concat([df1, df2])
     df = df[output_header]
     df.to_csv(args.output, quoting=False, sep='\t', index=False)
-    # create_table_for_progress(args.private_config_xml_file)
-    # df['Release'] = 3
-    # insert_remapping_progress_to_db(args.private_config_xml_file, df)
+    create_table_for_progress(args.private_config_xml_file)
+    output_header = ['Source', 'Taxid', 'Scientific Name', 'Assembly', 'number Of Studies',
+                     'Number Of Variants (submitted variants)', 'Target Assembly']
+    df = df[output_header]
+    df['Release'] = 3
+    df = df[df['Source'] != 'DBSNP - filesystem']
+    insert_remapping_progress_to_db(args.private_config_xml_file, df)
 
 
 if __name__ == "__main__":
