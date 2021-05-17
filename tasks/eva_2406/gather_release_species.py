@@ -299,7 +299,8 @@ def create_table_for_progress(private_config_xml_file):
             '(source TEXT, taxid INTEGER, scientific_name TEXT, assembly_accession TEXT, number_of_study INTEGER NOT NULL,'
             'number_submitted_variants BIGINT NOT NULL, release_number INTEGER, `target_assembly_accession` TEXT, '
             'report_time TIMESTAMP DEFAULT NOW(), progress_status TEXT, start_time TIMESTAMP, '
-            'completion_time TIMESTAMP, '
+            'completion_time TIMESTAMP, remapping_version TEXT, nb_variant_extracted INTEGER, '
+            'nb_variant_remapped INTEGER, nb_variant_ingested INTEGER, '
             'primary key(source, taxid, assembly_accession, release_number))'
         )
     execute_query(metadata_connection_handle, query_create_table)
