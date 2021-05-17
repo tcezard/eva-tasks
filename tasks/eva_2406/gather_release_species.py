@@ -253,7 +253,7 @@ def filter_studies(query_results):
         if not assembly or not tax_id:
             logger.error('Study %s is missing assembly (%s) or taxonomy id (%s)', study, assembly, tax_id)
         elif tax_id == 9606:
-            logger.debug("Study %s is human and won't be releases", study)
+            logger.debug("Study %s is human and won't be released", study)
         else:
             yield assembly, tax_id, study
 
