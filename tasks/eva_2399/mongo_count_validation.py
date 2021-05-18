@@ -1,5 +1,4 @@
 import argparse
-from argparse import ArgumentParser
 from datetime import datetime
 
 import psycopg2
@@ -15,8 +14,7 @@ logging_config.add_stdout_handler()
 mongo_migration_count_validation_table_name = "eva_tasks.mongo4_migration_count_validation"
 
 
-def create_collection_count_validation_report(mongo_source: MongoDatabase, database_list):
-    count_validation_res_list = []
+def create_collection_count_validation_report(mongo_source: MongoDatabase, database_list, private_config_xml_file):
     report_timestamp = datetime.now()
     mongo_host = mongo_source.mongo_handle.address[0]
 
@@ -34,9 +32,8 @@ def create_collection_count_validation_report(mongo_source: MongoDatabase, datab
             no_of_documents = get_documents_count_for_collection(mongo_source, db, coll)
             logger.info(f"Found {no_of_documents} documents in database ({db}) - collection ({coll})")
 
-            count_validation_res_list.append([mongo_host, db, coll, no_of_documents, report_timestamp])
-
-    return count_validation_res_list
+            insert_count_validation_result_to_db(private_config_xml_file,
+                                                 (mongo_host, db, coll, no_of_documents, report_timestamp))
 
 
 @retry(logger=logger, tries=3, delay=3, backoff=2)
@@ -65,7 +62,7 @@ def insert_count_validation_result_to_db(private_config_xml_file, count_validati
                                                "INSERT INTO {0} "
                                                "(mongo_host, database, collection, document_count,report_time) "
                                                "VALUES %s".format(mongo_migration_count_validation_table_name),
-                                               [tuple(x) for x in count_validation_res_list])
+                                               [count_validation_res_list])
 
 
 def get_databases_list_for_validation(file_path):
@@ -83,7 +80,7 @@ def get_databases_list_for_validation(file_path):
 
 
 def main():
-    parser: ArgumentParser = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         description='Given a list of databases, calculate number of documents in each collection of each of the given database and store the report',
         formatter_class=argparse.RawTextHelpFormatter, add_help=False)
     parser.add_argument("--mongo-source-uri",
@@ -105,8 +102,7 @@ def main():
     database_list = get_databases_list_for_validation(args.db_list)
 
     create_table_for_count_validation(args.private_config_xml_file)
-    count_validation_result = create_collection_count_validation_report(mongo_source, database_list)
-    insert_count_validation_result_to_db(args.private_config_xml_file, count_validation_result)
+    create_collection_count_validation_report(mongo_source, database_list, args.private_config_xml_file)
 
 
 if __name__ == "__main__":
