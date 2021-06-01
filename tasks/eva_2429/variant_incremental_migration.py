@@ -25,7 +25,7 @@ files_query_file_name = "files_query.txt"
 variants_query_file_name = "variants_query.txt"
 annotation_query_file_name = "annotations_query.txt"
 annotation_metadata_query_file_name = "annotations_metadata_query.txt"
-chunk_size = 100
+chunk_size = 1000
 
 
 def find_variants_studies_eligible_for_migration(private_config_xml_file, migration_start_time, migration_end_time):
@@ -79,7 +79,7 @@ def mongo_export_files_variants_data(mongo_source_uri, mongo_source_secrets_file
         mongo_source.export_data(variant_export_file, variants_mongo_export_args)
 
 
-def mongo_export_annotations_data(mongo_source_uri, mongo_source_secrets_file, export_dir, query_dir):
+def annotations_export(mongo_source_uri, mongo_source_secrets_file, export_dir, query_dir):
     db_list = os.listdir(export_dir)
     for db in db_list:
         mongo_source = MongoDatabase(uri=mongo_source_uri, secrets_file=mongo_source_secrets_file, db_name=db)
@@ -109,7 +109,8 @@ def export_annotations_data(mongo_source, db, collection, ids, export_dir, query
     query_file_path = write_query_to_file(query, query_dir, query_file_name)
     mongo_annot_export_args = {
         "collection": collection,
-        "queryFile": query_file_path
+        "queryFile": query_file_path,
+        "readPreference": "secondaryPreferred"
     }
     logger.info(
         f"Exporting data for database ({db} and collection ({collection}) - mongo_annot_export_args({mongo_annot_export_args})")
@@ -129,7 +130,8 @@ def get_annotations_ids(variant_batch):
         else:
             annot_array = variant["annot"]
             for annot in annot_array:
-                annotations_list["annotations_id"].add(f'{variant["_id"]}_{annot["vepv"]}_{annot["cachev"]}')
+                annotations_list["annotations_id"].add(
+                    json.dumps(f'{variant["_id"]}_{annot["vepv"]}_{annot["cachev"]}')[1:-1])
                 annotations_list["annotations_metadata_id"].add(f'{annot["vepv"]}_{annot["cachev"]}')
 
     return annotations_list
@@ -163,14 +165,13 @@ def create_query_with_ids(ids):
     id_string = ",".join(f'"{x}"' for x in ids)
     query_end = "]}}"
     query_with_id = query_beg + id_string + query_end
-    logger.info(f"query created for accession migration : {query_with_id}")
+    logger.info(f"query created for annotation migration : {query_with_id}")
 
     return query_with_id
 
 
-def variants_export(mongo_source_uri, mongo_source_secrets_file, private_config_xml_file, export_dir, query_file_dir,
-                    start_time, end_time):
+def files_variants_export(mongo_source_uri, mongo_source_secrets_file, private_config_xml_file, export_dir,
+                          query_file_dir, start_time, end_time):
     db_study_dict = find_variants_studies_eligible_for_migration(private_config_xml_file, start_time, end_time)
     mongo_export_files_variants_data(mongo_source_uri, mongo_source_secrets_file, db_study_dict, export_dir,
                                      query_file_dir)
-    mongo_export_annotations_data(mongo_source_uri, mongo_source_secrets_file, export_dir, query_file_dir)

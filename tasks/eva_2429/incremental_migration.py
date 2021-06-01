@@ -5,12 +5,12 @@ from ebi_eva_common_pyutils.logger import logging_config
 
 from accession_incremental_migration import accession_export
 from migration_util import mongo_import_from_dir
-from variant_incremental_migration import variants_export
+from variant_incremental_migration import files_variants_export, annotations_export
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
-all_tasks = ['accession_export', 'variant_export', 'import']
+all_tasks = ['accession_export', 'variant_export', 'annotation_export', 'import']
 
 
 def main():
@@ -54,8 +54,10 @@ def main():
         accession_export(args.mongo_source_uri, args.mongo_source_secrets_file, args.private_config_xml_file,
                          args.export_dir, args.query_file_dir, args.start_time, args.end_time)
     if 'variant_export' in args.tasks:
-        variants_export(args.mongo_source_uri, args.mongo_source_secrets_file, args.private_config_xml_file,
-                        args.export_dir, args.query_file_dir, args.start_time, args.end_time)
+        files_variants_export(args.mongo_source_uri, args.mongo_source_secrets_file, args.private_config_xml_file,
+                              args.export_dir, args.query_file_dir, args.start_time, args.end_time)
+    if 'annotation_export' in args.tasks:
+        annotations_export(args.mongo_source_uri, args.mongo_source_secrets_file, args.export_dir, args.query_file_dir)
     if 'import' in args.tasks:
         mongo_import_from_dir(args.mongo_dest_uri, args.mongo_dest_secrets_file, args.export_dir)
 
