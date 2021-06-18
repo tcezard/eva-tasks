@@ -1,10 +1,12 @@
 import os
 
-from mock import patch
+import pytest
 from pymongo import MongoClient
 from unittest import TestCase
+from unittest.mock import patch
+
 import logging
-from tasks.eva_2357.populate_ids import populate_ids
+from tasks.eva_2357.populate_ids import populate_ids, check_all_contigs
 
 
 class TestCorrectChr(TestCase):
@@ -132,8 +134,8 @@ class TestCorrectChr(TestCase):
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases.txt")
-        self.assertEqual(1, populate_ids(settings, databases_file, only_check=False, fail_on_first_error=False,
-                                         profile='localhost', mongo_accession_db=self.accession_db))
+        self.assertEqual(1, populate_ids(settings, databases_file,  profile='localhost',
+                                         mongo_accession_db=self.accession_db))
         variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
             {'_id': 'NC_018728.3_76166296_C_T'}))
         # The name for assertCountEqual more than just counting the elements, it checks both lists have the same
@@ -147,22 +149,26 @@ class TestCorrectChr(TestCase):
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases_errors.txt")
         with self.assertRaises(Exception):
-            self.assertEqual(1, populate_ids(settings, databases_file, only_check=False, fail_on_first_error=False,
-                                             profile='localhost', mongo_accession_db=self.accession_db))
+            self.assertEqual(1, populate_ids(settings, databases_file, profile='localhost',
+                                             mongo_accession_db=self.accession_db))
 
     @patch('tasks.eva_2357.populate_ids.get_mongo_uri_for_eva_profile')
-    def test_populate_ids_only_check(self, mock_get_mongo_uri_for_eva_profile):
+    def test_check_all_contigs(self, mock_get_mongo_uri_for_eva_profile):
         logging.getLogger().setLevel(logging.DEBUG)
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases.txt")
-        self.assertEqual(0, populate_ids(settings, databases_file, only_check=True, fail_on_first_error=False,
-                                         profile='localhost', mongo_accession_db=self.accession_db))
-        variant = (self.connection_handle[self.variant_warehouse_db][self.variant_collection].find_one(
-            {'_id': 'NC_018728.3_76166296_C_T'}))
-        # The name for assertCountEqual more than just counting the elements, it checks both lists have the same
-        # elements regardless of the order
-        self.assertCountEqual(variant['ids'], ['ss1'])
+        check_all_contigs(settings, databases_file, profile='localhost')
+
+    @patch('tasks.eva_2357.populate_ids.get_mongo_uri_for_eva_profile')
+    def test_check_all_contigs_raise(self, mock_get_mongo_uri_for_eva_profile):
+        logging.getLogger().setLevel(logging.DEBUG)
+        mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
+        settings = self.get_test_resource("settings.xml")
+        databases_file = self.get_test_resource("databases_errors.txt")
+        with pytest.raises(ValueError):
+            check_all_contigs(settings, databases_file, profile='localhost')
+
 
     @staticmethod
     def get_test_resource(resource_name):
