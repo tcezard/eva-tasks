@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from pymongo import MongoClient
 from unittest import TestCase
 from unittest.mock import patch
@@ -148,7 +147,7 @@ class TestCorrectChr(TestCase):
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases_errors.txt")
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.assertEqual(1, populate_ids(settings, databases_file, profile='localhost',
                                              mongo_accession_db=self.accession_db))
 
@@ -166,7 +165,7 @@ class TestCorrectChr(TestCase):
         mock_get_mongo_uri_for_eva_profile.return_value = 'mongodb://127.0.0.1:27017'
         settings = self.get_test_resource("settings.xml")
         databases_file = self.get_test_resource("databases_errors.txt")
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             check_all_contigs(settings, databases_file, profile='localhost')
 
 
