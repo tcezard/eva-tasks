@@ -1,0 +1,4 @@
+ebi_eva_common_pyutils==0.3.13
+wget==3.2
+psycopg2-binary
+biopython==1.77
