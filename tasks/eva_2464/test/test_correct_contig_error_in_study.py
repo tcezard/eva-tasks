@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 
-from tasks.eva_2461.correct_contig_error_in_study import replace_with_correct_contig
+from tasks.eva_2464.correct_contig_error_in_study import replace_with_correct_contig
 
 
 class TestCorrectContigErrorInStudy(TestCase):
