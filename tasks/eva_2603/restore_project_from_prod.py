@@ -34,7 +34,6 @@ class RestoreProject:
 
     def restore(self, project_accession):
         self.restore_table('project', where_clause=f"project_accession='{project_accession}'")
-
         query = "select dbxref_id from project_dbxref where project_accession='{project_accession}'"
         rows = get_all_results_for_query(self.prod_conn, query)
         for dbxref_id, in rows:
@@ -65,11 +64,11 @@ class RestoreProject:
 
         self.restore_table('project_ena_submission', where_clause=f"project_accession='{project_accession}'")
 
-        query = f"select eload_id from project_eva_submission where project_accession='{analysis_accession}'"
+        query = f"select eload_id from project_eva_submission where project_accession='{project_accession}'"
         rows = get_all_results_for_query(self.prod_conn, query)
         for eload_id, in rows:
             self.restore_table('eva_submission', where_clause=f"eva_submission_id={eload_id}")
-
+        self.restore_table('project_eva_submission', where_clause=f"project_accession='{project_accession}'")
         self.dev_conn.commit()
 
 
