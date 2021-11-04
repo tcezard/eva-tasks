@@ -2,6 +2,8 @@ import argparse
 
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.mongo_utils import get_mongo_connection_handle
+from pymongo import WriteConcern
+from pymongo.read_concern import ReadConcern
 
 from tasks.eva_2641.constants import annotation_metadata_collection_name, temp_collection_name
 
@@ -15,11 +17,17 @@ def cleanup_metadata(settings_xml_file, db_name):
         metadata_collection = db[annotation_metadata_collection_name]
         temp_collection = db[temp_collection_name]
 
-        results = [x for x in metadata_collection.find({'ct': {'$exists': True}})]
-        insert_result = temp_collection.insert_many(results)
+        majority_read = ReadConcern('majority')
+        majority_write = WriteConcern(w='majority', wtimeout=1200000)
+
+        results = [x for x in metadata_collection.with_options(read_concern=majority_read).find({'ct': {'$exists': True}})]
+
+        insert_result = temp_collection.with_options(write_concern=majority_write).insert_many(results)
         logger.info(f'Inserted {len(insert_result.inserted_ids)} documents into {temp_collection_name}')
-        delete_result = metadata_collection.delete_many(results)
+
+        delete_result = metadata_collection.with_options(write_concern=majority_write).delete_many(results)
         logger.info(f'Deleted {delete_result.deleted_count} documents from {annotation_metadata_collection_name}')
+
         metadata_collection.drop_indexes()
         logger.info(f'Dropped non-id indexes from {annotation_metadata_collection_name}')
 
