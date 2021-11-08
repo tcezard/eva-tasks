@@ -4,7 +4,10 @@ import org.slf4j.LoggerFactory
 import org.springframework.batch.item.ItemWriter
 import org.springframework.batch.item.support.CompositeItemWriter
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.mongodb.core.MongoOperations
+import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
 
 import uk.ac.ebi.eva.commons.models.metadata.AnnotationMetadata
 import uk.ac.ebi.eva.commons.models.mongo.entity.Annotation
@@ -16,37 +19,42 @@ import uk.ac.ebi.eva.pipeline.io.writers.AnnotationMongoWriter
 @Import(value=[AnnotationCompositeWriterConfiguration.class])
 class MainApp implements CommandLineRunner {
 
+    @Autowired
+    private MongoOperations mongoOperations
+
     private ItemWriter<List<Annotation>> variantAnnotationItemWriter
 
     private ItemWriter<List<Annotation>> annotationItemWriter
 
     private ItemWriter<List<Annotation>> annotationWriter
 
-    @Autowired
-    private MongoOperations mongoOperations
-
-    private String vepCacheVersion
-
+    @Value('${app.vep.version}')
     private String vepVersion
 
-    private final String metadataCollectionName = "annotationMetadata_2_0"
+    @Value('${app.vep.cache.version}')
+    private String vepCacheVersion
 
-    private final String variantCollectionName = "variants_2_0"
+    @Value('${db.collections.variants.name}')
+    private String variantCollectionName
 
-    private final String annotationCollectionName = "annotations_2_0"
+    @Value('${db.collections.annotation-metadata.name}')
+    private String metadataCollectionName
+
+    @Value('${db.collections.annotations.name}')
+    private String annotationCollectionName
+
+    private final String tempCollectionName = "eva2641_temp_annotations"
 
     private static Logger logger = LoggerFactory.getLogger(MainApp.class)
 
     void run(String... args) {
-        // TODO fill from ...?
-        vepVersion = "1"
-        vepCacheVersion = "1"
+        logger.info("VEP version {}, cache version {}", vepVersion, vepCacheVersion)
 
         annotationItemWriter = annotationItemWriter(mongoOperations)
         variantAnnotationItemWriter = variantAnnotationItemWriter(mongoOperations)
         annotationWriter = compositeAnnotationItemWriter()
 
-        List<Annotation> annotations = new ArrayList<>()  // TODO need a different reader
+        List<Annotation> annotations = readAnnotationsFromTempCollection()
         logger.info("Read {} annotations", annotations.size())
 
         annotationWriter.write(annotations)
@@ -54,6 +62,10 @@ class MainApp implements CommandLineRunner {
 
         writeAnnotationMetadata()
         logger.info("Done writing metadata")
+    }
+
+    List<Annotation> readAnnotationsFromTempCollection() {
+        return mongoOperations.findAll(Annotation.class, tempCollectionName)
     }
 
     // Replicate annotation writers outside of a step
@@ -80,11 +92,11 @@ class MainApp implements CommandLineRunner {
     }
 
     void writeUnlessAlreadyPresent(AnnotationMetadata annotationMetadata) {
-//        long count = mongoOperations.count(new Query(Criteria.byExample(annotationMetadata)), AnnotationMetadata.class,
-//                metadataCollectionName);
-//        if (count == 0) {
-//            mongoOperations.save(annotationMetadata, metadataCollectionName)
-//        }
+        long count = mongoOperations.count(new Query(Criteria.byExample(annotationMetadata)), AnnotationMetadata.class,
+                metadataCollectionName);
+        if (count == 0) {
+            mongoOperations.save(annotationMetadata, metadataCollectionName)
+        }
     }
 
 }
