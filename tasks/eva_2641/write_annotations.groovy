@@ -57,7 +57,7 @@ class MainApp implements CommandLineRunner {
         List<Annotation> annotations = readAnnotationsFromTempCollection()
         logger.info("Read {} annotations", annotations.size())
 
-        annotationWriter.write(annotations)
+        annotationWriter.write(Collections.singletonList(annotations))
         logger.info("Done writing annotations")
 
         writeAnnotationMetadata()
