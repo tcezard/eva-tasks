@@ -12,6 +12,7 @@ logging_config.add_stdout_handler()
 
 
 def cleanup_metadata(settings_xml_file, db_name):
+    logger.info(f'Cleaning up {db_name}...')
     with get_mongo_connection_handle('production', settings_xml_file) as mongo_conn:
         db = mongo_conn[db_name]
         metadata_collection = db[annotation_metadata_collection_name]
@@ -20,12 +21,13 @@ def cleanup_metadata(settings_xml_file, db_name):
         majority_read = ReadConcern('majority')
         majority_write = WriteConcern(w='majority', wtimeout=1200000)
 
-        results = [x for x in metadata_collection.with_options(read_concern=majority_read).find({'ct': {'$exists': True}})]
+        query = {'ct': {'$exists': True}}
+        results = [x for x in metadata_collection.with_options(read_concern=majority_read).find(query, no_cursor_timeout=True)]
 
         insert_result = temp_collection.with_options(write_concern=majority_write).insert_many(results)
         logger.info(f'Inserted {len(insert_result.inserted_ids)} documents into {temp_collection_name}')
 
-        delete_result = metadata_collection.with_options(write_concern=majority_write).delete_many(results)
+        delete_result = metadata_collection.with_options(write_concern=majority_write).delete_many(query)
         logger.info(f'Deleted {delete_result.deleted_count} documents from {annotation_metadata_collection_name}')
 
         metadata_collection.drop_indexes()
