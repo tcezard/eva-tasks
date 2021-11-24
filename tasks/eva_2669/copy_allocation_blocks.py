@@ -49,7 +49,8 @@ def main():
 
     # Get the last id used
     query = 'select max(id) from public.contiguous_id_blocks'
-    last_id_used, = prod_cursor.execute(query).fetchall()
+    prod_cursor.execute(query)
+    last_id_used, = prod_cursor.fetchall()
 
     # Set it to the sequence
     query = f"SELECT setval('hibernate_sequence', {last_id_used}, true);"
