@@ -32,6 +32,18 @@ def main():
     prod_conn = psycopg2.connect(args.production_uri, user=args.production_user, password=args.production_pass)
     prod_cursor = prod_conn.cursor()
 
+    # Get the newest existing block from prod
+    query = """select max("first_value") from public.contiguous_id_blocks where category_id ='rs' """
+    largest_first_value_in_prod, = get_all_results_for_query(prod_conn, query)[0]
+
+    # Fill in with incomplete blocks until reaching the first block used in dev
+    for first_value in range(largest_first_value_in_prod + 100000, 3166700000, 100000):
+        query = 'INSERT INTO public.contiguous_id_blocks VALUES ' + \
+                f"('instance-6', 'rs', {first_value}, {first_value}, {first_value + 999999})"
+        print(query)
+        if args.apply_queries:
+            prod_cursor.execute(query)
+
     # Retrieve the blocks used in dev
     query = (f'select application_instance_id, category_id, "first_value", last_committed , "last_value" '
              f'from public.contiguous_id_blocks '
