@@ -33,7 +33,7 @@ def main():
     for first_value in range(largest_first_value_in_prod + 100000, 3166700000, 100000):
         last_id_used += 1
         query = 'INSERT INTO public.contiguous_id_blocks VALUES ' + \
-                f"({last_id_used}, 'instance-6', 'rs', {first_value}, {first_value}, {first_value + 999999})"
+                f"({last_id_used}, 'instance-6', 'rs', {first_value}, {first_value}, {first_value + 99999})"
         print(query)
         if args.apply_queries:
             prod_cursor.execute(query)
