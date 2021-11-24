@@ -5,18 +5,6 @@ import psycopg2
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 
 
-def serialise_tuple(t):
-    res = []
-    for e in t:
-        if e is None:
-            res.append("null")
-        elif isinstance(e, str) or isinstance(e, datetime):
-            res.append(f"'{e}'")
-        else:
-            res.append(f"{e}")
-    return '(' + ', '.join(res) + ')'
-
-
 def main():
     parser = ArgumentParser()
     parser.add_argument('--production_uri', required=True)
@@ -32,14 +20,20 @@ def main():
     prod_conn = psycopg2.connect(args.production_uri, user=args.production_user, password=args.production_pass)
     prod_cursor = prod_conn.cursor()
 
+    # Get the last id used in production
+    query = 'select max(id) from public.contiguous_id_blocks'
+    prod_cursor.execute(query)
+    last_id_used, = prod_cursor.fetchall()[0]
+
     # Get the newest existing block from prod
     query = """select max("first_value") from public.contiguous_id_blocks where category_id ='rs' """
     largest_first_value_in_prod, = get_all_results_for_query(prod_conn, query)[0]
 
     # Fill in with incomplete blocks until reaching the first block used in dev
     for first_value in range(largest_first_value_in_prod + 100000, 3166700000, 100000):
+        last_id_used += 1
         query = 'INSERT INTO public.contiguous_id_blocks VALUES ' + \
-                f"('instance-6', 'rs', {first_value}, {first_value}, {first_value + 999999})"
+                f"({last_id_used}, 'instance-6', 'rs', {first_value}, {first_value}, {first_value + 999999})"
         print(query)
         if args.apply_queries:
             prod_cursor.execute(query)
@@ -53,16 +47,14 @@ def main():
     rows = get_all_results_for_query(dev_conn, query)
 
     # Write them out in prod
-    for row in rows:
-        query = 'INSERT INTO public.contiguous_id_blocks VALUES ' + serialise_tuple(row)
+    for application_instance_id, category_id, first_value, last_committed , last_value in rows:
+        last_id_used += 1
+        query = 'INSERT INTO public.contiguous_id_blocks VALUES ' + \
+                f"({last_id_used}, '{application_instance_id}', '{category_id}', {first_value}, {last_committed}, " \
+                f"{last_value})"
         print(query)
         if args.apply_queries:
             prod_cursor.execute(query)
-
-    # Get the last id used
-    query = 'select max(id) from public.contiguous_id_blocks'
-    prod_cursor.execute(query)
-    last_id_used, = prod_cursor.fetchall()[0]
 
     # Set it to the sequence
     query = f"SELECT setval('hibernate_sequence', {last_id_used}, true);"
