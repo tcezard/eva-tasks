@@ -18,7 +18,8 @@ def serialise_tuple(t):
 
 
 class RestoreProject:
-
+"""This class will restore a project existing in EVAPRO to EVADEV if it has been deleted by 
+https://github.com/EBIvariation/metadata/blob/master/evapro/delete_project_evapro.pl"""
     def __init__(self, prod_conn, dev_conn):
         self.prod_conn = prod_conn
         self.dev_conn = dev_conn
