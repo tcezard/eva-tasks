@@ -63,7 +63,7 @@ def main():
         prod_cursor.execute(query)
 
     if args.apply_queries:
-        prod_cursor.commit()
+        prod_conn.commit()
     prod_conn.close()
     dev_conn.close()
 
