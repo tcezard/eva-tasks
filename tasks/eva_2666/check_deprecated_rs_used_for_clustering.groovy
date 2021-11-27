@@ -34,8 +34,6 @@ class MainApp implements CommandLineRunner {
     @Autowired
     private MongoTemplate mongoTemplate
 
-    private List<Long> ssIDBatch = new ArrayList<>()
-
     void run(String... args) {
 
         int numRSCollected = 0

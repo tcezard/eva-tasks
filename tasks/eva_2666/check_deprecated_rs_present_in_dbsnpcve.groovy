@@ -1,5 +1,6 @@
+@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.1')
 import com.mongodb.MongoCursorNotFoundException
-@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.0-SNAPSHOT')
+import com.mongodb.client.MongoClient
 import org.apache.commons.collections.CollectionUtils
 import org.apache.commons.lang3.tuple.ImmutablePair
 import org.bson.BsonDocument
@@ -13,6 +14,7 @@ import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
+import org.springframework.stereotype.Component
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 
@@ -24,14 +26,12 @@ import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpClusteredVariantEntity
 
 
-@Component
 @Import(value=[MongoConfiguration.class])
-class MainApp implements CommandLineRunner {
+@Component
+class CheckDeprecatedRS implements CommandLineRunner {
 
     @Autowired
     private MongoTemplate mongoTemplate
-
-    private List<Long> ssIDBatch = new ArrayList<>()
 
     void run(String... args) {
 
@@ -42,7 +42,8 @@ class MainApp implements CommandLineRunner {
         while(true) {
             ImmutablePair<List<Document>, String> declusteredRSBatchAndLastSeenID = getNextBatchOfDeprecatedIds(lastSeenID)
             if (declusteredRSBatchAndLastSeenID != null) {
-                checkDeprecatedRS(declusteredRSBatchAndLastSeenID.left)
+                Collection deprecatedRSAppearingInMainCollection = getDeprecatedRS(mongoTemplate, declusteredRSBatchAndLastSeenID.left)
+                deprecatedRSAppearingInMainCollection.forEach{a -> System.out.println("Error: RS ID " + a + " appears in main dbsnpCVE collection but no SS ID is clustered with that RS ID!")}
                 numRSCollected += declusteredRSBatchAndLastSeenID.left.size()
                 lastSeenID = declusteredRSBatchAndLastSeenID.right
                 System.out.println("Checking deprecated RS - processed " + numRSCollected + " records...")
@@ -71,7 +72,7 @@ class MainApp implements CommandLineRunner {
     }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
-    void checkDeprecatedRS(List<Document> declusteredRSToCheck) {
+    public Collection getDeprecatedRS(MongoTemplate mongoTemplate, List < Document > declusteredRSToCheck) {
         List<String> delusteredRSHashes = declusteredRSToCheck*.getString("_id")
         List<Long> declusteredRSIDs = declusteredRSToCheck*.getLong("accession")
         Query queryToCheckDeclusteredRSHashesInDbsnpCVECollection = query(where("_id").in(delusteredRSHashes))
@@ -86,6 +87,6 @@ class MainApp implements CommandLineRunner {
         // If an RS ID from the declustered collection dbsnpClusteredVariantEntityDeclustered appears in the main
         // dbsnpCVE collection, the only reason must be because there is at least one SS ID clustered with that RS ID
         // Report, if otherwise
-        CollectionUtils.subtract(new HashSet(declusteredRSIDsInDbsnpCVECollection), new HashSet(declusteredRSIDsInAllSVECollections)).forEach{a -> System.out.println("Error: RS ID " + a + " appears in main dbsnpCVE collection but no SS ID is clustered with that RS ID!")}
+        return CollectionUtils.subtract(new HashSet(declusteredRSIDsInDbsnpCVECollection), new HashSet(declusteredRSIDsInAllSVECollections))
     }
 }
