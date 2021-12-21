@@ -25,11 +25,11 @@ def find_ids_of_declustered_variants(mongo_source, output_dir):
         "GCA_000224145.1", "GCA_003339765.3", "GCA_008746955.1"
     ]
 
-    print(f"""Number of Affected Assemblies :  {len(affected_assemblies)}""")
+    logger.info(f"""Number of Affected Assemblies :  {len(affected_assemblies)}""")
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpSubmittedVariantEntity"]
 
     for assembly in affected_assemblies:
-        print('Running for assembly: ' + assembly)
+        logger.info('Running for assembly: ' + assembly)
 
         filter_criteria = {'remappedFrom': {'$exists': True}, 'rs': {'$exists': False}, 'seq': assembly}
         cursor = dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority")) \
@@ -44,7 +44,7 @@ def find_ids_of_declustered_variants(mongo_source, output_dir):
 def delete_variants(mongo_source, output_dir):
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpSubmittedVariantEntity"]
     for variant_file in os.listdir(output_dir):
-        print(f"""variants deletion in process for assembly  {variant_file}""")
+        logger.info(f"""variants deletion in process for assembly  {variant_file}""")
         with open(os.path.join(output_dir, variant_file), 'r') as file:
             variant_count = 0
             while True:
@@ -54,8 +54,8 @@ def delete_variants(mongo_source, output_dir):
                 # remove trailing \n
                 batch_ids = [i.strip() for i in batch_ids]
                 variant_count = variant_count + len(batch_ids)
-                #dbsnp_sve_collection.deleteMany({'_id': {'$in': batch_ids}})
-            print(f"""variants deleted for assembly {variant_file} : {variant_count}""")
+                dbsnp_sve_collection.deleteMany({'_id': {'$in': batch_ids}})
+            logger.info(f"""variants deleted for assembly {variant_file} : {variant_count}""")
 
 
 
@@ -75,7 +75,7 @@ def main():
     # this method finds the variants to delete and stored their ids in a file named by assembly
     find_ids_of_declustered_variants(mongo_source, args.output_dir)
     # this method reads the variant ids store by previous method in batches and deletes them
-    #delete_variants(mongo_source, args.output_dir)
+    delete_variants(mongo_source, args.output_dir)
 
 
 if __name__ == "__main__":
