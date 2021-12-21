@@ -9,7 +9,7 @@ from pymongo.read_concern import ReadConcern
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
-batch_size = 1000
+batch_size = 10000
 
 
 def find_ids_of_declustered_variants(mongo_source, output_dir):
@@ -35,10 +35,9 @@ def find_ids_of_declustered_variants(mongo_source, output_dir):
         cursor = dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority")) \
             .find(filter_criteria, no_cursor_timeout=True)
 
-        f = open(f"""{output_dir}/{assembly}.txt""", "a")
-        for variant in cursor:
-            f.write(variant['_id'] + '\n')
-        f.close()
+        with open(f"""{output_dir}/{assembly}.txt""", "a") as file:
+            for variant in cursor:
+                file.write(variant['_id'] + '\n')
 
 
 def delete_variants(mongo_source, output_dir):
@@ -54,7 +53,8 @@ def delete_variants(mongo_source, output_dir):
                 # remove trailing \n
                 batch_ids = [i.strip() for i in batch_ids]
                 variant_count = variant_count + len(batch_ids)
-                dbsnp_sve_collection.deleteMany({'_id': {'$in': batch_ids}})
+                x = dbsnp_sve_collection.delete_many({'_id': {'$in': batch_ids}})
+                logger.info(f"""variants deleted in the batch : {x.deleted_count}""")
             logger.info(f"""variants deleted for assembly {variant_file} : {variant_count}""")
 
 
