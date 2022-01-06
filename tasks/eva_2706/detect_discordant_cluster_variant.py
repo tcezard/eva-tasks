@@ -18,6 +18,8 @@ def grouper(n, iterable, fillvalue=None):
 def compare(clustered_variants, submitted_variant_position_per_rs):
     error = 0
     for clustered_variant in clustered_variants:
+        if not clustered_variant:
+            continue
         pos = f'{clustered_variant.get("contig")}:{clustered_variant.get("start")}'
         if clustered_variant['accession'] not in submitted_variant_position_per_rs:
             logger.error(f'No submitted variant found for rs{clustered_variant["accession"]}')
@@ -52,8 +54,8 @@ def detect_discordant_cluster_variant(mongo_source, assemblies, batch_size=1000)
     nb_clustered_variants = 0
     nb_error = 0
     for clustered_variants in grouper(batch_size, cursor):
-        nb_clustered_variants += len(clustered_variants)
-        rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants]
+        rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants if clustered_variant]
+        nb_clustered_variants += len(rsids)
 
         sve_cursor = dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"))\
                                          .find({'rs': {'$in': rsids}}, projection)
