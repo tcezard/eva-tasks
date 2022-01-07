@@ -28,13 +28,12 @@ def compare(clustered_variants, submitted_variant_position_per_rs):
 
         positions = submitted_variant_position_per_rs[clustered_variant['accession']]
         if len(positions) > 1:
-            logger.error(f'{len(positions)} positions found in submitted variants for '
-                         f'rs{clustered_variant["accession"]}')
-            error += 1
-            continue
+            # This actually happened in dbSNP a but is  a different error.
+            logger.warning(f'{len(positions)} positions found in submitted variants for '
+                           f'rs{clustered_variant["accession"]}. These are {", ".join(positions)}')
 
         if pos not in positions:
-            logger.error(f'cluster position ({pos}) different from submitted position ({positions.pop()}) '
+            logger.error(f'cluster position ({pos}) not found in submitted position ({", ".join(positions)}) '
                          f'for rs{clustered_variant["accession"]}')
             error += 1
             continue
@@ -44,11 +43,13 @@ def compare(clustered_variants, submitted_variant_position_per_rs):
 def detect_discordant_cluster_variant(mongo_source, assemblies, batch_size=1000):
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpClusteredVariantEntity"]
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpSubmittedVariantEntity"]
-    filter_criteria = {}
+    cve_filter_criteria = {}
+    sve_filter_criteria = {}
     if assemblies:
-        filter_criteria = {'asm': {"$in": assemblies}}
+        cve_filter_criteria = {'asm': {"$in": assemblies}}
+        sve_filter_criteria = {'seq': {"$in": assemblies}}
     cursor = dbsnp_cve_collection.with_options(read_concern=ReadConcern("majority"))\
-                                 .find(filter_criteria, no_cursor_timeout=True)
+                                 .find(cve_filter_criteria, no_cursor_timeout=True)
     cursor.batch_size(batch_size)
     projection = {'contig': 1, 'start': 1, 'rs': 1}
     nb_clustered_variants = 0
@@ -56,9 +57,10 @@ def detect_discordant_cluster_variant(mongo_source, assemblies, batch_size=1000)
     for clustered_variants in grouper(batch_size, cursor):
         rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants if clustered_variant]
         nb_clustered_variants += len(rsids)
-
+        sve_filtering = sve_filter_criteria.copy()
+        sve_filtering['rs'] = {'$in': rsids}
         sve_cursor = dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"))\
-                                         .find({'rs': {'$in': rsids}}, projection)
+                                         .find(sve_filtering, projection)
         submitted_variant_position_per_rs = defaultdict(set)
         for sve in sve_cursor:
             submitted_variant_position_per_rs[sve.get('rs')].add(f"{sve.get('contig')}:{sve.get('start')}")
