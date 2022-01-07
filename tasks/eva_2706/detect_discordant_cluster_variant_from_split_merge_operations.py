@@ -85,7 +85,7 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
     sveo_collection = mongo_source.mongo_handle[mongo_source.db_name]["submittedVariantOperationEntity"]
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpClusteredVariantEntity"]
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpSubmittedVariantEntity"]
-    sveo_filter_criteria = {'eventType': {'$is': ['RS_MERGE_CANDIDATES', 'RS_SPLIT_CANDIDATES']}}
+    sveo_filter_criteria = {'eventType': {'$in': ['RS_MERGE_CANDIDATES', 'RS_SPLIT_CANDIDATES']}}
     if assemblies:
         sveo_filter_criteria['seq'] = {"$in": assemblies}
     cursor = sveo_collection.with_options(read_concern=ReadConcern("majority"))\
