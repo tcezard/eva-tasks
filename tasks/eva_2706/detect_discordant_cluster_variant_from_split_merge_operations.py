@@ -29,13 +29,12 @@ def compare(clustered_variants, submitted_variant_position_per_rs):
 
         positions = submitted_variant_position_per_rs[clustered_variant['accession']]
         if len(positions) > 1:
-            logger.error(f'{len(positions)} positions found in submitted variants for '
-                         f'rs{clustered_variant["accession"]}')
-            error += 1
-            continue
+            # This actually happened in dbSNP a but is  a different error.
+            logger.warning(f'{len(positions)} positions found in submitted variants for '
+                           f'rs{clustered_variant["accession"]}. These are {", ".join(positions)}')
 
         if pos not in positions:
-            logger.error(f'cluster position ({pos}) different from submitted position ({positions.pop()}) '
+            logger.error(f'cluster position ({pos}) not found in submitted position ({", ".join(positions)}) '
                          f'for rs{clustered_variant["accession"]}')
             error += 1
             continue
@@ -47,6 +46,7 @@ SNV = 'SNV'
 MNV = 'MNV'
 DEL = 'DEL'
 INS = 'INS'
+INDEL = 'INDEL'
 
 
 def classify_variant(reference, alternate):
@@ -66,6 +66,10 @@ def classify_variant(reference, alternate):
             return DEL
         if is_alt_alpha and not reference:
             return INS
+        if len(reference) != len(alternate):
+            return INDEL
+    logger.error(f'Cannot classify variant with reference: {reference} and alternate: {alternate}')
+    return 'NONE'
 
 
 def submitted_variant_to_clustered_variant_hash(submitted_variant):
@@ -96,10 +100,10 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
     for submitted_variant_operations in grouper(batch_size, cursor):
         clustered_variant_hashes = list(set((
             submitted_variant_to_clustered_variant_hash(submitted_variant)
-            for submitted_variant_operation in submitted_variant_operations
-            for submitted_variant in submitted_variant_operation.get('inactiveObjects') if submitted_variant_operation
+            for submitted_variant_operation in submitted_variant_operations if submitted_variant_operation
+            for submitted_variant in submitted_variant_operation.get('inactiveObjects')
         )))
-        clustered_variants = dbsnp_cve_collection.find({'_id': {'$in': clustered_variant_hashes}})
+        clustered_variants = list(dbsnp_cve_collection.find({'_id': {'$in': clustered_variant_hashes}}))
         rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants if clustered_variant]
         nb_clustered_variants += len(rsids)
         sve_filtering = {'seq': {"$in": assemblies}, 'rs': {'$in': rsids}}
@@ -108,7 +112,6 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
         submitted_variant_position_per_rs = defaultdict(set)
         for sve in sve_cursor:
             submitted_variant_position_per_rs[sve.get('rs')].add(f"{sve.get('contig')}:{sve.get('start')}")
-
         nb_error += compare(clustered_variants, submitted_variant_position_per_rs)
         logger.info(f'Processed {nb_clustered_variants}: Found {nb_error} errors')
 
