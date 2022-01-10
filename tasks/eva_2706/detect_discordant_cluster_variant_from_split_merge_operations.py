@@ -50,13 +50,12 @@ INS = 'INS'
 
 
 def classify_variant(reference, alternate):
-    reference = reference.trim().upper()
-    alternate = alternate.trim().upper()
+    reference = reference.strip().upper()
+    alternate = alternate.strip().upper()
 
     if reference == "NOVARIATION" or alternate == reference:
         return NO_SEQUENCE_ALTERATION
     else:
-        ''.isalpha()
         is_ref_alpha = reference.isalpha()
         is_alt_alpha = alternate.isalpha()
 
@@ -65,7 +64,7 @@ def classify_variant(reference, alternate):
                 return SNV if len(reference) == 1 else MNV
         if is_ref_alpha and not alternate:
             return DEL
-        if is_alt_alpha  and not reference:
+        if is_alt_alpha and not reference:
             return INS
 
 
@@ -75,7 +74,7 @@ def submitted_variant_to_clustered_variant_hash(submitted_variant):
     h.update('_'.join([
         submitted_variant.get('seq'),
         submitted_variant.get('contig'),
-        submitted_variant.get('start'),
+        str(submitted_variant.get('start')),
         classify_variant(submitted_variant.get('ref'), submitted_variant.get('alt')),
     ]).encode())
     return h.hexdigest().upper()
@@ -87,9 +86,9 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["dbsnpSubmittedVariantEntity"]
     sveo_filter_criteria = {'eventType': {'$in': ['RS_MERGE_CANDIDATES', 'RS_SPLIT_CANDIDATES']}}
     if assemblies:
-        sveo_filter_criteria['seq'] = {"$in": assemblies}
+        sveo_filter_criteria['inactiveObjects.seq'] = {"$in": assemblies}
     cursor = sveo_collection.with_options(read_concern=ReadConcern("majority"))\
-                            .find(sveo_filter_criteria, no_cursor_timeout=True)
+                            .find(sveo_filter_criteria)
     cursor.batch_size(batch_size)
     projection = {'contig': 1, 'start': 1, 'rs': 1}
     nb_clustered_variants = 0
@@ -98,7 +97,7 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
         clustered_variant_hashes = set((
             submitted_variant_to_clustered_variant_hash(submitted_variant)
             for submitted_variant_operation in submitted_variant_operations
-            for submitted_variant in submitted_variant_operation if submitted_variant_operation
+            for submitted_variant in submitted_variant_operation.get('inactiveObjects') if submitted_variant_operation
         ))
         clustered_variants = dbsnp_cve_collection.find({'id': {'$in': clustered_variant_hashes}})
         rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants if clustered_variant]
