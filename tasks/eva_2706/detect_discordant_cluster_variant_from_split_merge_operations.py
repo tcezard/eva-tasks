@@ -94,12 +94,12 @@ def detect_discordant_cluster_variant_from_split_merge_operations(mongo_source, 
     nb_clustered_variants = 0
     nb_error = 0
     for submitted_variant_operations in grouper(batch_size, cursor):
-        clustered_variant_hashes = set((
+        clustered_variant_hashes = list(set((
             submitted_variant_to_clustered_variant_hash(submitted_variant)
             for submitted_variant_operation in submitted_variant_operations
             for submitted_variant in submitted_variant_operation.get('inactiveObjects') if submitted_variant_operation
-        ))
-        clustered_variants = dbsnp_cve_collection.find({'id': {'$in': clustered_variant_hashes}})
+        )))
+        clustered_variants = dbsnp_cve_collection.find({'_id': {'$in': clustered_variant_hashes}})
         rsids = [clustered_variant.get('accession') for clustered_variant in clustered_variants if clustered_variant]
         nb_clustered_variants += len(rsids)
         sve_filtering = {'seq': {"$in": assemblies}, 'rs': {'$in': rsids}}
