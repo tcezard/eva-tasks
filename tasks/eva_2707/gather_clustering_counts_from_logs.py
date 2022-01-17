@@ -50,12 +50,6 @@ def gather_count_from_logs(clustering_dir, output_file):
             writer.writerow(metrics_per_species[taxid])
 
 
-clustered_variant_remapped
-clustered_variants_created
-submitted_variants_clustered
-merge_operations
-split_operations
-
 def detect_missing_data(result_dict):
     truncated = False
     for step in steps:
