@@ -125,7 +125,7 @@ def extract_relevant_metrics_from_one_log(parsed_log_dict):
             0
         )
 
-        parsed_log_dict['PROCESS_RS_MERGE_CANDIDATES_STEP'][metric] = max(
+        parsed_log_dict['PROCESS_RS_SPLIT_CANDIDATES_STEP'][metric] = max(
             int(parsed_log_dict.get('PROCESS_RS_SPLIT_CANDIDATES_STEP', {}).get(metric, 0)) -
             int(parsed_log_dict.get('PROCESS_RS_MERGE_CANDIDATES_STEP', {}).get(metric, 0)),
             0
@@ -135,7 +135,7 @@ def extract_relevant_metrics_from_one_log(parsed_log_dict):
     # Only metrics that matters for the first step
     clustered_variant_remapped = parsed_log_dict.get('CLUSTERING_CLUSTERED_VARIANTS_FROM_MONGO_STEP', {}).get('clustered_variants_created', 0)
     merge_operations = parsed_log_dict.get('PROCESS_RS_MERGE_CANDIDATES_STEP', {}).get('clustered_variants_merge_operations', 0)
-    split_operations = parsed_log_dict.get('PROCESS_RS_SPLIT_CANDIDATES_STEP', {}).get('clustered_variants_merge_operations', 0)
+    split_operations = parsed_log_dict.get('PROCESS_RS_SPLIT_CANDIDATES_STEP', {}).get('clustered_variants_rs_split', 0)
     clustered_variants_created = parsed_log_dict.get('CLUSTERING_NON_CLUSTERED_VARIANTS_FROM_MONGO_STEP', {}).get('clustered_variants_created', 0)
     submitted_variants_clustered = parsed_log_dict.get('CLUSTERING_NON_CLUSTERED_VARIANTS_FROM_MONGO_STEP', {}).get('submitted_variants_clustered', 0)
     return {

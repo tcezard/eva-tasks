@@ -24,11 +24,12 @@ class TestGatherClusteringCounts(TestCase):
     ]
 
     def test_parse_one_log_simple(self):
-        log_file = os.path.join(os.path.dirname(__file__), 'cluster_20211119133917.log')
+        log_file = os.path.join(os.path.dirname(__file__), 'cluster_20211111225415.log')
         results = parse_one_log(log_file)
         assert set(results.keys()) == set(self.steps)
         for step in self.steps:
             assert set(results[step].keys()) == set(self.metrics)
+            print(results[step].items())
 
     def test_parse_one_log_partial(self):
         # Log file for Maize where the second process didn't run
