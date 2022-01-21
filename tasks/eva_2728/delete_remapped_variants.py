@@ -17,7 +17,7 @@ assembly = "GCA_000298735.1"
 
 def find_ids_of_remapped_submitted_variants(mongo_source, output_dir):
     collections = ["dbsnpSubmittedVariantEntity", "submittedVariantEntity"]
-    filter_criteria = {'remappedFrom': {'$exists': True}, 'seq': assembly}
+    filter_criteria = {'seq': assembly, 'remappedFrom': {'$exists': True}}
     return extract_ids_to_file(mongo_source, collections, filter_criteria, output_dir)
 
 
@@ -30,7 +30,6 @@ def find_ids_of_remapped_clustered_variants(mongo_source, output_dir):
 def find_ids_of_submitted_variant_operations(mongo_source, output_dir):
     collections = ["submittedVariantOperationEntity"]
     filter_criteria = {'inactiveObjects.seq': assembly, 'eventType': {'$in': ["RS_MERGE_CANDIDATES", "RS_SPLIT_CANDIDATES"]}}
-    '''"inactiveObjects.seq": "GCA_000298735.1", eventType: {$in: ["RS_MERGE_CANDIDATES", "RS_SPLIT_CANDIDATES"]}}'''
     return extract_ids_to_file(mongo_source, collections, filter_criteria, output_dir)
 
 
