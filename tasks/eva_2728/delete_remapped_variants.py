@@ -68,7 +68,7 @@ def delete_variants(mongo_source, files_with_ids):
                     batch_ids = [i.strip() for i in batch_ids]
                 x = collection.delete_many({'_id': {'$in': batch_ids}})
                 id_count += len(batch_ids)
-                deletion_count += len(x.deleted_count)
+                deletion_count += x.deleted_count
 
             logger.info(f"""{id_count} id read and {deletion_count} documents deleted from collection {collection_name}""")
 
