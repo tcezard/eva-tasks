@@ -33,8 +33,8 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source):
         if 'CLUSTERING_CLUSTERED_VARIANTS_FROM_MONGO_STEP' in log_metric_date_range:
             ranges_per_assembly[assembly_accession]['new_remapped_current_rs'][log_file] = {
                 'from': log_metric_date_range['CLUSTERING_CLUSTERED_VARIANTS_FROM_MONGO_STEP'],
-                'to': log_metric_date_range['PROCESS_REMAPPED_VARIANTS_WITH_RS_JOB']["completed"]
-                if "completed" in log_metric_date_range['PROCESS_REMAPPED_VARIANTS_WITH_RS_JOB']
+                'to': log_metric_date_range['CLEAR_RS_MERGE_AND_SPLIT_CANDIDATES_STEP']
+                if "CLEAR_RS_MERGE_AND_SPLIT_CANDIDATES_STEP" in log_metric_date_range
                 else log_metric_date_range["last_timestamp"]
             }
         # new_current_rs
@@ -124,7 +124,9 @@ def query_mongo(mongo_source, filter_criteria, metric):
     for collection_name in collections[metric]:
         logger.info(f'Querying mongo: db.{collection_name}.countDocuments({filter_criteria})')
         collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
-        total_count += collection.count_documents(filter_criteria)
+        count = collection.count_documents(filter_criteria)
+        total_count += count
+        logger.info(f'{count}')
     return total_count
 
 
