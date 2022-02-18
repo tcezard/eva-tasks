@@ -21,9 +21,10 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
     # Assume the directory structure:
     # clustering_dir --> <scientific_name_taxonomy_id> --> <assembly_accession> --> cluster_<date>.log_dict
 
-    all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_*', 'cluster_*.log')
+    # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_*', 'cluster_*.log')
     # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_000003025.6', 'cluster_*.log')
     # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_001858045.3', 'cluster_*.log')
+    all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_016772045.1', 'cluster_*.log')
     all_log_files = glob.glob(all_log_pattern)
     ranges_per_assembly = defaultdict(dict)
     for log_file in all_log_files:
@@ -146,7 +147,10 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
             release_version = 3
 
             release3_new_remapped_current_rs = metrics_per_assembly[asm]['new_remapped_current_rs']
-            release3_new_current_rs = metrics_per_assembly[asm]['new_current_rs']
+
+            release3_new_clustered_current_rs = metrics_per_assembly[asm]['new_current_rs']
+            release3_new_current_rs = release3_new_clustered_current_rs + release3_new_remapped_current_rs
+
             release3_new_merged_rs = metrics_per_assembly[asm]['merged_rs']
             release3_new_split_rs = metrics_per_assembly[asm]['split_rs']
             release3_new_ss_clustered = metrics_per_assembly[asm]['new_ss_clustered']
@@ -156,7 +160,8 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                            f"current_rs, multi_mapped_rs, merged_rs, deprecated_rs, merged_deprecated_rs, " \
                            f"new_current_rs, new_multi_mapped_rs, new_merged_rs, new_deprecated_rs, " \
                            f"new_merged_deprecated_rs, new_ss_clustered, remapped_current_rs, " \
-                           f"new_remapped_current_rs, split_rs, new_split_rs, ss_clustered) " \
+                           f"new_remapped_current_rs, split_rs, new_split_rs, ss_clustered, clustered_current_rs," \
+                           f"new_clustered_current_rs) " \
                            f"values ({taxid}, '{scientific_name}', '{asm}', '{folder}', {release_version}, " \
 
             if asm_last_release_data:
@@ -178,6 +183,9 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                 # if assembly already existed -> add counts
                 release3_current_rs = release2_current_rs + release3_new_current_rs
                 release3_merged_rs = release2_merged_rs + release3_new_merged_rs
+                # current_rs in previous releases (1 and 2) were all new clustered
+                release3_clustered_current_rs = release2_current_rs + release3_new_clustered_current_rs
+
                 insert_query_values = f"{release3_current_rs}, " \
                                       f"{release2_multi_mapped_rs}, " \
                                       f"{release3_merged_rs}, " \
@@ -193,7 +201,9 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                                       f"{release3_new_remapped_current_rs}, " \
                                       f"{release3_new_split_rs}, " \
                                       f"{release3_new_split_rs}, " \
-                                      f"{release3_ss_clustered})"
+                                      f"{release3_ss_clustered}" \
+                                      f"{release3_clustered_current_rs}," \
+                                      f"{release3_new_clustered_current_rs})"
             else:
                 # if new assembly
                 insert_query_values = f"{release3_new_current_rs}, " \
@@ -211,7 +221,9 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                                       f"{release3_new_remapped_current_rs}, " \
                                       f"{release3_new_split_rs}, " \
                                       f"{release3_new_split_rs}, " \
-                                      f"{release3_new_ss_clustered})"
+                                      f"{release3_new_ss_clustered}," \
+                                      f"{release3_new_clustered_current_rs}," \
+                                      f"{release3_new_clustered_current_rs})"
             insert_query = f"{insert_query} {insert_query_values}"
             print(insert_query)
             execute_query(metadata_connection_handle, insert_query)
@@ -222,6 +234,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                                          f"from dbsnp_ensembl_species.release_rs_statistics_per_assembly " \
                                          f"where release_version = 2 " \
                                          f"and assembly_accession not in ({assemblies_in_logs});"
+                                         # f"and assembly_accession in ('GCA_000001215.2');"
         print(query_missing_assemblies_stats)
         missing_assemblies_stats = get_all_results_for_query(metadata_connection_handle, query_missing_assemblies_stats)
         for assembly_stats in missing_assemblies_stats:
