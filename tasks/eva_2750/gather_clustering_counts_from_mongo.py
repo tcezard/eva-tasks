@@ -282,10 +282,11 @@ def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_pe
                            f"current_rs, multi_mapped_rs, merged_rs, deprecated_rs, merged_deprecated_rs, " \
                            f"new_current_rs, new_multi_mapped_rs, new_merged_rs, new_deprecated_rs, " \
                            f"new_merged_deprecated_rs, new_ss_clustered, remapped_current_rs, " \
-                           f"new_remapped_current_rs, split_rs, new_split_rs, ss_clustered) " \
+                           f"new_remapped_current_rs, split_rs, new_split_rs, ss_clustered, clustered_current_rs, " \
+                           f"new_clustered_current_rs) " \
                            f"values ({taxonomy_id}, '{scientific_name}', '{assembly_accession}', '{release_folder}', " \
                            f"3, {current_rs}, {multi_mapped_rs}, {merged_rs}, {deprecated_rs}, " \
-                           f"{merged_deprecated_rs}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {ss_clustered});"
+                           f"{merged_deprecated_rs}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {ss_clustered}, 0, 0);"
             logger.info(insert_query)
             execute_query(metadata_connection_handle, insert_query)
 
