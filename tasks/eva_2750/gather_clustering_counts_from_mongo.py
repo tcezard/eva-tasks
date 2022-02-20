@@ -21,10 +21,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
     # Assume the directory structure:
     # clustering_dir --> <scientific_name_taxonomy_id> --> <assembly_accession> --> cluster_<date>.log_dict
 
-    # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_*', 'cluster_*.log')
-    # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_000003025.6', 'cluster_*.log')
-    # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_001858045.3', 'cluster_*.log')
-    all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_016772045.1', 'cluster_*.log')
+    all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_*', 'cluster_*.log')
     all_log_files = glob.glob(all_log_pattern)
     ranges_per_assembly = get_assembly_info_and_date_ranges(all_log_files)
     metrics_per_assembly = get_metrics_per_assembly(mongo_source, ranges_per_assembly)
@@ -254,7 +251,6 @@ def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_pe
                                          f"from dbsnp_ensembl_species.release_rs_statistics_per_assembly " \
                                          f"where release_version = 2 " \
                                          f"and assembly_accession not in ({assemblies_in_logs});"
-                                         # f"and assembly_accession in ('GCA_000001215.2');"
         logger.info(query_missing_assemblies_stats)
         missing_assemblies_stats = get_all_results_for_query(metadata_connection_handle, query_missing_assemblies_stats)
         for assembly_stats in missing_assemblies_stats:
