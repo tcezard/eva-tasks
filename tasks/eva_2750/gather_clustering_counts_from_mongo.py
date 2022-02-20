@@ -26,6 +26,16 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
     # all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_001858045.3', 'cluster_*.log')
     all_log_pattern = os.path.join(clustering_dir, '*', 'GCA_016772045.1', 'cluster_*.log')
     all_log_files = glob.glob(all_log_pattern)
+    ranges_per_assembly = get_assembly_info_and_date_ranges(all_log_files)
+    metrics_per_assembly = get_metrics_per_assembly(mongo_source, ranges_per_assembly)
+    insert_counts_in_db(private_config_xml_file, metrics_per_assembly)
+
+
+def get_assembly_info_and_date_ranges(all_log_files):
+    """
+    Parse all the log files and retrieve assembly basic information (taxonomy, scientific name) and the date ranges
+    where all jobs and steps were run during the clustering process
+    """
     ranges_per_assembly = defaultdict(dict)
     for log_file in all_log_files:
         logger.info('Parse log_dict file: ' + log_file)
@@ -80,11 +90,17 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                 if "completed" in log_metric_date_range['CLUSTER_UNCLUSTERED_VARIANTS_JOB']
                 else log_metric_date_range["last_timestamp"]
             }
+    return ranges_per_assembly
 
+
+def get_metrics_per_assembly(mongo_source, ranges_per_assembly):
+    """
+    Perform queries to mongodb to get counts based on the date ranges for the different metrics
+    """
     metrics_per_assembly = defaultdict(dict)
-    for asm, count_dict in ranges_per_assembly.items():
+    for asm, asm_dict in ranges_per_assembly.items():
         new_remapped_current_rs, new_current_rs, merged_rs, split_rs, new_ss_clustered = 0, 0, 0, 0, 0
-        for metric, log_dict in count_dict['metrics'].items():
+        for metric, log_dict in asm_dict['metrics'].items():
             expressions = []
             for log_name, query_range in log_dict.items():
                 expressions.append({"createdDate": {"$gt": query_range["from"], "$lt": query_range["to"]}})
@@ -120,29 +136,33 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
         metrics_per_assembly[asm]["merged_rs"] = merged_rs
         metrics_per_assembly[asm]["split_rs"] = split_rs
         metrics_per_assembly[asm]["new_ss_clustered"] = new_ss_clustered
-        metrics_per_assembly[asm]["taxid"] = ranges_per_assembly[asm]['taxid']
-        metrics_per_assembly[asm]["scientific_name"] = ranges_per_assembly[asm]['scientific_name']
+    return metrics_per_assembly
 
-    # with open(output_file, 'w') as open_file:
-    #     fieldnames = ['assembly_accession', 'new_remapped_current_rs', 'new_current_rs', 'merged_rs', 'split_rs',
-    #                   'new_ss_clustered']
-    #     writer = csv.DictWriter(open_file, fieldnames=fieldnames, dialect=excel_tab)
-    #     writer.writeheader()
-    #     for asm in metrics_per_assembly:
-    #         writer.writerow(metrics_per_assembly[asm])
 
+def query_mongo(mongo_source, filter_criteria, metric):
+    total_count = 0
+    for collection_name in collections[metric]:
+        logger.info(f'Querying mongo: db.{collection_name}.countDocuments({filter_criteria})')
+        collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
+        count = collection.count_documents(filter_criteria)
+        total_count += count
+        logger.info(f'{count}')
+    return total_count
+
+
+def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_per_assembly):
     with psycopg2.connect(get_pg_metadata_uri_for_eva_profile("development", private_config_xml_file), user="evadev") \
             as metadata_connection_handle:
         for asm in metrics_per_assembly:
             # get last release data for assembly
             query_release2 = f"select * from dbsnp_ensembl_species.release_rs_statistics_per_assembly "\
                              f"where assembly_accession = '{asm}' and release_version = 2"
-            print(query_release2)
+            logger.info(query_release2)
             asm_last_release_data = get_all_results_for_query(metadata_connection_handle, query_release2)
 
             # insert data for release 3
-            taxid = metrics_per_assembly[asm]['taxid']
-            scientific_name = metrics_per_assembly[asm]['scientific_name']
+            taxid = ranges_per_assembly[asm]['taxid']
+            scientific_name = ranges_per_assembly[asm]['scientific_name']
             folder = f"{scientific_name}/{asm}"
             release_version = 3
 
@@ -175,7 +195,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                 query_ss_clustered = f"select sum(new_ss_clustered) " \
                                      f"from dbsnp_ensembl_species.release_rs_statistics_per_assembly " \
                                      f"where assembly_accession = '{asm}'"
-                print(query_ss_clustered)
+                logger.info(query_ss_clustered)
                 ss_clustered_previous_releases = get_all_results_for_query(metadata_connection_handle,
                                                                            query_ss_clustered)
                 release3_ss_clustered = ss_clustered_previous_releases[0][0] + release3_new_ss_clustered
@@ -225,7 +245,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                                       f"{release3_new_clustered_current_rs}," \
                                       f"{release3_new_clustered_current_rs})"
             insert_query = f"{insert_query} {insert_query_values}"
-            print(insert_query)
+            logger.info(insert_query)
             execute_query(metadata_connection_handle, insert_query)
 
         # get assemblies in from release 1 and 2 not in release 3
@@ -235,7 +255,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                                          f"where release_version = 2 " \
                                          f"and assembly_accession not in ({assemblies_in_logs});"
                                          # f"and assembly_accession in ('GCA_000001215.2');"
-        print(query_missing_assemblies_stats)
+        logger.info(query_missing_assemblies_stats)
         missing_assemblies_stats = get_all_results_for_query(metadata_connection_handle, query_missing_assemblies_stats)
         for assembly_stats in missing_assemblies_stats:
             taxonomy_id = assembly_stats[0]
@@ -252,7 +272,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
             query_ss_clustered = f"select sum(new_ss_clustered) " \
                                  f"from dbsnp_ensembl_species.release_rs_statistics_per_assembly " \
                                  f"where assembly_accession = '{assembly_accession}'"
-            print(query_ss_clustered)
+            logger.info(query_ss_clustered)
             ss_clustered_previous_releases = get_all_results_for_query(metadata_connection_handle,
                                                                        query_ss_clustered)
             ss_clustered = ss_clustered_previous_releases[0][0]
@@ -266,19 +286,8 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
                            f"values ({taxonomy_id}, '{scientific_name}', '{assembly_accession}', '{release_folder}', " \
                            f"3, {current_rs}, {multi_mapped_rs}, {merged_rs}, {deprecated_rs}, " \
                            f"{merged_deprecated_rs}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {ss_clustered});"
-            print(insert_query)
+            logger.info(insert_query)
             execute_query(metadata_connection_handle, insert_query)
-
-
-def query_mongo(mongo_source, filter_criteria, metric):
-    total_count = 0
-    for collection_name in collections[metric]:
-        logger.info(f'Querying mongo: db.{collection_name}.countDocuments({filter_criteria})')
-        collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
-        count = collection.count_documents(filter_criteria)
-        total_count += count
-        logger.info(f'{count}')
-    return total_count
 
 
 collections = {
