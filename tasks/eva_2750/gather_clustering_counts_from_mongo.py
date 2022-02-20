@@ -28,7 +28,7 @@ def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_c
     all_log_files = glob.glob(all_log_pattern)
     ranges_per_assembly = get_assembly_info_and_date_ranges(all_log_files)
     metrics_per_assembly = get_metrics_per_assembly(mongo_source, ranges_per_assembly)
-    insert_counts_in_db(private_config_xml_file, metrics_per_assembly)
+    insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_per_assembly)
 
 
 def get_assembly_info_and_date_ranges(all_log_files):
@@ -58,9 +58,9 @@ def get_assembly_info_and_date_ranges(all_log_files):
                 if "CLEAR_RS_MERGE_AND_SPLIT_CANDIDATES_STEP" in log_metric_date_range
                 else log_metric_date_range["last_timestamp"]
             }
-        # new_current_rs
+        # new_clustered_current_rs
         if 'CLUSTERING_NON_CLUSTERED_VARIANTS_FROM_MONGO_STEP' in log_metric_date_range:
-            ranges_per_assembly[assembly_accession]['metrics']['new_current_rs'][log_file] = {
+            ranges_per_assembly[assembly_accession]['metrics']['new_clustered_current_rs'][log_file] = {
                 'from': log_metric_date_range['CLUSTERING_NON_CLUSTERED_VARIANTS_FROM_MONGO_STEP'],
                 'to': log_metric_date_range['CLUSTER_UNCLUSTERED_VARIANTS_JOB']["completed"]
                 if "completed" in log_metric_date_range['CLUSTER_UNCLUSTERED_VARIANTS_JOB']
@@ -99,7 +99,7 @@ def get_metrics_per_assembly(mongo_source, ranges_per_assembly):
     """
     metrics_per_assembly = defaultdict(dict)
     for asm, asm_dict in ranges_per_assembly.items():
-        new_remapped_current_rs, new_current_rs, merged_rs, split_rs, new_ss_clustered = 0, 0, 0, 0, 0
+        new_remapped_current_rs, new_clustered_current_rs, merged_rs, split_rs, new_ss_clustered = 0, 0, 0, 0, 0
         for metric, log_dict in asm_dict['metrics'].items():
             expressions = []
             for log_name, query_range in log_dict.items():
@@ -110,10 +110,10 @@ def get_metrics_per_assembly(mongo_source, ranges_per_assembly):
                 filter_criteria = {'asm': asm, '$or': date_range_filter}
                 new_remapped_current_rs = query_mongo(mongo_source, filter_criteria, metric)
                 logger.info(f'{metric} = {new_remapped_current_rs}')
-            elif metric == 'new_current_rs':
+            elif metric == 'new_clustered_current_rs':
                 filter_criteria = {'asm': asm, '$or': date_range_filter}
-                new_current_rs = query_mongo(mongo_source, filter_criteria, metric)
-                logger.info(f'{metric} = {new_current_rs}')
+                new_clustered_current_rs = query_mongo(mongo_source, filter_criteria, metric)
+                logger.info(f'{metric} = {new_clustered_current_rs}')
             elif metric == 'merged_rs':
                 filter_criteria = {'inactiveObjects.asm': asm, 'eventType': 'MERGED',
                                    '$or': date_range_filter}
@@ -132,7 +132,7 @@ def get_metrics_per_assembly(mongo_source, ranges_per_assembly):
 
         metrics_per_assembly[asm]["assembly_accession"] = asm
         metrics_per_assembly[asm]["new_remapped_current_rs"] = new_remapped_current_rs
-        metrics_per_assembly[asm]["new_current_rs"] = new_current_rs
+        metrics_per_assembly[asm]["new_clustered_current_rs"] = new_clustered_current_rs
         metrics_per_assembly[asm]["merged_rs"] = merged_rs
         metrics_per_assembly[asm]["split_rs"] = split_rs
         metrics_per_assembly[asm]["new_ss_clustered"] = new_ss_clustered
@@ -168,7 +168,7 @@ def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_pe
 
             release3_new_remapped_current_rs = metrics_per_assembly[asm]['new_remapped_current_rs']
 
-            release3_new_clustered_current_rs = metrics_per_assembly[asm]['new_current_rs']
+            release3_new_clustered_current_rs = metrics_per_assembly[asm]['new_clustered_current_rs']
             release3_new_current_rs = release3_new_clustered_current_rs + release3_new_remapped_current_rs
 
             release3_new_merged_rs = metrics_per_assembly[asm]['merged_rs']
@@ -296,7 +296,7 @@ collections = {
         "clusteredVariantEntity",
         "dbsnpClusteredVariantEntity"
     ],
-    "new_current_rs": [
+    "new_clustered_current_rs": [
         "clusteredVariantEntity"
     ],
     "merged_rs": [
