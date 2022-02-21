@@ -218,7 +218,7 @@ def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_pe
                                       f"{release3_new_remapped_current_rs}, " \
                                       f"{release3_new_split_rs}, " \
                                       f"{release3_new_split_rs}, " \
-                                      f"{release3_ss_clustered}" \
+                                      f"{release3_ss_clustered}," \
                                       f"{release3_clustered_current_rs}," \
                                       f"{release3_new_clustered_current_rs})"
             else:
