@@ -9,12 +9,12 @@ from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query, execute_q
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
-
-counts_table_name = 'dbsnp_ensembl_species.release_rs_statistics_per_species'
-tracker_table_name = 'eva_progress_tracker.clustering_release_tracker'
 shell_script_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bash')
 
-# TODO other columns are "new" which is just the diff with release 2?
+species_table_name = 'dbsnp_ensembl_species.release_rs_statistics_per_species'
+assembly_table_name = 'dbsnp_ensembl_species.release_rs_statistics_per_assembly'
+tracker_table_name = 'eva_progress_tracker.clustering_release_tracker'
+
 id_to_column = {
     'current': 'current_rs',
     'multimap': 'multi_mapped_rs',
@@ -26,17 +26,41 @@ id_to_column = {
 
 
 def write_counts_to_table(private_config_xml_file, counts):
+    all_columns = ['taxonomy_id', 'scientific_name', 'release_folder', 'release_version']
+    all_columns.extend(id_to_column.values())
+    all_values = [f"({','.join(species_counts[c] for c in all_columns)})" for species_counts in counts]
+    insert_query = f"insert into {species_table_name} " \
+                   f"({','.join(all_columns)}) " \
+                   f"values {','.join(all_values)}"
     with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
-        all_columns = ['taxonomy_id', 'scientific_name', 'release_folder', 'release_version']
-        all_columns.extend(id_to_column.values())
-        all_values = [f"({','.join(species_counts[c] for c in all_columns)})" for species_counts in counts]
-        insert_query = f"insert into {counts_table_name} " \
-                       f"({','.join(all_columns)}) " \
-                       f"values {','.join(all_values)}"
         execute_query(db_conn, insert_query)
 
 
-def get_scientific_name_and_taxonomy(private_config_xml_file, release_version, species_folder):
+def get_new_ss_clustered(private_config_xml_file, release_version, taxonomy_id):
+    query = f"select new_ss_clustered from {assembly_table_name} " \
+            f"where release_version={release_version} " \
+            f"and taxonomy_id={taxonomy_id} " \
+            f"and new_ss_clustered > 0"
+    with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
+        results = get_all_results_for_query(db_conn, query)
+    if len(results) != 1:
+        raise ValueError(f'Should have exactly one assembly for taxonomy {taxonomy_id} with new clustered ss, '
+                         f'instead found {len(results)}')
+    return results[0][0]
+
+
+def get_last_release_metric(private_config_xml_file, release_version, taxonomy_id, column_name):
+    query = f"select {column_name} from {species_table_name} " \
+            f"where release_version={release_version-1} " \
+            f"and taxonomy_id={taxonomy_id}"
+    with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
+        results = get_all_results_for_query(db_conn, query)
+    if len(results) != 1:
+        raise ValueError(f'Failed to get last release metric {column_name} for taxonomy {taxonomy_id}')
+    return results[0][0]
+
+
+def get_taxonomy_and_scientific_name(private_config_xml_file, release_version, species_folder):
     query = f"select taxonomy, scientific_name from {tracker_table_name} " \
             f"where release_version={release_version} " \
             f"and release_folder_name='{species_folder}' " \
@@ -57,17 +81,22 @@ def run_count_script(script_name, species_dir, metric_id):
 
 
 def gather_counts(private_config_xml_file, release_version, release_dir):
-    results = {}
+    results = []
     for species_dir in os.listdir(release_dir):
         full_species_dir = os.path.abspath(species_dir)
-        taxid, sci_name = get_scientific_name_and_taxonomy(private_config_xml_file, release_version, species_dir)
+
+        # Get data from other tables
+        taxid, sci_name = get_taxonomy_and_scientific_name(private_config_xml_file, release_version, species_dir)
+        new_ss_clustered = get_new_ss_clustered(private_config_xml_file, release_version, taxid)
         per_species_results = {
             'taxonomy_id': taxid,
-            'scientific_name': sci_name,
-            'release_folder': species_dir,
-            'release_version': release_version
+            'scientific_name': f"'{sci_name}'",
+            'release_folder': f"'{species_dir}'",
+            'release_version': release_version,
+            'new_ss_clustered': new_ss_clustered
         }
 
+        # Get metrics from release files
         for metric_id in id_to_column.keys():
             if metric_id in {'current', 'merged', 'multimap'}:
                 output_log = run_count_script('count_rs_for_release.sh', full_species_dir, metric_id)
@@ -81,7 +110,11 @@ def gather_counts(private_config_xml_file, release_version, release_dir):
             os.remove(output_log)
             per_species_results[id_to_column[metric_id]] = total
 
-        results[taxid] = per_species_results
+            # Include diff with previous release
+            last_release_total = get_last_release_metric(private_config_xml_file, release_version, taxid, metric_id)
+            per_species_results[f'new_{id_to_column[metric_id]}'] = max(0, total-last_release_total)
+
+        results.append(per_species_results)
     return results
 
 
@@ -91,7 +124,7 @@ def main():
     parser.add_argument("--release_root_path", type=str,
                         help="base directory where all the release was run.", required=True)
     parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
-    parser.add_argument("--release_version", type=int, help="release version to store in the table", required=True)
+    parser.add_argument("--release_version", type=int, help="current release version", required=True)
 
     args = parser.parse_args()
     counts = gather_counts(args.private_config_xml_file, args.release_version, args.release_root_path)
