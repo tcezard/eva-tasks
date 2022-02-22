@@ -26,8 +26,7 @@ id_to_column = {
 
 
 def write_counts_to_table(private_config_xml_file, counts):
-    all_columns = ['taxonomy_id', 'scientific_name', 'release_folder', 'release_version']
-    all_columns.extend(id_to_column.values())
+    all_columns = counts[0].keys()
     all_values = [f"({','.join(species_counts[c] for c in all_columns)})" for species_counts in counts]
     insert_query = f"insert into {species_table_name} " \
                    f"({','.join(all_columns)}) " \
@@ -55,8 +54,9 @@ def get_last_release_metric(private_config_xml_file, release_version, taxonomy_i
             f"and taxonomy_id={taxonomy_id}"
     with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
         results = get_all_results_for_query(db_conn, query)
-    if len(results) != 1:
-        raise ValueError(f'Failed to get last release metric {column_name} for taxonomy {taxonomy_id}')
+    # If this is a new species for this release, won't find anything, so just return 0
+    if len(results) < 1:
+        return 0
     return results[0][0]
 
 
