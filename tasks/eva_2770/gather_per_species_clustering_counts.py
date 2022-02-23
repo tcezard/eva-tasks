@@ -75,7 +75,7 @@ def get_taxonomy_and_scientific_name(private_config_xml_file, release_version, s
 def run_count_script(script_name, species_dir, metric_id):
     run_command_with_output(
         f'Run {script_name}',
-        f'bsub {os.path.join(shell_script_dir, script_name)} {species_dir} {metric_id}'
+        f'{os.path.join(shell_script_dir, script_name)} {species_dir} {metric_id}'
     )
     return f'{os.path.basename(species_dir)}_count_{metric_id}_rsid.log'
 
@@ -107,7 +107,6 @@ def gather_counts(private_config_xml_file, release_version, release_dir):
 
             with open(output_log) as f:
                 total = sum(int(l.strip()) for l in f)
-            os.remove(output_log)
             per_species_results[id_to_column[metric_id]] = total
 
             # Include diff with previous release
