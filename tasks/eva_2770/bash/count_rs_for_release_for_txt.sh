@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 set -e
 
 species_dir=$1

@@ -67,8 +67,9 @@ def get_taxonomy_and_scientific_name(private_config_xml_file, release_version, s
             f"and should_be_released"
     with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
         results = get_all_results_for_query(db_conn, query)
-    if len(results) != 1:
-        raise ValueError(f'Failed to get scientific name and taxonomy for {species_folder}')
+    if len(results) < 1:
+        logger.warning(f'Failed to get scientific name and taxonomy for {species_folder}')
+        return None, None
     return results[0][0], results[0][1]
 
 
@@ -83,10 +84,12 @@ def run_count_script(script_name, species_dir, metric_id):
 def gather_counts(private_config_xml_file, release_version, release_dir):
     results = []
     for species_dir in os.listdir(release_dir):
-        full_species_dir = os.path.abspath(species_dir)
+        full_species_dir = os.path.join(release_dir, species_dir)
 
         # Get data from other tables
         taxid, sci_name = get_taxonomy_and_scientific_name(private_config_xml_file, release_version, species_dir)
+        if not taxid or not sci_name:
+            continue
         new_ss_clustered = get_new_ss_clustered(private_config_xml_file, release_version, taxid)
         per_species_results = {
             'taxonomy_id': taxid,
@@ -103,14 +106,14 @@ def gather_counts(private_config_xml_file, release_version, release_dir):
             elif metric_id in {'deprecated', 'merged_deprecated'}:
                 output_log = run_count_script('count_rs_for_release_for_txt.sh', full_species_dir, metric_id)
             else:
-                output_log = run_count_script('count_rs_for_release_unmapped.sh', full_species_dir, '')
+                output_log = run_count_script('count_rs_for_release_unmapped.sh', full_species_dir, metric_id)
 
             with open(output_log) as f:
-                total = sum(int(l.strip()) for l in f)
+                total = sum(int(l.strip().split(' ')[0]) for l in f)
             per_species_results[id_to_column[metric_id]] = total
 
             # Include diff with previous release
-            last_release_total = get_last_release_metric(private_config_xml_file, release_version, taxid, metric_id)
+            last_release_total = get_last_release_metric(private_config_xml_file, release_version, taxid, id_to_column[metric_id])
             per_species_results[f'new_{id_to_column[metric_id]}'] = max(0, total-last_release_total)
 
         results.append(per_species_results)
@@ -120,10 +123,10 @@ def gather_counts(private_config_xml_file, release_version, release_dir):
 def main():
     parser = argparse.ArgumentParser(
         description='Parse all the release output to get RS statistics per species')
-    parser.add_argument("--release_root_path", type=str,
+    parser.add_argument("--release-root-path", type=str,
                         help="base directory where all the release was run.", required=True)
     parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
-    parser.add_argument("--release_version", type=int, help="current release version", required=True)
+    parser.add_argument("--release-version", type=int, help="current release version", required=True)
 
     args = parser.parse_args()
     counts = gather_counts(args.private_config_xml_file, args.release_version, args.release_root_path)

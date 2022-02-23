@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 set -e
 
 species_dir=$1
@@ -8,12 +7,10 @@ idtype=$2
 species_name=$(basename $species_dir)
 
 
-
-
 for ASSEMBLY_DIR in ${species_dir}/GC*
 do
     ASSEMBLY=$(basename $ASSEMBLY_DIR)
-     zcat  ${species_dir}/$ASSEMBLY/${ASSEMBLY}_${idtype}_ids.vcf.gz | grep -v '^#' | awk -v assembly=$ASSEMBLY '{print $3" "assembly}'
+    zcat  ${species_dir}/$ASSEMBLY/${ASSEMBLY}_${idtype}_ids.vcf.gz | grep -v '^#' | awk -v assembly=$ASSEMBLY '{print $3" "assembly}'
 done | sort > tmp_${species_name}_${idtype}_rsid_sorted
 
 cat tmp_${species_name}_${idtype}_rsid_sorted \
