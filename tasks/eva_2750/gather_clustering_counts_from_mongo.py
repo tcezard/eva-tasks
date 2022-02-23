@@ -1,10 +1,8 @@
 import argparse
-import csv
 import glob
 import os
 import psycopg2
 from collections import defaultdict
-from csv import excel_tab
 from datetime import datetime
 
 from ebi_eva_common_pyutils.logger import logging_config
@@ -17,7 +15,7 @@ logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
 
 
-def gather_count_from_mongo(clustering_dir, output_file, mongo_source, private_config_xml_file):
+def gather_count_from_mongo(clustering_dir, mongo_source, private_config_xml_file):
     # Assume the directory structure:
     # clustering_dir --> <scientific_name_taxonomy_id> --> <assembly_accession> --> cluster_<date>.log_dict
 
@@ -159,8 +157,8 @@ def insert_counts_in_db(private_config_xml_file, metrics_per_assembly, ranges_pe
 
             # insert data for release 3
             taxid = ranges_per_assembly[asm]['taxid']
-            scientific_name = ranges_per_assembly[asm]['scientific_name']
-            folder = f"{scientific_name}/{asm}"
+            scientific_name = ranges_per_assembly[asm]['scientific_name'].capitalize().replace('_', ' ')
+            folder = f"{ranges_per_assembly[asm]['scientific_name']}/{asm}"
             release_version = 3
 
             release3_new_remapped_current_rs = metrics_per_assembly[asm]['new_remapped_current_rs']
@@ -361,8 +359,6 @@ def main():
         description='Parse all the clustering logs to get date ranges and query mongo to get metrics counts')
     parser.add_argument("--clustering_root_path", type=str,
                         help="base directory where all the clustering was run.", required=True)
-    parser.add_argument("--output_csv", type=str,
-                        help="path to the output .", required=False)
     parser.add_argument("--mongo-source-uri",
                         help="Mongo Source URI (ex: mongodb://user:@mongos-source-host:27017/admin)", required=True)
     parser.add_argument("--mongo-source-secrets-file",
@@ -373,7 +369,7 @@ def main():
     args = parser.parse_args()
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva_accession_sharded")
-    gather_count_from_mongo(args.clustering_root_path, args.output_csv, mongo_source, args.private_config_xml_file)
+    gather_count_from_mongo(args.clustering_root_path, mongo_source, args.private_config_xml_file)
 
 
 if __name__ == '__main__':
