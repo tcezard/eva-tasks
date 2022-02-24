@@ -27,7 +27,7 @@ id_to_column = {
 
 def write_counts_to_table(private_config_xml_file, counts):
     all_columns = counts[0].keys()
-    all_values = [f"({','.join(species_counts[c] for c in all_columns)})" for species_counts in counts]
+    all_values = [f"({','.join(str(species_counts[c]) for c in all_columns)})" for species_counts in counts]
     insert_query = f"insert into {species_table_name} " \
                    f"({','.join(all_columns)}) " \
                    f"values {','.join(all_values)}"
@@ -42,9 +42,12 @@ def get_new_ss_clustered(private_config_xml_file, release_version, taxonomy_id):
             f"and new_ss_clustered > 0"
     with get_metadata_connection_handle('development', private_config_xml_file) as db_conn:
         results = get_all_results_for_query(db_conn, query)
-    if len(results) != 1:
+    if len(results) > 1:
         raise ValueError(f'Should have exactly one assembly for taxonomy {taxonomy_id} with new clustered ss, '
                          f'instead found {len(results)}')
+    elif len(results) == 0:
+        logger.warning(f'No assemblies found with new clustered ss for taxonomy {taxonomy_id}')
+        return 0
     return results[0][0]
 
 
@@ -74,11 +77,13 @@ def get_taxonomy_and_scientific_name(private_config_xml_file, release_version, s
 
 
 def run_count_script(script_name, species_dir, metric_id):
-    run_command_with_output(
-        f'Run {script_name}',
-        f'{os.path.join(shell_script_dir, script_name)} {species_dir} {metric_id}'
-    )
-    return f'{os.path.basename(species_dir)}_count_{metric_id}_rsid.log'
+    log_file = f'{os.path.basename(species_dir)}_count_{metric_id}_rsid.log'
+    if not os.path.exists(log_file):
+        run_command_with_output(
+            f'Run {script_name}',
+            f'{os.path.join(shell_script_dir, script_name)} {species_dir} {metric_id}'
+        )
+    return log_file
 
 
 def gather_counts(private_config_xml_file, release_version, release_dir):
