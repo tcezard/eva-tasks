@@ -56,9 +56,9 @@ def get_processed_analysis_files(processed_file_directory):
     for file in os.listdir(processed_file_directory):
         file_path = os.path.join(processed_file_directory, file)
         if os.path.islink(file_path):
-            org_path = os.readlink(file_path)
-            logger.info(f"{file_path} is a symlink, reading files from original path {org_path}")
-            processed_analysis.update(get_processed_analysis_files(org_path))
+            orig_path = os.readlink(file_path)
+            logger.info(f"{file_path} is a symlink, reading files from original path {orig_path}")
+            processed_analysis.update(get_processed_analysis_files(orig_path))
         elif os.path.isdir(file_path):
             logger.info(f"{file_path} is a directory, reading files from sub-directories")
             processed_analysis.update(get_processed_analysis_files(file_path))
@@ -86,10 +86,9 @@ def main():
     parser.add_argument("--project", default='PRJEB45554', required=False,
                         help="project from which analysis needs to be downloaded")
     parser.add_argument("--batch-size", default=10000, required=False, help="batch size of ENA analysis download")
-    parser.add_argument("--processed-file-directory", default="/nfs/production3/eva/data/PRJEB45554/30_eva_valid/",
-                        required=False, help="full path to the directory where all the processed files are present")
-    parser.add_argument("--target-file", default="/nfs/production3/eva/data/PRJEB45554/covid19_analysis.txt",
-                        required=False, help="full path to the target file that will be created")
+    parser.add_argument("--processed-file-directory", required=True,
+                        help="full path to the directory where all the processed files are present")
+    parser.add_argument("--target-file", required=True, help="full path to the target file that will be created")
 
     args = parser.parse_args()
     logging_config.add_stdout_handler()
