@@ -26,6 +26,8 @@ def prepare_processed_analysis_file(project, batch_size, processed_file_director
     logger.info(f"total analysis in project {project}: {total_analysis}")
 
     processed_analysis = get_processed_analysis_files(processed_file_directory)
+    logger.info(f"no of processed analysis : {len(processed_analysis)}")
+    processed_file_with_no_analysis = processed_analysis.copy()
 
     if not os.path.exists(target_file):
         logger.info(f"{target_file} does not exist and will be created")
@@ -34,12 +36,16 @@ def prepare_processed_analysis_file(project, batch_size, processed_file_director
         offset = 0
         limit = batch_size
         while offset < total_analysis:
+            logger.info(f"Fetching ENA analysis from {offset} to  {offset+limit} (offset={offset}, limit={limit})")
             analysis_from_ena = get_analysis_from_ena(project, offset, limit)
             for analysis in analysis_from_ena:
                 if analysis['run_ref'] in processed_analysis:
-                    logger.info(f"Analysis file {analysis['run_ref']} found in already processed list")
                     f.write(f"{analysis['analysis_accession']},{analysis['submitted_ftp']}\n")
+                    processed_file_with_no_analysis.discard(analysis['run_ref'])
             offset = offset + limit
+
+    print(f"Processed files for which no analysis were found in ENA : "
+          f"total count = {len(processed_file_with_no_analysis)}, files = {processed_file_with_no_analysis}")
 
 
 def total_analysis_in_project(project):
@@ -85,7 +91,7 @@ def main():
                                      formatter_class=argparse.RawTextHelpFormatter, add_help=False)
     parser.add_argument("--project", default='PRJEB45554', required=False,
                         help="project from which analysis needs to be downloaded")
-    parser.add_argument("--batch-size", default=10000, required=False, help="batch size of ENA analysis download")
+    parser.add_argument("--batch-size", default=100000, required=False, help="batch size of ENA analysis download")
     parser.add_argument("--processed-file-directory", required=True,
                         help="full path to the directory where all the processed files are present")
     parser.add_argument("--target-file", required=True, help="full path to the target file that will be created")
