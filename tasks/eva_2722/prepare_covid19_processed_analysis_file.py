@@ -69,7 +69,7 @@ def get_processed_analyses_files(processed_file_directory):
             logger.info(f"{file_path} is a directory, reading files from sub-directories")
             processed_analyses.update(get_processed_analyses_files(file_path))
         else:
-            if "_filtered_vcf.gz" in file:
+            if "_filtered_vcf.gz" in file or ".vcf" in file:
                 file_name = file.split("_")[0]
                 processed_analyses.add(file_name)
 
