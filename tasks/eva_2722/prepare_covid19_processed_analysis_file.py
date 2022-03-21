@@ -14,6 +14,7 @@
 
 import argparse
 import os
+import re
 
 import requests
 from ebi_eva_common_pyutils.logger import logging_config
@@ -36,12 +37,13 @@ def prepare_processed_analyses_file(project, batch_size, processed_file_director
         offset = 0
         limit = batch_size
         while offset < total_analyses:
-            logger.info(f"Fetching ENA analyses from {offset} to  {offset+limit} (offset={offset}, limit={limit})")
+            logger.info(f"Fetching ENA analyses from {offset} to  {offset + limit} (offset={offset}, limit={limit})")
             analyses_from_ena = get_analyses_from_ena(project, offset, limit)
             for analysis in analyses_from_ena:
-                if analysis['run_ref'] in processed_analyses:
+                if analysis['run_ref'] in processed_analyses or analysis['analysis_accession'] in processed_analyses:
                     f.write(f"{analysis['analysis_accession']},{analysis['submitted_ftp']}\n")
                     processed_files_with_no_analyses.discard(analysis['run_ref'])
+
             offset = offset + limit
 
     print(f"Processed files for which no analyses were found in ENA : "
@@ -69,8 +71,9 @@ def get_processed_analyses_files(processed_file_directory):
             logger.info(f"{file_path} is a directory, reading files from sub-directories")
             processed_analyses.update(get_processed_analyses_files(file_path))
         else:
-            if "_filtered_vcf.gz" in file or ".vcf" in file:
-                file_name = file.split("_")[0]
+            if (file.endswith("_filtered_vcf.gz") or file.endswith(".vcf") or file.endswith(".vcf.gz")) \
+                    and not file.startswith("concat"):
+                file_name = re.split('_|\.', file)[0]
                 processed_analyses.add(file_name)
 
     return processed_analyses
