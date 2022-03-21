@@ -36,26 +36,28 @@ def find_rs_references_in_ss_collection(mongo_db, collection_name, assembly_acce
 
 
 def check_rs_for_assembly(mongo_db, assembly_accession, batch_size):
-    batch_processed = 0
+    nb_processed = 0
     for rs_list in find_rs_references_in_ss_collection(mongo_db, 'submittedVariantEntity', assembly_accession, batch_size):
-        batch_processed += 1
-        print(f'Processes {batch_size * batch_processed} EVA submitted variants', file=sys.stderr)
-        rs_with_no_entity = find_rs_entity_not_exist(
-            mongo_db, ['clusteredVariantEntity', 'dbsnpClusteredVariantEntity'], rs_list, assembly_accession
-        )
-        if rs_with_no_entity:
-            for rs in rs_with_no_entity:
-                print(f'Found a EVA submitted variant entity referencing rs {rs} but no clustered variant entity was found for it.')
-    batch_processed = 0
+        if rs_list:
+            nb_processed += len(rs_list)
+            print(f'Processes {nb_processed} EVA submitted variants', file=sys.stderr)
+            rs_with_no_entity = find_rs_entity_not_exist(
+                mongo_db, ['clusteredVariantEntity', 'dbsnpClusteredVariantEntity'], rs_list, assembly_accession
+            )
+            if rs_with_no_entity:
+                for rs in rs_with_no_entity:
+                    print(f'Found a EVA submitted variant entity referencing rs {rs} but no clustered variant entity was found for it.')
+    nb_processed = 0
     for rs_list in find_rs_references_in_ss_collection(mongo_db, 'dbsnpSubmittedVariantEntity', assembly_accession, batch_size):
-        batch_processed += 1
-        print(f'Processes {batch_size * batch_processed} DBSNP submitted variants', file=sys.stderr)
-        rs_with_no_entity = find_rs_entity_not_exist(
-            mongo_db, ['dbsnpClusteredVariantEntity', 'clusteredVariantEntity'], rs_list, assembly_accession
-        )
-        if rs_with_no_entity:
-            for rs in rs_with_no_entity:
-                print(f'Found a DBSNP submitted variant entity referencing rs {rs} but no clustered variant entity was found for it.')
+        if rs_list:
+            nb_processed += len(rs_list)
+            print(f'Processes {nb_processed} DBSNP submitted variants', file=sys.stderr)
+            rs_with_no_entity = find_rs_entity_not_exist(
+                mongo_db, ['dbsnpClusteredVariantEntity', 'clusteredVariantEntity'], rs_list, assembly_accession
+            )
+            if rs_with_no_entity:
+                for rs in rs_with_no_entity:
+                    print(f'Found a DBSNP submitted variant entity referencing rs {rs} but no clustered variant entity was found for it.')
 
 
 if __name__ == '__main__':
