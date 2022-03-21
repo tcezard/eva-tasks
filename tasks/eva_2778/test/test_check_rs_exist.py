@@ -4,11 +4,8 @@ import builtins
 import os
 import hashlib
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
-from pymongo import MongoClient
 from unittest import TestCase
 from unittest.mock import patch
-
-import logging
 
 from tasks.eva_2778.check_rs_exist import find_rs_entity_not_exist_in_collection, find_rs_references_in_ss_collection, \
     check_rs_for_assembly
@@ -16,7 +13,6 @@ from tasks.eva_2778.check_rs_exist import find_rs_entity_not_exist_in_collection
 
 def calculate_id(rs):
     h = hashlib.sha1()
-    keys = ['seq', 'study', 'contig', 'start', 'ref', 'alt']
     h.update(str(rs).encode())
     return h.hexdigest().upper()
 
