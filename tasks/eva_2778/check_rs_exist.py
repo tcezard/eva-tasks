@@ -2,13 +2,15 @@ import argparse
 import sys
 
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
+from pymongo.read_concern import ReadConcern
 
 
 def find_rs_entity_not_exist_in_collection(mongo_db, collection_name, rsid_list, assembly_accession):
     cve_collection = mongo_db.mongo_handle[mongo_db.db_name][collection_name]
     filter_criteria = {'asm': assembly_accession, 'accession': {'$in': rsid_list}}
     projection = {'accession': 1}
-    cursor = cve_collection.find(filter_criteria, projection, no_cursor_timeout=True)
+    cursor = cve_collection.with_options(read_concern=ReadConcern("majority"))\
+                           .find(filter_criteria, projection, no_cursor_timeout=True)
     accession_found = [record['accession'] for record in cursor]
     remaining_rsids = set(rsid_list).difference(accession_found)
     return list(remaining_rsids)
@@ -25,7 +27,8 @@ def find_rs_references_in_ss_collection(mongo_db, collection_name, assembly_acce
     sve_collection = mongo_db.mongo_handle[mongo_db.db_name][collection_name]
     filter_criteria = {'seq': assembly_accession, 'rs': {'$exists': True}}
     projection = {'rs': 1}
-    cursor = sve_collection.find(filter_criteria, projection, no_cursor_timeout=True)
+    cursor = sve_collection.with_options(read_concern=ReadConcern("majority"))\
+                           .find(filter_criteria, projection, no_cursor_timeout=True)
     rs_list = []
     for record in cursor:
         rs_list.append(record['rs'])

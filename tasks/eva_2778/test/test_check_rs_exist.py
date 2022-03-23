@@ -32,7 +32,6 @@ class TestCheckRsExist(TestCase):
         self.connection_handle = self.mongo_db.mongo_handle
 
         # Accessioning db
-
         submitted_variants = [{
             "_id": calculate_id(rs),
             "seq": "GCA_000181335.4",
@@ -69,7 +68,6 @@ class TestCheckRsExist(TestCase):
         missing_rsids = find_rs_entity_not_exist_in_collection(self.mongo_db, self.clustered_variants_collection,
                                                                rsid_list=[1000], assembly_accession='GCA_000181335.4')
         assert missing_rsids == []
-
         missing_rsids = find_rs_entity_not_exist_in_collection(self.mongo_db, self.clustered_variants_collection,
                                                                rsid_list=[1010], assembly_accession='GCA_000181335.4')
         assert missing_rsids == [1010]
