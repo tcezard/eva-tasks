@@ -1,0 +1,92 @@
+import argparse
+import hashlib
+import traceback
+
+import pymongo
+from ebi_eva_common_pyutils.logger import logging_config
+from ebi_eva_common_pyutils.mongodb import MongoDatabase
+from pymongo import WriteConcern
+from pymongo.read_concern import ReadConcern
+
+logger = logging_config.get_logger(__name__)
+logging_config.add_stdout_handler()
+
+
+def get_SHA1(text):
+    h = hashlib.sha1()
+    h.update(text.encode())
+    return h.hexdigest().upper()
+
+
+def get_submitted_SHA1(variant_rec):
+    """Calculate the SHA1 digest from the seq, study, contig, start, ref, and alt attributes of the variant"""
+    keys = ['seq', 'study', 'contig', 'start', 'ref', 'alt']
+    return get_SHA1('_'.join([str(variant_rec[key]) for key in keys]))
+
+
+def find_documents_in_batch(mongo_source, collection_name, filter_criteria, batch_size=1000):
+    collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
+    cursor = collection.with_options(read_concern=ReadConcern("majority")) \
+                       .find(filter_criteria, no_cursor_timeout=True)
+    records = []
+    for result in cursor:
+        records.append(result)
+        if len(records) == batch_size:
+            yield records
+            records = []
+    yield records
+
+def replace_with_correct_assembly(mongo_source, filter_criteria, correction_map):
+    correction_map = {'seq': 'GCA_015227675.2'}
+    filter_criteria = {'seq': 'GCA_015227675.1'}
+
+    sve_collection = mongo_source.mongo_handle[mongo_source.db_name]["submittedVariantEntity"]
+    cursor = sve_collection.with_options(read_concern=ReadConcern("majority")) \
+                           .find(filter_criteria, no_cursor_timeout=True)
+    insert_statements = []
+    drop_statements = []
+    number_of_variants_to_replace = 1
+    total_inserted, total_dropped = 0, 0
+    try:
+        for variant in cursor:
+            original_id = get_SHA1(variant)
+            assert variant['_id'] == original_id, "Original id is different from the one calculated %s != %s" % (
+                variant['_id'], original_id)
+            for key in correction_map:
+                variant[key] = correction_map[key]
+            variant['_id'] = get_submitted_SHA1(variant)
+            insert_statements.append(pymongo.InsertOne(variant))
+            drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
+        result_insert = sve_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
+                                      .bulk_write(requests=insert_statements, ordered=False)
+        total_inserted += result_insert.inserted_count
+        result_drop = sve_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+            .bulk_write(requests=drop_statements, ordered=False)
+        total_dropped += result_drop.deleted_count
+        logger.info('%s / %s new documents inserted' % (total_inserted, number_of_variants_to_replace))
+        logger.info('%s / %s old documents dropped' % (total_dropped, number_of_variants_to_replace))
+    except Exception as e:
+        print(traceback.format_exc())
+        raise e
+    finally:
+        cursor.close()
+    return total_inserted
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Correct assembly error in study PRJEB36115 by replacing assembly PRJEB36115 with GCA_000002315.5',
+        add_help=False)
+    parser.add_argument("--mongo-source-uri",
+                        help="Mongo Source URI (ex: mongodb://user:@mongos-source-host:27017/admin)", required=True)
+    parser.add_argument("--mongo-source-secrets-file",
+                        help="Full path to the Mongo Source secrets file (ex: /path/to/mongo/source/secret)",
+                        required=True)
+    args = parser.parse_args()
+    mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
+                                 db_name="eva_accession_sharded")
+    replace_with_correct_assembly(mongo_source)
+
+
+if __name__ == "__main__":
+    main()
