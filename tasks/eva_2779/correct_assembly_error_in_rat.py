@@ -89,7 +89,6 @@ def update_operation_entities(mongo_source, collection_name, id_creation_func, f
             update_statements = []
             for variant in batch_of_variant:
                 filter_dict = {'_id': variant['_id']}
-                filter_dict.update(filter_criteria)
                 for key in correction_map:
                     if callable(correction_map[key]):
                         variant[key] = correction_map[key](variant[key])
@@ -116,136 +115,105 @@ def update_operation_entities(mongo_source, collection_name, id_creation_func, f
 
 def replace_variant_entities(mongo_source, batch_size):
     # submitted variants on MT chromosome
-    replace_document_with_correct_information(
-        mongo_source, "submittedVariantEntity", get_submitted_SHA1,
-        {'seq': 'GCA_015227675.1', 'contig': 'CM026996.1'},
-        {'seq': 'GCA_015227675.2', 'contig': 'AY172581.1'},
-        batch_size
-    )
-    replace_document_with_correct_information(
-        mongo_source, "dbsnpSubmittedVariantEntity", get_submitted_SHA1,
-        {'seq': 'GCA_015227675.1', 'contig': 'CM026996.1'},
-        {'seq': 'GCA_015227675.2', 'contig': 'AY172581.1'},
-        batch_size
-    )
+    source_asm = 'GCA_015227675.1'
+    target_asm = 'GCA_015227675.2'
+    source_mt = 'CM026996.1'
+    target_mt = 'AY172581.1'
+    filter_sve_with_MT = {'seq': source_asm, 'contig': source_mt}
+    filter_sve_without_MT = {'seq': source_asm}
+    change_sve_with_MT = {'seq': target_asm, 'contig': target_mt}
+    change_sve_without_MT = {'seq': target_asm}
+    submitted_variant_collections = ["submittedVariantEntity", "dbsnpSubmittedVariantEntity"]
+
+    # submitted variants on MT chromosome
+    for collection in submitted_variant_collections:
+        replace_document_with_correct_information(
+            mongo_source, collection, get_submitted_SHA1,
+            filter_sve_with_MT, change_sve_with_MT, batch_size
+        )
 
     # submitted variants Not on MT chromosome
-    replace_document_with_correct_information(
-        mongo_source, "submittedVariantEntity", get_submitted_SHA1, {'seq': 'GCA_015227675.1'},
-        {'seq': 'GCA_015227675.2'}, batch_size
-    )
-    replace_document_with_correct_information(
-        mongo_source, "dbsnpSubmittedVariantEntity", get_submitted_SHA1, {'seq': 'GCA_015227675.1'},
-        {'seq': 'GCA_015227675.2'}, batch_size
-    )
+    for collection in submitted_variant_collections:
+        replace_document_with_correct_information(
+            mongo_source, collection, get_submitted_SHA1,
+            filter_sve_without_MT, change_sve_without_MT, batch_size
+        )
 
+    filter_cve_with_MT = {'asm': source_asm, 'contig': source_mt}
+    filter_cve_without_MT = {'asm': source_asm}
+    change_cve_with_MT = {'asm': target_asm, 'contig': target_mt}
+    change_cve_without_MT = {'asm': target_asm}
+    clustered_variant_collections = ["submittedVariantEntity", "dbsnpSubmittedVariantEntity"]
     # Clustered variants on MT chromosome
-    replace_document_with_correct_information(
-        mongo_source, "clusteredVariantEntity", get_clustered_SHA1,
-        {'asm': 'GCA_015227675.1', 'contig': 'CM026996.1'},
-        {'asm': 'GCA_015227675.2', 'contig': 'AY172581.1'},
-        batch_size
-    )
-    replace_document_with_correct_information(
-        mongo_source, "dbsnpClusteredVariantEntity", get_clustered_SHA1,
-        {'asm': 'GCA_015227675.1', 'contig': 'CM026996.1'},
-        {'asm': 'GCA_015227675.2', 'contig': 'AY172581.1'},
-        batch_size
-    )
+    for collection in clustered_variant_collections:
+        replace_document_with_correct_information(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cve_with_MT, change_cve_with_MT, batch_size
+        )
 
     # Clustered variants Not on MT chromosome
-    replace_document_with_correct_information(
-        mongo_source, "clusteredVariantEntity", get_clustered_SHA1, {'asm': 'GCA_015227675.1'},
-        {'asm': 'GCA_015227675.2'}, batch_size
-    )
-    replace_document_with_correct_information(
-        mongo_source, "dbsnpClusteredVariantEntity", get_clustered_SHA1, {'asm': 'GCA_015227675.1'},
-        {'asm': 'GCA_015227675.2'}, batch_size
-    )
+    for collection in clustered_variant_collections:
+        replace_document_with_correct_information(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cve_without_MT, change_cve_without_MT, batch_size
+        )
+
+    filter_cvoe_with_merge_MT = {'inactiveObjects.asm': source_asm, 'inactiveObjects.contig': source_mt, 'eventType': 'MERGED'}
+    filter_cvoe_with_merge_without_MT = {'inactiveObjects.asm': source_asm, 'eventType': 'MERGED'}
+    change_cvoe_with_merge_MT = {'inactiveObjects.asm': target_asm, 'inactiveObjects.contig': target_mt, 'reason': lambda x: x.replace(source_asm, target_asm)}
+    change_cvoe_with_merge_without_MT = {'inactiveObjects.asm': target_asm, 'reason': lambda x: x.replace(source_asm, target_asm)}
+    clustered_variant_operation_collections = ['clusteredVariantOperationEntity', 'dbsnpClusteredVariantOperationEntity']
 
     # MERGED Operations on MT chromosomes
-    update_operation_entities(
-        mongo_source, 'dbsnpClusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'MERGED'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1', 'reason': lambda x: x.replace('GCA_015227675.1', 'GCA_015227675.2')},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'clusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'MERGED'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1', 'reason': lambda x: x.replace('GCA_015227675.1', 'GCA_015227675.2')},
-        batch_size
-    )
+    for collection in clustered_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cvoe_with_merge_MT, change_cvoe_with_merge_MT, batch_size
+        )
 
     # MERGED Operations Not on MT chromosomes
-    update_operation_entities(
-        mongo_source, 'dbsnpClusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'eventType': 'MERGED'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'reason': lambda x: x.replace('GCA_015227675.1', 'GCA_015227675.2')},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'clusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'eventType': 'MERGED'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'reason': lambda x: x.replace('GCA_015227675.1', 'GCA_015227675.2')},
-        batch_size
-    )
+    for collection in clustered_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cvoe_with_merge_without_MT, change_cvoe_with_merge_without_MT, batch_size
+        )
 
+    filter_cvoe_with_MT = {'inactiveObjects.asm': source_asm, 'inactiveObjects.contig': source_mt}
+    filter_cvoe_without_MT = {'inactiveObjects.asm': source_asm}
+    change_cvoe_with_MT = {'inactiveObjects.asm': target_asm, 'inactiveObjects.contig': target_mt}
+    change_cvoe_without_MT = {'inactiveObjects.asm': target_asm}
     # SPLIT Operations on MT chromosomes
-    update_operation_entities(
-        mongo_source, 'dbsnpClusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'RS_SPLIT'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1'},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'clusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'RS_SPLIT'},
-        {'inactiveObjects.asm': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1'},
-        batch_size
-    )
+    for collection in clustered_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cvoe_with_MT, change_cvoe_with_MT, batch_size
+        )
 
     # SPLIT Operations Not on MT chromosomes
-    update_operation_entities(
-        mongo_source, 'dbsnpClusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'eventType': 'RS_SPLIT'},
-        {'inactiveObjects.asm': 'GCA_015227675.2'},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'clusteredVariantOperationEntity', get_clustered_SHA1,
-        {'inactiveObjects.asm': 'GCA_015227675.1', 'eventType': 'RS_SPLIT'},
-        {'inactiveObjects.asm': 'GCA_015227675.2'},
-        batch_size
-    )
+    for collection in clustered_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_clustered_SHA1,
+            filter_cvoe_without_MT, change_cvoe_without_MT, batch_size
+        )
 
-    # UPDATE Operations on MT chromosome
-    update_operation_entities(
-        mongo_source, 'dbsnpSubmittedVariantOperationEntity', get_submitted_SHA1,
-        {'inactiveObjects.seq': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'UPDATED'},
-        {'inactiveObjects.seq': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1'},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'submittedVariantOperationEntity', get_submitted_SHA1,
-        {'inactiveObjects.seq': 'GCA_015227675.1', 'inactiveObjects.contig': 'CM026996.1', 'eventType': 'UPDATED'},
-        {'inactiveObjects.seq': 'GCA_015227675.2', 'inactiveObjects.contig': 'AY172581.1'},
-        batch_size
-    )
+    filter_svoe_with_merge_MT = {'inactiveObjects.seq': source_asm, 'inactiveObjects.contig': source_mt, 'eventType': 'UPDATED'}
+    filter_svoe_with_merge_without_MT = {'inactiveObjects.seq': source_asm, 'eventType': 'UPDATED'}
+    change_svoe_with_merge_MT = {'inactiveObjects.seq': target_asm, 'inactiveObjects.contig': target_mt}
+    change_svoe_with_merge_without_MT = {'inactiveObjects.seq': target_asm}
+    submitted_variant_operation_collections = ['submittedVariantOperationEntity', 'dbsnpSubmittedVariantOperationEntity']
+    # UPDATED Operations on MT chromosome
+    for collection in submitted_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_submitted_SHA1,
+            filter_svoe_with_merge_MT, change_svoe_with_merge_MT, batch_size
+        )
 
     # UPDATE Operations Not on MT chromosome
-    update_operation_entities(
-        mongo_source, 'dbsnpSubmittedVariantOperationEntity', get_submitted_SHA1,
-        {'inactiveObjects.seq': 'GCA_015227675.1', 'eventType': 'UPDATED'},
-        {'inactiveObjects.seq': 'GCA_015227675.2'},
-        batch_size
-    )
-    update_operation_entities(
-        mongo_source, 'submittedVariantOperationEntity', get_submitted_SHA1,
-        {'inactiveObjects.seq': 'GCA_015227675.1', 'eventType': 'UPDATED'},
-        {'inactiveObjects.seq': 'GCA_015227675.2'},
-        batch_size
-    )
+    for collection in submitted_variant_operation_collections:
+        update_operation_entities(
+            mongo_source, collection, get_submitted_SHA1,
+            filter_svoe_with_merge_without_MT, change_svoe_with_merge_without_MT, batch_size
+        )
 
 
 def main():
