@@ -22,16 +22,23 @@ from ebi_eva_common_pyutils.logger import logging_config
 logger = logging_config.get_logger(__name__)
 
 
-def prepare_processed_analyses_file(project, batch_size, processed_file_directory, target_file):
+def prepare_processed_analyses_file(project, batch_size, processed_file_directory, target_file, field):
     total_analyses = total_analyses_in_project(project)
     logger.info(f"total analyses in project {project}: {total_analyses}")
 
-    processed_analyses = get_processed_analyses_files(processed_file_directory)
-    logger.info(f"no of processed analyses : {len(processed_analyses)}")
-    processed_files_with_no_analyses = processed_analyses.copy()
+    processed_files = get_processed_files(processed_file_directory)
+    logger.info(f"no of processed files in {processed_file_directory} : {len(processed_files)}")
+    processed_files_with_no_analyses_in_ena = processed_files.copy()
 
+    processed_analyses_in_target_file = set()
     if not os.path.exists(target_file):
         logger.info(f"{target_file} does not exist and will be created")
+    else:
+        logger.info(f"{target_file} file exists, reading already processed analyses captured in file")
+        with open(target_file, 'r') as f:
+            for line in f:
+                processed_analyses_in_target_file.add(line.split(',', 1)[0])
+        logger.info(f"{len(processed_analyses_in_target_file)} processed analyses read from file")
 
     with open(target_file, 'a') as f:
         offset = 0
@@ -40,14 +47,16 @@ def prepare_processed_analyses_file(project, batch_size, processed_file_director
             logger.info(f"Fetching ENA analyses from {offset} to  {offset + limit} (offset={offset}, limit={limit})")
             analyses_from_ena = get_analyses_from_ena(project, offset, limit)
             for analysis in analyses_from_ena:
-                if analysis['run_ref'] in processed_analyses or analysis['analysis_accession'] in processed_analyses:
-                    f.write(f"{analysis['analysis_accession']},{analysis['submitted_ftp']}\n")
-                    processed_files_with_no_analyses.discard(analysis['run_ref'])
+                if analysis[field] in processed_files:
+                    processed_files_with_no_analyses_in_ena.discard(analysis[field])
+                    if analysis['analysis_accession'] not in processed_analyses_in_target_file:
+                        f.write(f"{analysis['analysis_accession']},{analysis['submitted_ftp']}\n")
 
             offset = offset + limit
 
     print(f"Processed files for which no analyses were found in ENA : "
-          f"total count = {len(processed_files_with_no_analyses)}, files = {processed_files_with_no_analyses}")
+          f"total count = {len(processed_files_with_no_analyses_in_ena)}, "
+          f"files = {processed_files_with_no_analyses_in_ena}")
 
 
 def total_analyses_in_project(project):
@@ -59,17 +68,17 @@ def total_analyses_in_project(project):
     return response.json()
 
 
-def get_processed_analyses_files(processed_file_directory):
+def get_processed_files(processed_file_directory):
     processed_analyses = set()
     for file in os.listdir(processed_file_directory):
         file_path = os.path.join(processed_file_directory, file)
         if os.path.islink(file_path):
             orig_path = os.readlink(file_path)
             logger.info(f"{file_path} is a symlink, reading files from original path {orig_path}")
-            processed_analyses.update(get_processed_analyses_files(orig_path))
+            processed_analyses.update(get_processed_files(orig_path))
         elif os.path.isdir(file_path):
             logger.info(f"{file_path} is a directory, reading files from sub-directories")
-            processed_analyses.update(get_processed_analyses_files(file_path))
+            processed_analyses.update(get_processed_files(file_path))
         else:
             if (file.endswith("_filtered_vcf.gz") or file.endswith(".vcf") or file.endswith(".vcf.gz")) \
                     and not file.startswith("concat"):
@@ -98,11 +107,14 @@ def main():
     parser.add_argument("--processed-file-directory", required=True,
                         help="full path to the directory where all the processed files are present")
     parser.add_argument("--target-file", required=True, help="full path to the target file that will be created")
+    parser.add_argument("--field", choices=['run_ref', 'analysis_accession'], required=True,
+                        help="field whose names has been used as file name and should be used for lookup")
 
     args = parser.parse_args()
     logging_config.add_stdout_handler()
 
-    prepare_processed_analyses_file(args.project, args.batch_size, args.processed_file_directory, args.target_file)
+    prepare_processed_analyses_file(args.project, args.batch_size, args.processed_file_directory, args.target_file,
+                                    args.field)
 
 
 if __name__ == "__main__":
