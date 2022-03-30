@@ -70,9 +70,11 @@ def replace_document_with_correct_information(mongo_source, collection_name, id_
             result_insert = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
                                       .bulk_write(requests=insert_statements, ordered=False)
             total_inserted += result_insert.inserted_count
+            logger.debug(f'{result_insert.inserted_count} new documents inserted in {collection_name}')
             result_drop = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
                                     .bulk_write(requests=drop_statements, ordered=False)
             total_dropped += result_drop.deleted_count
+            logger.debug(f'{result_drop.deleted_count} old documents dropped in {collection_name}')
         logger.info(f'{total_inserted} new documents inserted in {collection_name}')
         logger.info(f'{total_dropped} old documents dropped in {collection_name}')
     except Exception as e:
@@ -106,6 +108,7 @@ def update_operation_entities(mongo_source, collection_name, id_creation_func, f
             result_update = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
                 .bulk_write(requests=update_statements, ordered=False)
             total_updated += result_update.modified_count
+            logger.debug(f'{result_update.modified_count} documents updated in {collection_name}')
         logger.info(f'{total_updated} documents updated in {collection_name}')
     except Exception as e:
         print(traceback.format_exc())
@@ -125,6 +128,7 @@ def replace_variant_entities(mongo_source, batch_size):
     submitted_variant_collections = ["submittedVariantEntity", "dbsnpSubmittedVariantEntity"]
 
     # submitted variants on MT chromosome
+    logger.info(f'Change submitted variants on MT chromosome')
     for collection in submitted_variant_collections:
         replace_document_with_correct_information(
             mongo_source, collection, get_submitted_SHA1,
@@ -132,6 +136,7 @@ def replace_variant_entities(mongo_source, batch_size):
         )
 
     # submitted variants Not on MT chromosome
+    logger.info(f'Change submitted variants Not on MT chromosome')
     for collection in submitted_variant_collections:
         replace_document_with_correct_information(
             mongo_source, collection, get_submitted_SHA1,
@@ -144,6 +149,7 @@ def replace_variant_entities(mongo_source, batch_size):
     change_cve_without_MT = {'asm': target_asm}
     clustered_variant_collections = ["clusteredVariantEntity", "dbsnpClusteredVariantEntity"]
     # Clustered variants on MT chromosome
+    logger.info(f'Change Clustered variants on MT chromosome')
     for collection in clustered_variant_collections:
         replace_document_with_correct_information(
             mongo_source, collection, get_clustered_SHA1,
@@ -151,6 +157,7 @@ def replace_variant_entities(mongo_source, batch_size):
         )
 
     # Clustered variants Not on MT chromosome
+    logger.info(f'Change Clustered variants Not on MT chromosome')
     for collection in clustered_variant_collections:
         replace_document_with_correct_information(
             mongo_source, collection, get_clustered_SHA1,
@@ -164,6 +171,7 @@ def replace_variant_entities(mongo_source, batch_size):
     clustered_variant_operation_collections = ['clusteredVariantOperationEntity', 'dbsnpClusteredVariantOperationEntity']
 
     # MERGED Operations on MT chromosomes
+    logger.info(f'Change MERGED Operations on MT chromosomes')
     for collection in clustered_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_clustered_SHA1,
@@ -171,6 +179,7 @@ def replace_variant_entities(mongo_source, batch_size):
         )
 
     # MERGED Operations Not on MT chromosomes
+    logger.info(f'Change MERGED Operations Not on MT chromosomes')
     for collection in clustered_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_clustered_SHA1,
@@ -182,6 +191,7 @@ def replace_variant_entities(mongo_source, batch_size):
     change_cvoe_with_MT = {'inactiveObjects.asm': target_asm, 'inactiveObjects.contig': target_mt}
     change_cvoe_without_MT = {'inactiveObjects.asm': target_asm}
     # SPLIT Operations on MT chromosomes
+    logger.info(f'Change SPLIT Operations on MT chromosomes')
     for collection in clustered_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_clustered_SHA1,
@@ -189,6 +199,7 @@ def replace_variant_entities(mongo_source, batch_size):
         )
 
     # SPLIT Operations Not on MT chromosomes
+    logger.info(f'Change SPLIT Operations Not on MT chromosomes')
     for collection in clustered_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_clustered_SHA1,
@@ -201,13 +212,15 @@ def replace_variant_entities(mongo_source, batch_size):
     change_svoe_with_merge_without_MT = {'inactiveObjects.seq': target_asm}
     submitted_variant_operation_collections = ['submittedVariantOperationEntity', 'dbsnpSubmittedVariantOperationEntity']
     # UPDATED Operations on MT chromosome
+    logger.info(f'Change UPDATED Operations on MT chromosome')
     for collection in submitted_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_submitted_SHA1,
             filter_svoe_with_merge_MT, change_svoe_with_merge_MT, batch_size
         )
 
-    # UPDATE Operations Not on MT chromosome
+    # UPDATED Operations Not on MT chromosome
+    logger.info(f'Change UPDATED Operations Not on MT chromosome')
     for collection in submitted_variant_operation_collections:
         update_operation_entities(
             mongo_source, collection, get_submitted_SHA1,
