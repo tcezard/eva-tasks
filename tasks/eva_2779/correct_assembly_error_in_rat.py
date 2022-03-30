@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import logging
 import traceback
 
 import pymongo
@@ -9,7 +10,6 @@ from pymongo import WriteConcern
 from pymongo.read_concern import ReadConcern
 
 logger = logging_config.get_logger(__name__)
-logging_config.add_stdout_handler()
 
 
 def get_SHA1(text):
@@ -245,11 +245,18 @@ def main():
     parser.add_argument("--mongo-source-secrets-file",
                         help="Full path to the Mongo Source secrets file (ex: /path/to/mongo/source/secret)",
                         required=True)
-    parser.add_argument("--batch-size", help="number of document processed at once", required=False, default=1000)
+    parser.add_argument("--batch-size", help="number of document processed at once", required=False, type=int, default=1000)
+    parser.add_argument("--debug", help="Set the script to output debug message", default=False, action='store_true')
     args = parser.parse_args()
+
+    if args.debug:
+        logging_config.add_stdout_handler(logging.DEBUG)
+    else:
+        logging_config.add_stdout_handler()
+
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva_accession_sharded")
-    replace_variant_entities(mongo_source, batch_size=args.batch_size)
+    replace_variant_entities(mongo_source, batch_size=int(args.batch_size))
     del mongo_source
 
 
