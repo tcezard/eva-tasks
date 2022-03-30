@@ -114,7 +114,6 @@ def update_operation_entities(mongo_source, collection_name, id_creation_func, f
 
 
 def replace_variant_entities(mongo_source, batch_size):
-    # submitted variants on MT chromosome
     source_asm = 'GCA_015227675.1'
     target_asm = 'GCA_015227675.2'
     source_mt = 'CM026996.1'
@@ -143,7 +142,7 @@ def replace_variant_entities(mongo_source, batch_size):
     filter_cve_without_MT = {'asm': source_asm}
     change_cve_with_MT = {'asm': target_asm, 'contig': target_mt}
     change_cve_without_MT = {'asm': target_asm}
-    clustered_variant_collections = ["submittedVariantEntity", "dbsnpSubmittedVariantEntity"]
+    clustered_variant_collections = ["clusteredVariantEntity", "dbsnpClusteredVariantEntity"]
     # Clustered variants on MT chromosome
     for collection in clustered_variant_collections:
         replace_document_with_correct_information(

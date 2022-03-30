@@ -13,7 +13,7 @@ def calculate_id(rs):
     return h.hexdigest().upper()
 
 
-class TestCorrectAsseblyError(TestCase):
+class TestCorrectAssemblyError(TestCase):
     def setUp(self) -> None:
         host = 'localhost'
         port = 27017
