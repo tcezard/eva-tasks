@@ -60,14 +60,14 @@ class TestCorrectAssemblyError(TestCase):
             "reason": "After remapping to GCA_015227675.1, RS IDs mapped to the same locus.",
             "inactiveObjects": [
                 {
-                        "asm": "GCA_015227675.1",
-                        "tax": 10116,
-                        "contig": "CM026996.1",
-                        "start": 39058078,
-                        "type": "SNV",
-                        "hashedMessage": "AF611B8ED3BE813B427AD7E48D266D3DB5F013B8",
-                        "accession": 198834536,
-                        "version": 1,
+                    "asm": "GCA_015227675.1",
+                    "tax": 10116,
+                    "contig": "CM026996.1",
+                    "start": 39058078,
+                    "type": "SNV",
+                    "hashedMessage": "AF611B8ED3BE813B427AD7E48D266D3DB5F013B8",
+                    "accession": 198834536,
+                    "version": 1,
                 },
                 {
                     "asm": "GCA_015227675.1",
@@ -102,7 +102,7 @@ class TestCorrectAssemblyError(TestCase):
             5
         )
         cursor = self.connection_handle[self.accession_db][self.submitted_variants_collection].find()
-        document = cursor.__next__()
+        document = next(cursor)
         assert document['seq'] == 'GCA_015227675.2'
         assert document['contig'] == 'AY172581.1'
 
@@ -115,6 +115,7 @@ class TestCorrectAssemblyError(TestCase):
             5
         )
         cursor = self.connection_handle[self.accession_db][self.clustered_variants_operation_collection].find()
-        document = cursor.__next__()
+        document = next(cursor)
         assert document['reason'] == 'After remapping to GCA_015227675.2, RS IDs mapped to the same locus.'
         assert document['inactiveObjects'][0]['asm'] == 'GCA_015227675.2'
+        assert document['inactiveObjects'][0]['hashedMessage'] == '0C862AF547775CACD6105C7518494EBEF19FD707'
