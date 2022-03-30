@@ -67,14 +67,19 @@ def replace_document_with_correct_information(mongo_source, collection_name, id_
                 variant['_id'] = id_creation_func(variant)
                 insert_statements.append(pymongo.InsertOne(variant))
                 drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
-            result_insert = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
-                                      .bulk_write(requests=insert_statements, ordered=False)
-            total_inserted += result_insert.inserted_count
-            logger.debug(f'{result_insert.inserted_count} new documents inserted in {collection_name}')
-            result_drop = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
-                                    .bulk_write(requests=drop_statements, ordered=False)
-            total_dropped += result_drop.deleted_count
-            logger.debug(f'{result_drop.deleted_count} old documents dropped in {collection_name}')
+            if insert_statements and drop_statements:
+                result_insert = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
+                                          .bulk_write(requests=insert_statements, ordered=False)
+                total_inserted += result_insert.inserted_count
+                logger.debug(f'{result_insert.inserted_count} new documents inserted in {collection_name}')
+                result_drop = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+                                        .bulk_write(requests=drop_statements, ordered=False)
+                total_dropped += result_drop.deleted_count
+                logger.debug(f'{result_drop.deleted_count} old documents dropped in {collection_name}')
+            else:
+                logger.warning(f'{len(insert_statements)} insert statements and {len(drop_statements)} drop statements '
+                               f'created. Skipping.')
+
         logger.info(f'{total_inserted} new documents inserted in {collection_name}')
         logger.info(f'{total_dropped} old documents dropped in {collection_name}')
     except Exception as e:
@@ -105,10 +110,13 @@ def update_operation_entities(mongo_source, collection_name, id_creation_func, f
                     inactive['hashedMessage'] = id_creation_func(inactive)
                 variant.pop('_id')
                 update_statements.append(pymongo.ReplaceOne(filter_dict, variant))
-            result_update = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
-                .bulk_write(requests=update_statements, ordered=False)
-            total_updated += result_update.modified_count
-            logger.debug(f'{result_update.modified_count} documents updated in {collection_name}')
+            if update_statements:
+                result_update = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+                    .bulk_write(requests=update_statements, ordered=False)
+                total_updated += result_update.modified_count
+                logger.debug(f'{result_update.modified_count} documents updated in {collection_name}')
+            else:
+                logger.warning(f'{len(update_statements)} update statements created. Skipping.')
         logger.info(f'{total_updated} documents updated in {collection_name}')
     except Exception as e:
         print(traceback.format_exc())
@@ -242,6 +250,7 @@ def main():
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva_accession_sharded")
     replace_variant_entities(mongo_source, batch_size=args.batch_size)
+    del mongo_source
 
 
 if __name__ == "__main__":
