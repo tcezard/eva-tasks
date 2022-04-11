@@ -7,6 +7,7 @@ import pymongo
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from pymongo import WriteConcern
+from pymongo.errors import BulkWriteError
 from pymongo.read_concern import ReadConcern
 
 logger = logging_config.get_logger(__name__)
@@ -68,10 +69,23 @@ def replace_document_with_correct_information(mongo_source, collection_name, id_
                 insert_statements.append(pymongo.InsertOne(variant))
                 drop_statements.append(pymongo.DeleteOne({'_id': original_id}))
             if insert_statements and drop_statements:
-                result_insert = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
-                                          .bulk_write(requests=insert_statements, ordered=False)
-                total_inserted += result_insert.inserted_count
-                logger.debug(f'{result_insert.inserted_count} new documents inserted in {collection_name}')
+                try:
+                    result_insert = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000))\
+                                              .bulk_write(requests=insert_statements, ordered=False)
+                    total_inserted += result_insert.inserted_count
+                    logger.debug(f'{result_insert.inserted_count} new documents inserted in {collection_name}')
+                except BulkWriteError as bulk_error:
+                    error_code_names = set([error.get('codeName') for error in bulk_error.details.get('writeErrors')])
+                    if len(error_code_names) == 1 and error_code_names.pop() == 'DuplicateKey':
+                        # This error occurs because we were able to create the entry in a previous run but not able to
+                        # remove the original variant yet
+                        total_inserted += bulk_error.details.get('nInserted')
+                        logger.debug(f"Duplicate key error found while inserting but still inserted "
+                                     f"{bulk_error.details.get('nInserted')} new documents inserted "
+                                     f"in {collection_name}")
+                    else:
+                        raise bulk_error
+
                 result_drop = collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
                                         .bulk_write(requests=drop_statements, ordered=False)
                 total_dropped += result_drop.deleted_count
