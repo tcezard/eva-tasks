@@ -187,7 +187,8 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     # Updating the final output columns
     global all_columns
     all_columns.extend(keys)
-    all_columns = list(dict.fromkeys(all_columns))
+    all_columns = list(dict.fromkeys(all_columns)
+    all_columns.sort()
 
 
 def gather_counts_per_file(filename):
