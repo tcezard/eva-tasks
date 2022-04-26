@@ -16,7 +16,6 @@
 import os
 import yaml
 import argparse
-import csv
 import xlsxwriter
 from string import ascii_uppercase
 import pandas as pd
@@ -36,12 +35,15 @@ all_assembly=[]
 
 def generate_output(remapping_root_path, output_path):
     """
-    This function is used to store the ful list of taxonomy ids and assembly accessions
+    This function is used to store the full list of taxonomy ids and assembly accessions along with generation
+    of the output excel containing all the stats gathered from the yml files
+
     Input: It accepts the remapping full path from the user along with the output path
            for storing the results for subsequent analysis
+
     Output: It calls gather_counts_per_tax_per_assembly() function
-           for a particular taxonomy id and a particular assembly of that taxonomy and generate an spreadsheet
-           containing the statistics
+           for a particular taxonomy id and a particular assembly of that taxonomy and generate a spreadsheet
+           containing the statistics of remapping and various reasons of remapping failures for different steps
     """
 
     # Collecting the tax_ids from the input path
@@ -57,13 +59,13 @@ def generate_output(remapping_root_path, output_path):
         tax_assembly[tax_id] = assembly_accession
 
     # Collect statistics for each taxonomy and each assembly
-    for key, value in tax_assembly.items():
-        for val in range(len(value)):
-            gather_counts_per_tax_per_assembly(remapping_root_path, key, value[val])
+    for taxid, assembly in tax_assembly.items():
+        for val in range(len(assembly)):
+            gather_counts_per_tax_per_assembly(remapping_root_path, taxid, assembly[val])
 
     # Generate output file from the statistics gathered
 
-    # Initializing the excel workbook
+    # Initializing the Excel workbook
     workbook = xlsxwriter.Workbook(output_path + '/Gather_Stats.xlsx')
     worksheet = workbook.add_worksheet('All counts.xlsx')
 
@@ -79,12 +81,12 @@ def generate_output(remapping_root_path, output_path):
     # Considering maximum reasons of failure to be restricted to 26*3
     letters = list(ascii_uppercase[:3])
     all_letters = list(ascii_uppercase)
-    A_Z = list(ascii_uppercase)
+    a_z = list(ascii_uppercase)
 
-    # Storing the excel cell header subscripts for excel
+    # Storing the Excel cell header subscripts for Excel
     for char in letters:
         for char2 in all_letters:
-            A_Z.append(char + char2)
+            a_z.append(char + char2)
 
     # Displaying the first two headers
     worksheet.write('A1', 'Taxonomy', header_format)
@@ -92,7 +94,7 @@ def generate_output(remapping_root_path, output_path):
 
     # Displaying the other headers
     for column in range(len(all_columns)):
-        cell_name = A_Z[column + 2] + "1"
+        cell_name = a_z[column + 2] + "1"
         worksheet.write(cell_name, all_columns[column], header_format)
 
     # Defining the cell format for the values
@@ -103,7 +105,7 @@ def generate_output(remapping_root_path, output_path):
     # Setting the starting row for values
     row = 1
 
-    # Populating the excel with the values per taxonomy id and per assembly
+    # Populating the Excel with the values per taxonomy id and per assembly
     for r in range(len(all_tax_id)):
         worksheet.write(row, 0, all_tax_id[row - 1], filename_fmt)
         worksheet.write(row, 1, all_assembly[row - 1], filename_fmt)
@@ -132,18 +134,18 @@ def generate_output(remapping_root_path, output_path):
     # Closing the workbook
     workbook.close()
 
-    # Creating pandas dataframe from the output spredsheet
-    excel_file = os.path.join(output_path, "Gather_Stats.xlsx")
-    dataframe = pd.read_excel(excel_file, sheet_name=0)
-
 
 def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     """
     This function is used to store the counts of the remapped variants along wih the reason for failures
-    at different rounds (i.e. for different lengths of the flanking region)
-    Input: The taxonomy id and the assembly accession from generate_output()
-    Output: A spreadsheet outlining all the relevant counts for each taxonomy and each assembly
-            per taxonomy for both EVA and dbSNP data
+    at different rounds (i.e. for different lengths of the flanking region) for a particular taxonomy and
+    assembly
+
+    Input: The taxonomy id and the assembly accession from generate_output() along with the input files full
+           path
+
+    Output: All the statistics in global lists
+
     """
 
     # Setting the filename for the eva counts
@@ -158,7 +160,7 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     keys_values = gather_counts_per_file(filename_eva)
     keys_values_dbsnp = gather_counts_per_file(filename_dbsnp)
 
-    # Adding the values of bdsnp and eva with the common keys
+    # Adding the values of dbsnp and eva with the common keys
     for key in keys_values_dbsnp:
         if key in keys_values:
             keys_values_dbsnp[key] = keys_values_dbsnp[key] + keys_values[key]
@@ -174,7 +176,7 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     keys = list(keys)
     values = list(values)
 
-    # Adding the keys and values list to the master list for each taxononmy and assembly
+    # Adding the keys and values list to the master list for each taxonomy and assembly
     all_keys.append(keys)
     all_values.append(values)
 
@@ -189,9 +191,26 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
 
 
 def gather_counts_per_file(filename):
+    """
+    This function is used to load the yml files for both eva and dbsnp and gather the data for the kay-value pairs
+    in the yml files
+
+    Input: The absolute filepaths and filenames of the eva and the dbsnp files
+
+    Output: A dictionary containing the key-value pairs of the yml files for a particular taxonomy and assembly
+
+    """
+
     # Storing the contents for a particular yaml file in a linear dictionary format for eva
+
+    # Defining a list to store all the fields in the yml files for a particular taxonomy and assembly
     keys = []
+
+    # Defining a list to store all the values corresponding to the key fields in the yml files for a particular
+    # taxonomy and assembly
     values = []
+
+    # Defining a dictionary to store the key-value pairs of the yml files for a particular taxonomy and assembly
     keys_values = {}
 
     with open(filename, 'r') as file:
@@ -221,6 +240,12 @@ def gather_counts_per_file(filename):
 
 
 def main():
+    """
+    This is the main function which accepts two arguments from the user, namely, remapping_root_path and
+    the output path respectively.
+
+    """
+
     parser = argparse.ArgumentParser(
         description='Collecting statistics per taxonomy per assembly for variant remapping')
 
@@ -232,14 +257,13 @@ def main():
 
     # Taking the output path from the user where the visualization files and output csv
     # files are present
-    parser.add_argument("--output_file", type=str,
+    parser.add_argument("--output_path", type=str,
                         help="Path to the output .", required=True)
 
     args = parser.parse_args()
 
     # Calling the primary function responsible for generating the statistics
-    generate_output(args.remapping_root_path, args.output_file)
-
+    generate_output(args.remapping_root_path, args.output_path)
 
 if __name__ == "__main__":
     main()
