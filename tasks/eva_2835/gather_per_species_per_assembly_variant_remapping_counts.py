@@ -18,7 +18,6 @@ import yaml
 import argparse
 import xlsxwriter
 from string import ascii_uppercase
-import pandas as pd
 
 
 # Initializing the final output column
