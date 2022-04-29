@@ -20,49 +20,23 @@ import xlsxwriter
 from string import ascii_uppercase
 
 
-# Initializing the final output column
-all_columns=[]
-
-# Initializing the list to store all the keys and values for all the files
-all_keys=[]
-all_values=[]
-
-# Initializing the list to store the values of all taxonomy ids and assembly accessions
-all_tax_id=[]
-all_assembly=[]
-
-
 def generate_output(remapping_root_path, output_path):
     """
-    This function is used to store the full list of taxonomy ids and assembly accessions along with generation
-    of the output excel containing all the stats gathered from the yml files
+    This function is used to generate the results in a spreadsheet containing the statistics of remapping
+    and various reasons of remapping failures for different steps(i.e. flanking region length) for all the
+    taxonomies and their corresponding assemblies
 
-    Input: It accepts the remapping full path from the user along with the output path
-           for storing the results for subsequent analysis
+    Input: It accepts the remapping full path and the output path from the user for generating the output
+           spreadsheet
 
-    Output: It calls gather_counts_per_tax_per_assembly() function
-           for a particular taxonomy id and a particular assembly of that taxonomy and generate a spreadsheet
-           containing the statistics of remapping and various reasons of remapping failures for different steps
+    Output: It calls the extract_taxid_assembly() function to gather the taxonomy ids and the assembly accession
+            which in turn calls the gather_counts_per_tax_per_assembly() function for a particular taxonomy id
+            and a particular assembly to collect the statistics and generate the output spreadsheet
     """
 
-    # Collecting the tax_ids from the input path
-    taxids = [name for name in os.listdir(remapping_root_path) if
-              os.path.isdir(os.path.join(remapping_root_path, name))]
-
-    # Defining a dictionary to store the taxonomy and its corresponding assemblies
-    tax_assembly = {}
-
-    for tax_id in taxids:
-        assembly_accession = [name for name in os.listdir(os.path.join(remapping_root_path, tax_id)) if
-                              os.path.isdir(os.path.join(os.path.join(remapping_root_path, tax_id), name))]
-        tax_assembly[tax_id] = assembly_accession
-
-    # Collect statistics for each taxonomy and each assembly
-    for taxid, assembly in tax_assembly.items():
-        for val in range(len(assembly)):
-            gather_counts_per_tax_per_assembly(remapping_root_path, taxid, assembly[val])
-
-    # Generate output file from the statistics gathered
+    # Collecting the values of all_taxonomy ids and their corresponding assemblies
+    all_columns, all_columns_for_specific_taxid_assembly, all_values_for_specific_taxid_assembly, \
+    all_tax_id, all_assembly = extract_taxid_assembly(remapping_root_path)
 
     # Initializing the Excel workbook
     workbook = xlsxwriter.Workbook(output_path + '/Gather_Stats.xlsx')
@@ -82,26 +56,28 @@ def generate_output(remapping_root_path, output_path):
     all_letters = list(ascii_uppercase)
     a_z = list(ascii_uppercase)
 
-    # Storing the Excel cell header subscripts for Excel
+    # Storing the Excel cell header subscripts in a list
     for char in letters:
         for char2 in all_letters:
             a_z.append(char + char2)
 
-    # Displaying the first two headers
+    # Displaying the first two headers i.e. the taxonomy id and the assembly accession
     worksheet.write('A1', 'Taxonomy', header_format)
     worksheet.write('B1', 'Assembly Accession', header_format)
 
-    # Displaying the other headers
+    # Displaying the other column headers
     for column in range(len(all_columns)):
         cell_name = a_z[column + 2] + "1"
         worksheet.write(cell_name, all_columns[column], header_format)
 
-    # Defining the cell format for the values
-    stats_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
+    # Defining the cell format for the taxonomy ids and the assembly accession columns
     filename_fmt = workbook.add_format(
         {'align': 'left', 'valign': 'vcenter', 'border': 1, 'font_color': 'red', 'text_wrap': 1})
 
-    # Setting the starting row for values
+    # Defining the cell format for the column values
+    stats_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
+
+    # Setting the starting row for entering the records
     row = 1
 
     # Populating the Excel with the values per taxonomy id and per assembly
@@ -112,16 +88,16 @@ def generate_output(remapping_root_path, output_path):
         # Setting the index list which has values for a particular iteration
         idx = []
 
-        for key in all_keys[row - 1]:
-            position = all_columns.index(key)
+        for column in all_columns_for_specific_taxid_assembly[row - 1]:
+            position = all_columns.index(column)
             idx.append(position)
 
         # Populating the values for the other stats columns for a particular iteration
         for col in range(len(all_columns)):
             if col in idx:
                 key = all_columns[col]
-                position = all_keys[row - 1].index(key)
-                stats = all_values[row - 1][position]
+                position = all_columns_for_specific_taxid_assembly[row - 1].index(key)
+                stats = all_values_for_specific_taxid_assembly[row - 1][position]
                 worksheet.write(row, col + 2, stats, stats_fmt)
 
             else:
@@ -134,6 +110,70 @@ def generate_output(remapping_root_path, output_path):
     workbook.close()
 
 
+def extract_taxid_assembly(remapping_root_path):
+    """
+    This function is used to extract the full list of taxonomy ids and assembly accessions and pass it to
+    gather_counts_per_tax_per_assembly() function for a particular taxonomy id and assembly for gathering statistics and subsequently consolidates statistics for a holistic analysis
+
+    Input: It accepts the remapping full path for subsequent analysis
+
+    Output: It calls gather_counts_per_tax_per_assembly() function for a particular taxonomy id and
+            a particular assembly of that taxonomy to gather statistics and consolidates the final list of columns,
+            the master list containing the list of fields and their corresponding counts for each taxonomy and assembly
+    """
+
+    # Initializing the final output columns for the output spreadsheet. This comprises the total number of
+    # variants,remapped variants, total number of variants for each flanking regions and the various reasons of
+    # failures for each flanking regions
+    all_columns = []
+
+    # Initializing the list to store all counts of remapped variants, total number of variants for each
+    # flanking regions and the various reasons of failures for each flanking regions and their corresponding
+    # counts for all taxonomies and assemblies
+    all_columns_for_specific_taxid_assembly = []
+    all_values_for_specific_taxid_assembly = []
+
+    # Initializing the list to store the values of all taxonomy ids and assembly accessions
+    all_tax_id = []
+    all_assembly = []
+
+    # Collecting the tax_ids from the input path
+    taxids = [name for name in os.listdir(remapping_root_path) if
+              os.path.isdir(os.path.join(remapping_root_path, name))]
+
+    # Defining a dictionary to store the taxonomy and its corresponding assemblies
+    tax_assembly = {}
+
+    for tax_id in taxids:
+        assembly_accession = [name for name in os.listdir(os.path.join(remapping_root_path, tax_id)) if
+                              os.path.isdir(os.path.join(os.path.join(remapping_root_path, tax_id), name))]
+        tax_assembly[tax_id] = assembly_accession
+
+    # Collect statistics for each taxonomy and each assembly
+    for taxid, assembly in tax_assembly.items():
+        for val in range(len(assembly)):
+            columns, values, taxid, assembly_accession = gather_counts_per_tax_per_assembly(remapping_root_path,
+                                                                                            taxid, assembly[val])
+
+            # Adding the fields and values to the master list for each taxonomy and assembly
+            all_columns_for_specific_taxid_assembly.append(columns)
+            all_values_for_specific_taxid_assembly.append(values)
+
+            # Adding the taxonomy and assembly accession for a particular file to the master list
+            all_tax_id.append(taxid)
+            all_assembly.append(assembly_accession)
+
+            # Updating the final output column in a sorted order every time from an individual yml file
+            all_columns.extend(columns)
+            all_columns = list(dict.fromkeys(all_columns))
+            all_columns.sort()
+
+    # Returning the final list of output columns along with the master lists of columns and
+    # their corresponding values for a specific tax id and assembly accession
+    return all_columns, all_columns_for_specific_taxid_assembly, all_values_for_specific_taxid_assembly, \
+           all_tax_id, all_assembly
+
+
 def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     """
     This function is used to store the counts of the remapped variants along wih the reason for failures
@@ -143,7 +183,7 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     Input: The taxonomy id and the assembly accession from generate_output() along with the input files full
            path
 
-    Output: All the statistics in global lists
+    Output: All the statistics i.e. columns and values for a particular taxonomy and assembly
 
     """
 
@@ -155,44 +195,35 @@ def gather_counts_per_tax_per_assembly(path, taxid, assembly_accession):
     filename_dbsnp = str(assembly_accession) + "_dbsnp_remapped_counts.yml"
     filename_dbsnp = os.path.join(path, str(taxid), str(assembly_accession), "dbsnp", filename_dbsnp)
 
-    # Calling functions for gathering stats per file from eva and dbsnp data
-    keys_values = gather_counts_per_file(filename_eva)
-    keys_values_dbsnp = gather_counts_per_file(filename_dbsnp)
+    # Calling functions for gathering stats per file from eva and dbsnp data and storing the data in a dictionary
+    # as a key-value pair
+    columns_values = gather_counts_per_file(filename_eva)
+    columns_values_dbsnp = gather_counts_per_file(filename_dbsnp)
 
-    # Adding the values of dbsnp and eva with the common keys
-    for key in keys_values_dbsnp:
-        if key in keys_values:
-            keys_values_dbsnp[key] = keys_values_dbsnp[key] + keys_values[key]
+    # Adding the values of dbsnp and eva with the common columns i.e. fields
+    for column in columns_values_dbsnp:
+        if column in columns_values:
+            columns_values_dbsnp[column] = columns_values_dbsnp[column] + columns_values[column]
 
     # Concatenating the two dictionaries
-    keys_values_dbsnp = {**keys_values, **keys_values_dbsnp}
+    columns_values_dbsnp = {**columns_values, **columns_values_dbsnp}
 
-    # Sorting the dictionary using the keys
-    keys_values_dbsnp = {key: value for key, value in sorted(keys_values_dbsnp.items())}
+    # Sorting the dictionary using the keys in order to maintain uniformity in the order of appearance of columns
+    # in the final output spreadsheet
+    columns_values_dbsnp = {column: value for column, value in sorted(columns_values_dbsnp.items())}
 
     # Splitting the dictionary into two lists - one for keys and one for values
-    keys, values = zip(*keys_values_dbsnp.items())
-    keys = list(keys)
+    columns, values = zip(*columns_values_dbsnp.items())
+    columns = list(columns)
     values = list(values)
 
-    # Adding the keys and values list to the master list for each taxonomy and assembly
-    all_keys.append(keys)
-    all_values.append(values)
-
-    # Adding the taxonomy and assembly accession for a particular file
-    all_tax_id.append(taxid)
-    all_assembly.append(assembly_accession)
-
-    # Updating the final output columns
-    global all_columns
-    all_columns.extend(keys)
-    all_columns = list(dict.fromkeys(all_columns)
-    all_columns.sort()
+    # Returning the fields in a yaml file along with its value for a particular tax id and accession
+    return columns, values, taxid, assembly_accession
 
 
 def gather_counts_per_file(filename):
     """
-    This function is used to load the yml files for both eva and dbsnp and gather the data for the kay-value pairs
+    This function is used to load the yml files for both eva and dbsnp and gather the data from the key-value pairs
     in the yml files
 
     Input: The absolute filepaths and filenames of the eva and the dbsnp files
@@ -204,39 +235,49 @@ def gather_counts_per_file(filename):
     # Storing the contents for a particular yaml file in a linear dictionary format for eva
 
     # Defining a list to store all the fields in the yml files for a particular taxonomy and assembly
-    keys = []
+    columns = []
 
     # Defining a list to store all the values corresponding to the key fields in the yml files for a particular
     # taxonomy and assembly
     values = []
 
     # Defining a dictionary to store the key-value pairs of the yml files for a particular taxonomy and assembly
-    keys_values = {}
+    columns_values = {}
 
     with open(filename, 'r') as file:
 
         # Loading the data from the yaml file
         data = yaml.safe_load(file)
 
-        for key, value in data.items():
+        # Iterating over the yml data for a particular file
+        for column, value in data.items():
 
-            if key == "Flank_50":
-                key = "Flank_050"
+            # Renaming the column in order to sort the columns in proper order starting with Flank_050 data
+            # followed by Flank_2000 data and finally by Flank_50000 data
+            if column == "Flank_50":
+                column = "Flank_050"
 
             # Checking if the value is dictionary
             if isinstance(value, dict):
-                for key2, value2 in value.items():
-                    keys.append(key + "_" + key2)
+
+                # Concatenating the outer field name i.e.(Flank_050, Flank_2000, Flank_50000) with the inner field
+                # name i.e. the reasons of failures, remapping rate or flank_total
+                for column2, value2 in value.items():
+                    columns.append(column + "_" + column2)
                     values.append(value2)
             else:
-                keys.append(key.capitalize())
+
+                # Capitalizing the Taxonomy and the Assembly Accession field names in order to preserve the sorting
+                # order of columns
+                columns.append(column.capitalize())
                 values.append(value)
 
-    # Creating dictionary from two lists
-    zip_iterator = zip(keys, values)
-    keys_values = dict(zip_iterator)
+    # Creating dictionary from two lists i.e. the columns and the values
+    zip_iterator = zip(columns, values)
+    columns_values = dict(zip_iterator)
 
-    return keys_values
+    # Returning the fields and values for a particular yml file
+    return columns_values
 
 
 def main():
@@ -265,6 +306,6 @@ def main():
     # Calling the primary function responsible for generating the statistics
     generate_output(args.remapping_root_path, args.output_path)
 
+
 if __name__ == "__main__":
     main()
-
