@@ -23,9 +23,9 @@ def categorise_batch_duplicate_ss(mongo_db, ssids, assembly_accession):
         change = f"{variant_rec['ref']}-{variant_rec['alt']}"
 
         if 'allelesMatch' in variant_rec:
-            reasons.add('Mismatching allele')
+            reasons.add('Mismatching_allele')
         if 'mapWeight' in variant_rec:
-            reasons.add('Multi mapped')
+            reasons.add('Multi_mapped')
         if not reasons:
             ssid_to_positions[variant_rec['accession']].add(position)
             ssid_to_changes[variant_rec['accession']].add(change)
@@ -33,17 +33,17 @@ def categorise_batch_duplicate_ss(mongo_db, ssids, assembly_accession):
             if 'remappedFrom' in variant_rec:
                 reasons.add('Remapped')
             if not reasons:
-                reasons.add('Original')
+                reasons.add('In_original_assembly')
         ssid_to_type_set[variant_rec['accession']].append(','.join(sorted(reasons)))
     cursor.close()
     # Check variants per ssids
     for accession in ssid_to_positions:
         if len(ssid_to_positions[accession]) > 1:
-            ssid_to_type_set[accession].append('multi position')
+            ssid_to_type_set[accession].append('Multi_position_ssid')
         elif len(ssid_to_changes[accession]) > 1:
-            ssid_to_type_set[accession].append('multi allele')
+            ssid_to_type_set[accession].append('Multi_allele_ssid')
         else:
-            ssid_to_type_set[accession].append('same variants')
+            ssid_to_type_set[accession].append('Same_variants')
 
     # check variants in different assembly
     ssids = list(ssid_to_positions)
@@ -59,11 +59,11 @@ def categorise_batch_duplicate_ss(mongo_db, ssids, assembly_accession):
 
     for accession in ssid_to_positions:
         if len(ssid_to_positions[accession]) > 1:
-            ssid_to_type_set[accession].append('Original multi position')
+            ssid_to_type_set[accession].append('Multi_position_in_source')
         elif len(ssid_to_changes[accession]) > 1:
-            ssid_to_type_set[accession].append('Original multi allele')
+            ssid_to_type_set[accession].append('Multi_allele_in_source')
         else:
-            ssid_to_type_set[accession].append('Original same variants')
+            ssid_to_type_set[accession].append('Same_variants_in_source')
     return ssid_to_type_set
 
 
