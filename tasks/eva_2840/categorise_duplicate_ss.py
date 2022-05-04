@@ -22,10 +22,9 @@ def categorise_batch_duplicate_ss(mongo_db, ssids, assembly_accession):
         position = f"{variant_rec['contig']}:{variant_rec['start']}"
         change = f"{variant_rec['ref']}-{variant_rec['alt']}"
 
-        if 'allelesMatch' in variant_rec:
-            reasons.add('Mismatching_allele')
-        if 'mapWeight' in variant_rec:
-            reasons.add('Multi_mapped')
+        if 'allelesMatch' in variant_rec or 'mapWeight' in variant_rec:
+            # Ingore the variant that have multimapped or allele mismatch flag set because they are ignored anyway
+            continue
         if not reasons:
             ssid_to_positions[variant_rec['accession']].add(position)
             ssid_to_changes[variant_rec['accession']].add(change)
@@ -45,8 +44,8 @@ def categorise_batch_duplicate_ss(mongo_db, ssids, assembly_accession):
         else:
             ssid_to_type_set[accession].append('Same_variants')
 
-    # check variants in different assembly
-    ssids = list(ssid_to_positions)
+    # check variants in different assembly only if it was remapped
+    ssids = list([ssid for ssid in ssid_to_positions if 'Remapped' in ssid_to_type_set[ssid]])
     ssid_to_positions = defaultdict(set)
     ssid_to_changes = defaultdict(set)
     cursor = sve_collection.find({'seq': {'$ne': assembly_accession}, 'accession': {'$in': ssids}})
@@ -86,7 +85,7 @@ def categorise_all_ss(mongo_db, duplicate_ss_file, output_file, batch_size):
             ssids = [ssid for ssid in ssids if ssid is not None]
             ssid_to_types = categorise_batch_duplicate_ss(mongo_db, ssids, assembly)
             for ssid in ssid_to_types:
-                print(f"{ssid}\t{assembly}\t{','.join(list(dict.fromkeys(ssid_to_types[ssid])))}", file=open_file)
+                print(f"{ssid}\t{assembly}\t{','.join(sorted(set(ssid_to_types[ssid])))}", file=open_file)
             nb_processed += len(ssid_to_types)
             print(f"{nb_processed}")
 
