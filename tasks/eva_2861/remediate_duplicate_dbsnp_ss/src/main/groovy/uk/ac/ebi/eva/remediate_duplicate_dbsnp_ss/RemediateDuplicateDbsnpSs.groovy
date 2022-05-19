@@ -22,7 +22,6 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
-import uk.ac.ebi.eva.accession.clustering.batch.io.SSSplitWriter
 import uk.ac.ebi.eva.accession.clustering.configuration.BeanNames
 import uk.ac.ebi.eva.accession.clustering.configuration.InputParametersConfiguration
 import uk.ac.ebi.eva.accession.clustering.configuration.batch.io.SSSplitWriterConfiguration

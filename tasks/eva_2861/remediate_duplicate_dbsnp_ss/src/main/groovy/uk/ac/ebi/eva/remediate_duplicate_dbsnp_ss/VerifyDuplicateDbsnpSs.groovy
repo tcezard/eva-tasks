@@ -21,7 +21,6 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
-import uk.ac.ebi.eva.accession.clustering.batch.io.SSSplitWriter
 import uk.ac.ebi.eva.accession.clustering.configuration.BeanNames
 import uk.ac.ebi.eva.accession.clustering.configuration.InputParametersConfiguration
 import uk.ac.ebi.eva.accession.clustering.configuration.batch.io.SSSplitWriterConfiguration
@@ -51,7 +50,7 @@ class VerifyDuplicateDbsnpSs implements CommandLineRunner {
     @Autowired
     private InputParameters inputParameters
 
-    private HashSet<String> accessionsEncounteredSoFar = new HashSet<>();
+    private HashSet<String> accessionsEncounteredSoFar = new HashSet<>()
 
     void run(String... args) {
         //ssSplitWriter.write(new ArrayList<SubmittedVariantEntity>())
@@ -80,7 +79,7 @@ class VerifyDuplicateDbsnpSs implements CommandLineRunner {
                 if (this.accessionsEncounteredSoFar.contains(asmAccessionPairToCheck)) {
                     println("ERROR: ASM accession pair $asmAccessionPairToCheck has duplicates...")
                 } else {
-                    this.accessionsEncounteredSoFar.add(asmAccessionPairToCheck);
+                    this.accessionsEncounteredSoFar.add(asmAccessionPairToCheck)
                 }
             }
         }
