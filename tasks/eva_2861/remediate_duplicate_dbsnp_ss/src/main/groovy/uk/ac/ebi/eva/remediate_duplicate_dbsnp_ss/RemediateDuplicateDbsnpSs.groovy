@@ -52,7 +52,6 @@ class RemediateDuplicateDbsnpSs implements CommandLineRunner {
     private InputParameters inputParameters
 
     void run(String... args) {
-        //ssSplitWriter.write(new ArrayList<SubmittedVariantEntity>())
         int numSSScanned = 0
         int batchIndex = 0
         String lastSeenID = null

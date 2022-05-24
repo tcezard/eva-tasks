@@ -53,7 +53,6 @@ class VerifyDuplicateDbsnpSs implements CommandLineRunner {
     private HashSet<String> accessionsEncounteredSoFar = new HashSet<>()
 
     void run(String... args) {
-        //ssSplitWriter.write(new ArrayList<SubmittedVariantEntity>())
         int numSSScanned = 0
         int batchIndex = 0
         String lastSeenID = null
@@ -88,7 +87,7 @@ class VerifyDuplicateDbsnpSs implements CommandLineRunner {
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     ImmutablePair<List<? extends SubmittedVariantEntity>, String> getNextBatchOfDbsnpSVEs(String lastSeenID) {
         Query queryToGetNextBatchOfSS =
-                query(where("seq").is(inputParameters.getAssemblyAccession()).and("remappedFrom").exists(false))
+                query(where("remappedFrom").exists(false))
         if (Objects.nonNull(lastSeenID)) {
             queryToGetNextBatchOfSS.addCriteria(where("_id").gt(lastSeenID))
         }
