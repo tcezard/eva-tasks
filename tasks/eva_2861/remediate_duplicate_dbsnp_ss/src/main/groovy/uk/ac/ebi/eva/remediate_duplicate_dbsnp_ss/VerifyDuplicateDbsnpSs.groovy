@@ -87,7 +87,7 @@ class VerifyDuplicateDbsnpSs implements CommandLineRunner {
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     ImmutablePair<List<? extends SubmittedVariantEntity>, String> getNextBatchOfDbsnpSVEs(String lastSeenID) {
         Query queryToGetNextBatchOfSS =
-                query(where("remappedFrom").exists(false))
+                query(where("seq").is(inputParameters.getAssemblyAccession()).and("remappedFrom").exists(false))
         if (Objects.nonNull(lastSeenID)) {
             queryToGetNextBatchOfSS.addCriteria(where("_id").gt(lastSeenID))
         }
