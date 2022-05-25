@@ -1,3 +1,5 @@
+@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.10-SNAPSHOT')
+
 import com.mongodb.MongoClient
 import com.mongodb.MongoClientOptions
 import com.mongodb.ReadConcern
