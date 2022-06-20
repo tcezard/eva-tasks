@@ -1,3 +1,5 @@
+@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.10-SNAPSHOT')
+
 import com.mongodb.MongoClient
 import com.mongodb.MongoClientOptions
 import com.mongodb.ReadConcern
@@ -35,7 +37,7 @@ public class EVADatabaseEnvironment {
     }
 
     static EVADatabaseEnvironment parseFrom(String propertiesFile) {
-        var properties = new Properties()
+        def properties = new Properties()
         properties.load(new FileInputStream(new File(propertiesFile)))
         MongoProperties mongoProperties = getMongoPropertiesForEnv(properties)
         MongoClient mongoClient = getMongoClientForEnv(properties, mongoProperties)
@@ -45,16 +47,16 @@ public class EVADatabaseEnvironment {
     }
 
     private static MongoClient getMongoClientForEnv(Properties properties, MongoProperties mongoProperties) {
-        var readPreference = ReadPreference.valueOf(properties.getProperty("mongodb.read-preference"))
-        var mongoClientOptions = new MongoClientOptions.Builder().readPreference(readPreference).writeConcern(WriteConcern.MAJORITY).readConcern(ReadConcern.MAJORITY)
+        def readPreference = ReadPreference.valueOf(properties.getProperty("mongodb.read-preference"))
+        def mongoClientOptions = new MongoClientOptions.Builder().readPreference(readPreference).writeConcern(WriteConcern.MAJORITY).readConcern(ReadConcern.MAJORITY)
 
-        var environment = new StandardEnvironment()
-        var mongoClient = new MongoClientFactory(mongoProperties, environment).createMongoClient(mongoClientOptions.build())
+        def environment = new StandardEnvironment()
+        def mongoClient = new MongoClientFactory(mongoProperties, environment).createMongoClient(mongoClientOptions.build())
         mongoClient
     }
 
     private static MongoProperties getMongoPropertiesForEnv(Properties properties) {
-        var mongoProperties = new MongoProperties()
+        def mongoProperties = new MongoProperties()
         mongoProperties.setDatabase(properties.getProperty("spring.data.mongodb.database"))
         mongoProperties.setHost(properties.getProperty("spring.data.mongodb.host"))
         mongoProperties.setPort(Integer.parseInt(properties.getProperty("spring.data.mongodb.port")))
@@ -65,14 +67,14 @@ public class EVADatabaseEnvironment {
     }
 
     private static MongoTemplate getMongoTemplateForEnv(MongoClient mongoClient, MongoProperties mongoProperties) {
-        var mongoDbFactory = new SimpleMongoDbFactory(mongoClient, mongoProperties.getDatabase())
-        var mappingContext = new MongoMappingContext()
+        def mongoDbFactory = new SimpleMongoDbFactory(mongoClient, mongoProperties.getDatabase())
+        def mappingContext = new MongoMappingContext()
         SimpleTypeHolder simpleTypeHolder = new SimpleTypeHolder(new HashSet<>(Arrays.asList(
                 Date.class,
                 LocalDateTime.class
         )), MongoSimpleTypes.HOLDER)
         mappingContext.setSimpleTypeHolder(simpleTypeHolder)
-        var mappingMongoConverter = new MappingMongoConverter(new DefaultDbRefResolver(mongoDbFactory), mappingContext)
+        def mappingMongoConverter = new MappingMongoConverter(new DefaultDbRefResolver(mongoDbFactory), mappingContext)
         mappingMongoConverter.setTypeMapper(new DefaultMongoTypeMapper(null))
         List<Converter<?, ?>> converterList = new ArrayList<Converter<?, ?>>()
         converterList.add(new MongoLocalDateTimeFromStringConverter())
