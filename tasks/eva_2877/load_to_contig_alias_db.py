@@ -1,6 +1,8 @@
 import argparse
 import base64
 import urllib.request
+from socket import socket
+from urllib.error import HTTPError, URLError
 
 from ebi_eva_common_pyutils.config_utils import get_properties_from_xml_file
 from ebi_eva_common_pyutils.logger import logging_config
@@ -8,12 +10,13 @@ from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 from retry import retry
 
+logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
 
 
 def get_assemblies_from_evapro(private_config_xml_file):
     with get_metadata_connection_handle("development", private_config_xml_file) as pg_conn:
-        query = "select assembly_accession from accessioned_assembly where assembly_accession like 'GCA%'"
+        query = "select distinct assembly_accession from accessioned_assembly where assembly_accession like 'GCA%'"
         evapro_assemblies = get_all_results_for_query(pg_conn, query)
         return [asm[0] for asm in evapro_assemblies]
 
@@ -34,7 +37,7 @@ def load_assembly_to_contig_alias(assemblies, admin_credentials, delete_insert):
         url = f"https://wwwdev.ebi.ac.uk/eva/webservices/contig-alias/v1/admin/assemblies/{assembly}"
         headers = {'Authorization': 'Basic ' + admin_credentials}
         if delete_insert == 'True':
-            #delete request for assembly
+            # delete request for assembly
             del_request(assembly, url, headers)
 
         # insert request for assembly
@@ -44,29 +47,45 @@ def load_assembly_to_contig_alias(assemblies, admin_credentials, delete_insert):
 def del_request(assembly, url, headers):
     try:
         create_and_execute_request(url, 'DELETE', headers)
-        logger.warning(f'Assembly info Deleted successfully for Assembly {assembly}')
+        logger.info(f'Assembly info Deleted successfully for Assembly {assembly}')
     except Exception as e:
-        logger.error(f'Error Deleting assembly {assembly}')
+        logger.error(f'Error Deleting assembly {assembly}. Exception : {e}')
 
 
 def insert_request(assembly, url, headers):
     try:
         create_and_execute_request(url, 'PUT', headers)
-        logger.warning(f'Assembly info inserted successfully for Assembly {assembly}')
+        logger.info(f'Assembly info inserted successfully for Assembly {assembly}')
+    except HTTPError as error:
+        logger.error(f'Error inserting assembly {assembly}. HTTP Error: {error}')
+    except URLError as error:
+        if isinstance(error.reason, socket.timeout):
+            logger.error(f'Error inserting assembly {assembly}. URL Timeout Error: {error}')
+        else:
+            logger.error(f'Error inserting assembly {assembly}. URL Error: {error}')
     except Exception as e:
-        logger.error(f'Error inserting assembly {assembly}')
+        logger.error(f'Error inserting assembly {assembly}. Exception : {e}')
 
 
-#@retry(tries=4, delay=2, backoff=1.2, jitter=(1, 3))
+class CustomError(Exception):
+    pass
+
+@retry(CustomError, tries=4, delay=2, backoff=1.2, jitter=(1, 3))
 def create_and_execute_request(url, method, headers):
-    request = urllib.request.Request(url, None, headers, method=method)
-    urllib.request.urlopen(request)
+    client_request = urllib.request.Request(url, None, headers, method=method)
+    try:
+        urllib.request.urlopen(client_request, timeout=None)
+    except HTTPError as error:
+        if error.code == 500:
+            raise CustomError
+        else:
+            raise error
 
 
 def load_data_to_contig_alias(private_config_xml_file, assembly_list, delete_insert):
     assemblies = assembly_list if assembly_list else get_assemblies_from_evapro(private_config_xml_file)
     admin_credentials = get_contig_alias_auth(private_config_xml_file)
-    logger.info(f"Assemblies to be loaded into contig alias database: {assemblies}")
+    logger.info(f"A total of {len(assemblies)} assemblies to be loaded into contig-alias database: {assemblies}")
     load_assembly_to_contig_alias(assemblies, admin_credentials, delete_insert)
 
 
