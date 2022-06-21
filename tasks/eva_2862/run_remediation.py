@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import subprocess
+import sys
 from argparse import ArgumentParser
 
 import yaml
@@ -12,6 +13,9 @@ from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
 
+sys.path.append(os.path.dirname(__file__))
+
+from remapping_config import load_config
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
@@ -114,11 +118,8 @@ def main():
     argparse.add_argument('--resume', action='store_true', default=False)
 
     args = argparse.parse_args()
-    cfg.load_config_file(os.getenv('REMAPPINGCONFIG'))
-    
-    # TODO make sure it's safe to run this on everything in the tracking table
-    #  (i.e. most of the time it should correctly do nothing)
-    #  otherwise we need a way to figure out which assemblies to run it on
+    load_config()
+
     process_one_assembly(args.assembly, args.resume)
 
 

@@ -134,7 +134,7 @@ process extract_vcf_from_mongo {
     echo "parameters.assemblyAccession=${params.source_assembly_accession}" >> ${params.source_assembly_accession}_extraction.properties
     echo "parameters.outputFolder=." >> ${params.source_assembly_accession}_extraction.properties
 
-    spring run $params.groovy.split_ss_export --spring.config.name=${params.source_assembly_accession}_extraction > ${params.source_assembly_accession}_vcf_extractor.log
+    export SPRING_CONFIG_LOCATION=${params.source_assembly_accession}_extraction.properties && spring run $params.groovy.split_ss_export > ${params.source_assembly_accession}_vcf_extractor.log
     """
 }
 
@@ -213,6 +213,6 @@ process ingest_vcf_into_mongo {
     fi
     echo "parameters.assemblyReportUrl=file:${target_report}" >> ${remapped_vcf}_ingestion.properties
 
-    spring run $params.groovy.split_ss_propagate --spring.config.name=${remapped_vcf}_ingestion > ${remapped_vcf}_ingestion.log
+    export SPRING_CONFIG_LOCATION=${remapped_vcf}_ingestion.properties && spring run $params.groovy.split_ss_propagate > ${remapped_vcf}_ingestion.log
     """
 }

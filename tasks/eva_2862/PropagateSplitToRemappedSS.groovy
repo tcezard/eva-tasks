@@ -96,9 +96,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     List<? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves) {
-        List<String> hashes = sves.stream()
-                                  .map(SubmittedVariantEntity::getHashedMessage)
-                                  .collect(Collectors.toList())
+        List<String> hashes = sves.collect{ it.getHashedMessage() }
         Query queryToGetNextBatchOfSVE = query(where("_id").in(hashes))
         List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE,
                 DbsnpSubmittedVariantEntity.class)

@@ -97,9 +97,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     List<? extends SubmittedVariantEntity> getNextBatchOfSplitEvaSVEs(
             List<? extends SubmittedVariantOperationEntity> operations) {
-        List<Long> accessions = operations.stream()
-                                          .map(SubmittedVariantOperationEntity::getSplitInto)
-                                          .collect(Collectors.toList())
+        List<Long> accessions = operations.collect{ it.getSplitInto() }
         Query queryToGetNextBatchOfSVE = query(where("accession").in(accessions)
                 .and("remappedFrom").exists(false))
         List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE,
