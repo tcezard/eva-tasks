@@ -1,10 +1,8 @@
 import argparse
-import base64
-import urllib.request
-from socket import socket
-from urllib.error import HTTPError, URLError
+import os
 
-from ebi_eva_common_pyutils.config_utils import get_properties_from_xml_file
+import requests
+from ebi_eva_common_pyutils.config_utils import get_contig_alias_db_creds_for_profile
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
@@ -14,87 +12,76 @@ logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
 
 
-def get_assemblies_from_evapro(private_config_xml_file):
-    with get_metadata_connection_handle("development", private_config_xml_file) as pg_conn:
-        query = "select distinct assembly_accession from accessioned_assembly where assembly_accession like 'GCA%'"
+class InternalServerError(Exception):
+    pass
+
+
+def get_assemblies_from_evapro(profile, private_config_xml_file):
+    with get_metadata_connection_handle(profile, private_config_xml_file) as pg_conn:
+        query = "select distinct assembly_accession from evapro.accessioned_assembly where assembly_accession like 'GCA%'" \
+                " union " \
+                "select distinct assembly_accession from eva_progress_tracker.remapping_tracker where assembly_accession like 'GCA%'"
         evapro_assemblies = get_all_results_for_query(pg_conn, query)
         return [asm[0] for asm in evapro_assemblies]
 
 
-def get_contig_alias_auth(private_config_xml_file):
-    properties = get_properties_from_xml_file("development", private_config_xml_file)
-    contig_alias_username = str(properties['contig-alias.admin-user'])
-    contig_alias_password = str(properties['contig-alias.admin-password'])
+def load_assembly_to_contig_alias(assemblies, contig_alias_url, contig_alias_user, contig_alias_pass, overwrite):
+    logger.info(f"A total of {len(assemblies)} assemblies to be loaded into contig-alias database: {assemblies}")
 
-    auth = f"{contig_alias_username}:{contig_alias_password}"
-    encode_auth = auth.encode('ascii')
-    base64_auth = base64.b64encode(encode_auth)
-    return base64_auth.decode()
-
-
-def load_assembly_to_contig_alias(assemblies, admin_credentials, delete_insert):
     for assembly in assemblies:
-        url = f"https://wwwdev.ebi.ac.uk/eva/webservices/contig-alias/v1/admin/assemblies/{assembly}"
-        headers = {'Authorization': 'Basic ' + admin_credentials}
-        if delete_insert == 'True':
+        full_url = os.path.join(contig_alias_url, f'v1/admin/assemblies/{assembly}')
+        if overwrite:
             # delete request for assembly
-            del_request(assembly, url, headers)
+            del_request(assembly, full_url, contig_alias_user, contig_alias_pass)
 
         # insert request for assembly
-        insert_request(assembly, url, headers)
+        insert_request(assembly, full_url, contig_alias_user, contig_alias_pass)
 
 
-def del_request(assembly, url, headers):
-    try:
-        create_and_execute_request(url, 'DELETE', headers)
-        logger.info(f'Assembly info Deleted successfully for Assembly {assembly}')
-    except Exception as e:
-        logger.error(f'Error Deleting assembly {assembly}. Exception : {e}')
+@retry(InternalServerError, tries=3, delay=2, backoff=1.5, jitter=(1, 3))
+def del_request(assembly, url, user, password):
+    response = requests.delete(url, auth=(user, password))
+    if response.status_code == 200:
+        logger.info(f'Assembly accession {assembly} successfully deleted from Contig-Alias DB')
+    elif response.status_code == 500:
+        logger.error(f'Assembly accession {assembly} could not be deleted. Response: {response.text}')
+        raise InternalServerError
+    else:
+        logger.error(f'Assembly accession {assembly} could not be deleted. Response: {response.text}')
 
 
-def insert_request(assembly, url, headers):
-    try:
-        create_and_execute_request(url, 'PUT', headers)
-        logger.info(f'Assembly info inserted successfully for Assembly {assembly}')
-    except HTTPError as error:
-        logger.error(f'Error inserting assembly {assembly}. HTTP Error: {error}')
-    except URLError as error:
-        if isinstance(error.reason, socket.timeout):
-            logger.error(f'Error inserting assembly {assembly}. URL Timeout Error: {error}')
-        else:
-            logger.error(f'Error inserting assembly {assembly}. URL Error: {error}')
-    except Exception as e:
-        logger.error(f'Error inserting assembly {assembly}. Exception : {e}')
+@retry(InternalServerError, tries=10, delay=2, backoff=1.5, jitter=(1, 3))
+def insert_request(assembly, url, user, password):
+    response = requests.put(url, auth=(user, password))
+    if response.status_code == 200:
+        logger.info(f'Assembly accession {assembly} successfully added to Contig-Alias DB')
+    elif response.status_code == 409:
+        logger.warning(f'Assembly accession {assembly} already exist in Contig-Alias DB. Response: {response.text}')
+    elif response.status_code == 500:
+        logger.error(f'Could not save Assembly accession {assembly} to Contig-Alias DB. Error : {response.text}')
+        raise InternalServerError
+    else:
+        logger.error(f'Could not save Assembly accession {assembly} to Contig-Alias DB. Error : {response.text}')
 
 
-class CustomError(Exception):
-    pass
+def load_data_to_contig_alias(private_config_xml_file, profile, assembly_list, overwrite):
+    assemblies = assembly_list if assembly_list else get_assemblies_from_evapro(profile, private_config_xml_file)
+    contig_alias_url, contig_alias_user, contig_alias_pass = get_contig_alias_db_creds_for_profile(
+        profile, private_config_xml_file)
 
-@retry(CustomError, tries=4, delay=2, backoff=1.2, jitter=(1, 3))
-def create_and_execute_request(url, method, headers):
-    client_request = urllib.request.Request(url, None, headers, method=method)
-    try:
-        urllib.request.urlopen(client_request, timeout=None)
-    except HTTPError as error:
-        if error.code == 500:
-            raise CustomError
-        else:
-            raise error
-
-
-def load_data_to_contig_alias(private_config_xml_file, assembly_list, delete_insert):
-    assemblies = assembly_list if assembly_list else get_assemblies_from_evapro(private_config_xml_file)
-    admin_credentials = get_contig_alias_auth(private_config_xml_file)
-    logger.info(f"A total of {len(assemblies)} assemblies to be loaded into contig-alias database: {assemblies}")
-    load_assembly_to_contig_alias(assemblies, admin_credentials, delete_insert)
+    load_assembly_to_contig_alias(assemblies, contig_alias_url, contig_alias_user, contig_alias_pass, overwrite)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Load data into contig alias database', add_help=False)
     parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
+    parser.add_argument("--profile", choices=('localhost', 'development', 'production'),
+                        help="Profile to decide whether to run this for development or production", required=True)
     parser.add_argument("--assembly-list", help="Assembly list e.g. GCA_000181335.4", required=False, nargs='+')
-    parser.add_argument("--delete-insert", choices=('True', 'False'), help="Delete and re insert Assembly information",
-                        required=False, default='False')
+    parser.add_argument("--overwrite", action="store_true", default=False,
+                        help="Whether to delete and re-insert assembly information")
+
     args = parser.parse_args()
 
-    load_data_to_contig_alias(args.private_config_xml_file, args.assembly_list, args.delete_insert)
+    load_data_to_contig_alias(args.private_config_xml_file, args.profile, args.assembly_list, args.overwrite)
+
