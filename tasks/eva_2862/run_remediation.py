@@ -6,7 +6,8 @@ from argparse import ArgumentParser
 import yaml
 from ebi_eva_common_pyutils import command_utils
 from ebi_eva_common_pyutils.config import cfg
-from ebi_eva_common_pyutils.config_utils import get_primary_mongo_creds_for_profile, get_accession_pg_creds_for_profile
+from ebi_eva_common_pyutils.config_utils import get_primary_mongo_creds_for_profile, get_accession_pg_creds_for_profile, \
+    get_properties_from_xml_file
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
@@ -21,6 +22,8 @@ def write_remapping_process_props_template(template_file_path):
                                                                              cfg['maven']['settings_file'])
     pg_url, pg_user, pg_pass = get_accession_pg_creds_for_profile(cfg['maven']['environment'],
                                                                   cfg['maven']['settings_file'])
+    accession_db = get_properties_from_xml_file(cfg['maven']['environment'],
+                                                cfg['maven']['settings_file'])['eva.accession.mongo.database']
     with open(template_file_path, 'w') as open_file:
         open_file.write(f'''spring.datasource.driver-class-name=org.postgresql.Driver
 spring.datasource.url={pg_url}
@@ -32,7 +35,7 @@ spring.jpa.generate-ddl=true
 
 spring.data.mongodb.host={mongo_host}
 spring.data.mongodb.port=27017
-spring.data.mongodb.database=eva_accession_sharded
+spring.data.mongodb.database={accession_db}
 spring.data.mongodb.username={mongo_user}
 spring.data.mongodb.password={mongo_pass}
 
@@ -50,7 +53,7 @@ parameters.chunkSize=1000
 def process_one_taxonomy(assembly, taxid, scientific_name, target_assembly, resume):
     base_directory = cfg['remapping']['base_directory']
     nextflow_remapping_process = os.path.join(os.path.dirname(__file__), 'remediate.nf')
-    assembly_directory = os.path.join(base_directory, taxid, assembly)
+    assembly_directory = os.path.join(base_directory, str(taxid), assembly)
     work_dir = os.path.join(assembly_directory, 'work')
     prop_template_file = os.path.join(assembly_directory, 'template.properties')
     os.makedirs(work_dir, exist_ok=True)
@@ -95,9 +98,9 @@ def process_one_taxonomy(assembly, taxid, scientific_name, target_assembly, resu
 def process_one_assembly(assembly, resume):
     # Check the original remapping tracking table for the appropriate taxonomies and target assemblies
     query = (
-        'SELECT taxonomy, scientific_name, assembly_accession'
+        'SELECT taxonomy, scientific_name, assembly_accession '
         'FROM eva_progress_tracker.remapping_tracker '
-        f"WHERE origin_assembly_accession='{assembly}'"
+        f"WHERE origin_assembly_accession='{assembly}' "
         "AND source='DBSNP'"
     )
     with get_metadata_connection_handle(cfg['maven']['environment'], cfg['maven']['settings_file']) as pg_conn:
@@ -113,6 +116,9 @@ def main():
     args = argparse.parse_args()
     cfg.load_config_file(os.getenv('REMAPPINGCONFIG'))
     
+    # TODO make sure it's safe to run this on everything in the tracking table
+    #  (i.e. most of the time it should correctly do nothing)
+    #  otherwise we need a way to figure out which assemblies to run it on
     process_one_assembly(args.assembly, args.resume)
 
 
