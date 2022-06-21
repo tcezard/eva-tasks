@@ -9,9 +9,6 @@ import org.springframework.batch.item.ItemReader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.CommandLineRunner
-import org.springframework.boot.SpringApplication
-import org.springframework.boot.autoconfigure.SpringBootApplication
-import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Import
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
@@ -19,12 +16,13 @@ import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
 import uk.ac.ebi.eva.accession.clustering.batch.processors.VariantToSubmittedVariantEntityProcessor
-import uk.ac.ebi.eva.accession.clustering.configuration.batch.processors.CluteringVariantProcessorConfiguration
+import uk.ac.ebi.eva.accession.clustering.configuration.batch.processors.ClusteringVariantProcessorConfiguration
+import uk.ac.ebi.eva.accession.clustering.parameters.InputParameters
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.remapping.ingest.configuration.batch.io.VcfReaderConfiguration
-import uk.ac.ebi.eva.remapping.ingest.configuration.BeanNames;
+import uk.ac.ebi.eva.remapping.ingest.configuration.BeanNames
 import uk.ac.ebi.eva.remapping.ingest.configuration.InputParametersConfiguration
 
 import static org.springframework.data.mongodb.core.query.Criteria.where
@@ -131,17 +129,6 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         }
 
         return updatedSVE
-    }
-
-}
-
-
-@SpringBootApplication
-class PropagateSplitToRemappedSSApp  {
-
-    static void main(String[] args) {
-        ConfigurableApplicationContext context = SpringApplication.run(PropagateSplitToRemappedSS.class, args)
-        System.exit(SpringApplication.exit(context))
     }
 
 }

@@ -6,12 +6,11 @@ import htsjdk.variant.variantcontext.VariantContext;
 import org.apache.commons.lang3.tuple.ImmutablePair
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.batch.item.ExecutionContext
 import org.springframework.batch.item.ItemProcessor
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.CommandLineRunner
-import org.springframework.boot.SpringApplication
-import org.springframework.boot.autoconfigure.SpringBootApplication
-import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Import
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -19,10 +18,14 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
-import uk.ac.ebi.eva.accession.remapping.source.configuration.batch.io.VariantContextWriterConfiguration
-import uk.ac.ebi.eva.accession.remapping.source.configuration.batch.io.SubmittedVariantsProcessorConfiguration
-import uk.ac.ebi.eva.accession.remapping.source.configuration.InputParametersConfiguration
+import uk.ac.ebi.eva.remapping.source.configuration.batch.io.VariantContextWriterConfiguration
+import uk.ac.ebi.eva.remapping.source.configuration.batch.processors.SubmittedVariantsProcessorConfiguration
+import uk.ac.ebi.eva.remapping.source.configuration.BeanNames
+import uk.ac.ebi.eva.remapping.source.configuration.InputParametersConfiguration
+import uk.ac.ebi.eva.remapping.source.batch.io.VariantContextWriter
+import uk.ac.ebi.eva.remapping.source.parameters.InputParameters
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
+import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 
@@ -46,6 +49,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
     private ItemProcessor<SubmittedVariantEntity, VariantContext> submittedVariantProcessor
 
     @Autowired
+    @Qualifier(BeanNames.EVA_SUBMITTED_VARIANT_WRITER)
     private VariantContextWriter variantContextWriter
 
     void run(String... args) {
@@ -57,6 +61,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
         int numSplitOperations = 0
         int batchIndex = 0
         String lastSeenID = null
+	variantContextWriter.open(new ExecutionContext())
         while (true) {
             ImmutablePair<List<? extends SubmittedVariantOperationEntity>, String> splitOperationsAndLastSeenID =
                     getNextBatchOfSplitOperations(lastSeenID)
@@ -64,7 +69,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
                 List<? extends SubmittedVariantEntity> sves = 
                         getNextBatchOfSplitEvaSVEs(splitOperationsAndLastSeenID.left)
                 if (sves != null) {
-                    variantContextWriter.write(submittedVariantProcessor.process(sves))
+                    variantContextWriter.write(sves.collect{ submittedVariantProcessor.process(it) })
                 }
                 numSplitOperations += splitOperationsAndLastSeenID.left.size()
                 lastSeenID = splitOperationsAndLastSeenID.right
@@ -74,6 +79,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
                 break
             }
         }
+	variantContextWriter.close()
     }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
@@ -106,16 +112,6 @@ class ExportNewlySplitSS implements CommandLineRunner {
             return result
         }
         return null
-    }
-
-}
-
-@SpringBootApplication
-class ExportNewlySplitSSApp  {
-
-    static void main(String[] args) {
-        ConfigurableApplicationContext context = SpringApplication.run(ExportNewlySplitSS.class, args)
-        System.exit(SpringApplication.exit(context))
     }
 
 }
