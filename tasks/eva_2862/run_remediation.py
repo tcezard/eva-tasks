@@ -48,6 +48,7 @@ mongodb.read-preference=secondaryPreferred
 spring.main.web-environment=false
 spring.main.allow-bean-definition-overriding=true
 spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
+spring.main.web-application-type=none
 logging.level.uk.ac.ebi.eva.accession.remapping=INFO
 parameters.chunkSize=1000
 ''')

@@ -61,15 +61,17 @@ class ExportNewlySplitSS implements CommandLineRunner {
         int numSplitOperations = 0
         int batchIndex = 0
         String lastSeenID = null
-	variantContextWriter.open(new ExecutionContext())
+	    variantContextWriter.open(new ExecutionContext())
         while (true) {
             ImmutablePair<List<? extends SubmittedVariantOperationEntity>, String> splitOperationsAndLastSeenID =
                     getNextBatchOfSplitOperations(lastSeenID)
             if (splitOperationsAndLastSeenID != null) {
-                List<? extends SubmittedVariantEntity> sves = 
+                List<? extends SubmittedVariantEntity> sves =
                         getNextBatchOfSplitEvaSVEs(splitOperationsAndLastSeenID.left)
                 if (sves != null) {
                     variantContextWriter.write(sves.collect{ submittedVariantProcessor.process(it) })
+                } else {
+                    logger.warn("Got split operations but found no EVA SVEs")
                 }
                 numSplitOperations += splitOperationsAndLastSeenID.left.size()
                 lastSeenID = splitOperationsAndLastSeenID.right
@@ -79,7 +81,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
                 break
             }
         }
-	variantContextWriter.close()
+	    variantContextWriter.close()
     }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
@@ -105,6 +107,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
             List<? extends SubmittedVariantOperationEntity> operations) {
         List<Long> accessions = operations.collect{ it.getSplitInto() }
         Query queryToGetNextBatchOfSVE = query(where("accession").in(accessions)
+                .and("seq").is(inputParameters.getAssemblyAccession())
                 .and("remappedFrom").exists(false))
         List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE,
                 SubmittedVariantEntity.class)
