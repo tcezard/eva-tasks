@@ -18,6 +18,7 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
+
 import uk.ac.ebi.eva.remapping.source.configuration.batch.io.VariantContextWriterConfiguration
 import uk.ac.ebi.eva.remapping.source.configuration.batch.processors.SubmittedVariantsProcessorConfiguration
 import uk.ac.ebi.eva.remapping.source.configuration.BeanNames
@@ -61,7 +62,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
         int numSplitOperations = 0
         int batchIndex = 0
         String lastSeenID = null
-	    variantContextWriter.open(new ExecutionContext())
+        variantContextWriter.open(new ExecutionContext())
         while (true) {
             ImmutablePair<List<? extends SubmittedVariantOperationEntity>, String> splitOperationsAndLastSeenID =
                     getNextBatchOfSplitOperations(lastSeenID)
@@ -81,7 +82,7 @@ class ExportNewlySplitSS implements CommandLineRunner {
                 break
             }
         }
-	    variantContextWriter.close()
+        variantContextWriter.close()
     }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))

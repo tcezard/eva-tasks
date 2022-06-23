@@ -1,4 +1,3 @@
-@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-clustering', version = '0.6.10-SNAPSHOT')
 @Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.10-SNAPSHOT')
 @Grab(group = 'uk.ac.ebi.eva', module = 'eva-remapping-ingest', version = '0.6.10-SNAPSHOT')
 
@@ -15,21 +14,24 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
 import org.springframework.stereotype.Component
-import uk.ac.ebi.eva.accession.clustering.batch.processors.VariantToSubmittedVariantEntityProcessor
-import uk.ac.ebi.eva.accession.clustering.configuration.batch.processors.ClusteringVariantProcessorConfiguration
-import uk.ac.ebi.eva.accession.clustering.parameters.InputParameters
+
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
+import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
+import uk.ac.ebi.eva.commons.core.models.pipeline.Variant
 import uk.ac.ebi.eva.remapping.ingest.configuration.batch.io.VcfReaderConfiguration
+import uk.ac.ebi.eva.remapping.ingest.configuration.batch.processors.VariantProcessorConfiguration
 import uk.ac.ebi.eva.remapping.ingest.configuration.BeanNames
 import uk.ac.ebi.eva.remapping.ingest.configuration.InputParametersConfiguration
+import uk.ac.ebi.eva.remapping.ingest.parameters.InputParameters
+import uk.ac.ebi.eva.remapping.ingest.batch.processors.VariantToSubmittedVariantEntityRemappedProcessor
 
 import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 
 @Component
-@Import(value=[VcfReaderConfiguration.class, CluteringVariantProcessorConfiguration.class,
+@Import(value=[VcfReaderConfiguration.class, VariantProcessorConfiguration.class,
                InputParametersConfiguration.class, MongoConfiguration.class])
 class PropagateSplitToRemappedSS implements CommandLineRunner {
 
@@ -46,7 +48,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
     private ItemReader<Variant> vcfReader
 
     @Autowired
-    private VariantToSubmittedVariantEntityProcessor variantProcessor
+    private VariantToSubmittedVariantEntityRemappedProcessor variantProcessor
     
 
     void run(String... args) {
