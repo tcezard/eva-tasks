@@ -4,9 +4,10 @@
 import com.mongodb.MongoCursorNotFoundException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.batch.item.ExecutionContext
 import org.springframework.batch.item.ItemReader
+import org.springframework.batch.item.ItemStreamReader
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Import
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -19,11 +20,13 @@ import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
+import uk.ac.ebi.eva.commons.batch.io.UnwindingItemStreamReader
+import uk.ac.ebi.eva.commons.batch.io.VcfReader
 import uk.ac.ebi.eva.commons.core.models.pipeline.Variant
 import uk.ac.ebi.eva.remapping.ingest.configuration.batch.io.VcfReaderConfiguration
 import uk.ac.ebi.eva.remapping.ingest.configuration.batch.processors.VariantProcessorConfiguration
-import uk.ac.ebi.eva.remapping.ingest.configuration.BeanNames
 import uk.ac.ebi.eva.remapping.ingest.configuration.InputParametersConfiguration
+import uk.ac.ebi.eva.remapping.ingest.configuration.RemappingMetadataConfiguration
 import uk.ac.ebi.eva.remapping.ingest.parameters.InputParameters
 import uk.ac.ebi.eva.remapping.ingest.batch.processors.VariantToSubmittedVariantEntityRemappedProcessor
 
@@ -31,7 +34,7 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 
 @Component
-@Import(value=[VcfReaderConfiguration.class, VariantProcessorConfiguration.class,
+@Import(value=[VcfReaderConfiguration.class, VariantProcessorConfiguration.class, RemappingMetadataConfiguration.class,
                InputParametersConfiguration.class, MongoConfiguration.class])
 class PropagateSplitToRemappedSS implements CommandLineRunner {
 
@@ -44,8 +47,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
     private InputParameters inputParameters
 
     @Autowired
-    @Qualifier(BeanNames.VCF_READER)
-    private ItemReader<Variant> vcfReader
+    private VcfReader baseVcfReader
 
     @Autowired
     private VariantToSubmittedVariantEntityRemappedProcessor variantProcessor
@@ -62,6 +64,9 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         int chunkSize = 1000
         int count = 0
         List<SubmittedVariantEntity> chunk = new ArrayList<>()
+
+        ItemReader<Variant> vcfReader = getVcfItemReader(baseVcfReader)
+        vcfReader.open(new ExecutionContext())
 
         Variant variant = vcfReader.read()
 
@@ -83,6 +88,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         if (!chunk.isEmpty()) {
             processChunk(chunk)
         }
+        vcfReader.close()
     }
 
     void processChunk(List<? extends SubmittedVariantEntity> chunk) {
@@ -131,6 +137,12 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         }
 
         return updatedSVE
+    }
+
+
+    // Avoid step-scope bean shenanigans
+    ItemStreamReader<Variant> getVcfItemReader(VcfReader vcfReader) {
+        return new UnwindingItemStreamReader<>(vcfReader)
     }
 
 }

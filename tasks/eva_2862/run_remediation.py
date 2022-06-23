@@ -51,6 +51,7 @@ spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
 spring.main.web-application-type=none
 logging.level.uk.ac.ebi.eva.accession.remapping=INFO
 parameters.chunkSize=1000
+build.version=
 ''')
     return template_file_path
 
