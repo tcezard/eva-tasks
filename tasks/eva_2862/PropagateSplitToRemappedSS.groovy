@@ -92,8 +92,10 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
     }
 
     void processChunk(List<? extends SubmittedVariantEntity> chunk) {
+        logger.info("Processing " + chunk.size() + " variants...")
         List<? extends SubmittedVariantEntity> remappedSVEWithOldSS = getSVEWithSameHash(chunk)
         if (remappedSVEWithOldSS != null) {
+            logger.info("Found " + remappedSVEWithOldSS.size() + " SVE with same hash")
             List<SubmittedVariantEntity> remappedSVEWithUpdatedSS = getUpdatedSVE(remappedSVEWithOldSS, sve)
             mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
             mongoTemplate.findAndRemove(remappedSVEWithOldSS, DbsnpSubmittedVariantEntity.class)
