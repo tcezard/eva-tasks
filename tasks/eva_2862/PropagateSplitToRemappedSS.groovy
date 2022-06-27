@@ -93,32 +93,33 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
 
     void processChunk(List<? extends SubmittedVariantEntity> chunk) {
         logger.info("Processing " + chunk.size() + " variants...")
-        List<? extends SubmittedVariantEntity> remappedSVEWithOldSS = getSVEWithSameHash(chunk)
-        if (remappedSVEWithOldSS != null) {
-            logger.info("Found " + remappedSVEWithOldSS.size() + " SVE with same hash")
-            List<SubmittedVariantEntity> remappedSVEWithUpdatedSS = getUpdatedSVE(remappedSVEWithOldSS, sve)
+        Map<Long, ? extends SubmittedVariantEntity> ssToRemappedSVE = getSVEWithSameHash(chunk)
+        if (ssToRemappedSVE != null) {
+            logger.info("Found " + ssToRemappedSVE.size() + " SVE with same hash")
+            List<SubmittedVariantEntity> remappedSVEWithUpdatedSS = getUpdatedSVE(ssToRemappedSVE)
             mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
-            mongoTemplate.findAndRemove(remappedSVEWithOldSS, DbsnpSubmittedVariantEntity.class)
+            mongoTemplate.findAndRemove(ssToRemappedSVE.entrySet(), DbsnpSubmittedVariantEntity.class)
         }
 }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
-    List<? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves) {
-        List<String> hashes = sves.collect{ it.getHashedMessage() }
-        Query queryToGetNextBatchOfSVE = query(where("_id").in(hashes))
-        List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE,
-                DbsnpSubmittedVariantEntity.class)
+    Map<Long, ? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves) {
+        /* Returns map from provided SS to the SVE with the same hash */
+        Map<String, Long> hashToSS = sves.collectEntries { sve -> [sve.getHashedMessage(), sve.getAccession()] }
+        Query queryToGetNextBatchOfSVE = query(where("_id").in(hashToSS.keySet()))
+        List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE, DbsnpSubmittedVariantEntity.class)
         if (result.size() > 0) {
-            return result
+            return result.collectEntries { sve -> [hashToSS[sve.getHashedMessage()], sve] }
         }
+        logger.info("No SVE with same hash for this chunk: " + hashes)
         return null
     }
 
-    List<? extends SubmittedVariantEntity> getUpdatedSVE(List<? extends SubmittedVariantEntity> sveWithOldSS,
-                                                         SubmittedVariantEntity sveWithNewSS) {
-        Long newSS = sveWithNewSS.getAccession()
+    List<? extends SubmittedVariantEntity> getUpdatedSVE(Map<Long, ? extends SubmittedVariantEntity> newSSToSVEWithOldSS) {
         List<SubmittedVariantEntity> updatedSVE = new ArrayList<>()
-        for (SubmittedVariantEntity sve : sveWithOldSS) {
+        for (Map.Entry<> entry: newSSToSVEWithOldSS) {
+            Long newSS = entry.getKey()
+            SubmittedVariantEntity sve = entry.getValue()
             SubmittedVariant variant = new SubmittedVariant(
                 sve.getReferenceSequenceAccession(),
                 sve.getTaxonomyAccession(),

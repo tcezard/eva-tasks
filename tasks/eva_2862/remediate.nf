@@ -216,3 +216,17 @@ process ingest_vcf_into_mongo {
     export SPRING_CONFIG_LOCATION=${remapped_vcf}_ingestion.properties && spring run $params.groovy.split_ss_propagate > ${remapped_vcf}_ingestion.log
     """
 }
+
+process qc_remediation {
+    input:
+    path *_remapped_unmapped.vcf from unmapped_vcfs
+    path *_ingestion.log from ingestion_log_filename
+
+    publishDir "$params.output_dir/properties", overwrite: true, mode: "copy", pattern: "*.properties"
+    publishDir "$params.output_dir/logs", overwrite: true, mode: "copy", pattern: "*.log*"
+
+    """
+    cp ${params.template_properties} ${params.source_assembly_accession}_qc.properties
+    export SPRING_CONFIG_LOCATION=${params.source_assembly_accession}_qc.properties && spring run $params.groovy.qc_remediation > ${params.source_assembly_accession}_qc.log
+    """
+}
