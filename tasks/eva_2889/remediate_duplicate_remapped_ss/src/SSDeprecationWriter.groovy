@@ -20,13 +20,13 @@ class SSDeprecationWriter implements ItemWriter<SubmittedVariantEntity> {
 
     }
 
-    SSDeprecationWriter(MongoTemplate mongoTemplate, accessioningMonotonicInitSs) {
+    SSDeprecationWriter(MongoTemplate mongoTemplate, Long accessioningMonotonicInitSs) {
         this.mongoTemplate = mongoTemplate
         this.accessioningMonotonicInitSs = accessioningMonotonicInitSs
     }
 
     @Override
-    def write(List<? extends SubmittedVariantEntity> svesToDeprecate) {
+    void write(List<? extends SubmittedVariantEntity> svesToDeprecate) {
         def svesToDeprecateInSVE = svesToDeprecate.findAll{sve -> (sve.getAccession() >= accessioningMonotonicInitSs)}
         def svesToDeprecateInDbsnpSVE = svesToDeprecate.findAll{sve -> (sve.getAccession() < accessioningMonotonicInitSs)}
         deprecateVariants(svesToDeprecateInSVE, SubmittedVariantEntity.class)
@@ -35,10 +35,11 @@ class SSDeprecationWriter implements ItemWriter<SubmittedVariantEntity> {
 
     def deprecateVariants(List<? extends SubmittedVariantEntity> svesToDeprecate, Class sveCollectionToUse) {
         def idsToRemove = svesToDeprecate.collect {sve -> sve.getId()}
-        this.mongoTemplate.findAllAndRemove(query(where("_id").in(idsToRemove)), sveCollectionToUse)
-        def svoeCollectionToUse = sveCollectionToUse.equals(SubmittedVariantEntity.class) ?
-                SubmittedVariantOperationEntity.class : DbsnpSubmittedVariantOperationEntity.class
+        def svoeCollectionToUse =
+                sveCollectionToUse.equals(SubmittedVariantEntity.class) ? SubmittedVariantOperationEntity.class :
+                        DbsnpSubmittedVariantOperationEntity.class
         writeDeprecationOperation(svesToDeprecate, svoeCollectionToUse)
+        this.mongoTemplate.findAllAndRemove(query(where("_id").in(idsToRemove)), sveCollectionToUse)
     }
 
     def writeDeprecationOperation(List<? extends SubmittedVariantEntity> svesToDeprecate, Class svoeCollectionToUse) {
@@ -50,6 +51,11 @@ class SSDeprecationWriter implements ItemWriter<SubmittedVariantEntity> {
             svoe.setId("EVA2889_SS_DEPRECATED_${sve.getId()}")
             return svoe
         }
+        def idsToWrite = svoesToWrite.collect{svoe -> svoe.getId()}.toSet()
+        def alreadyExistingIds = this.mongoTemplate.find(query(where("_id").in(idsToWrite)),
+                svoeCollectionToUse).toSet()
+        idsToWrite = idsToWrite - alreadyExistingIds
+        svoesToWrite = svoesToWrite.findAll{svoe -> idsToWrite.contains(svoe.getId())}
         this.mongoTemplate.insert(svoesToWrite, svoeCollectionToUse)
     }
 
