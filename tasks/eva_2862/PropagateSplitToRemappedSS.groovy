@@ -102,7 +102,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
                 mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
             } catch (DuplicateKeyException exception) {
                 // Duplicates on insertion either means we are rerunning, or (less likely) there is already a matching SVE in the EVA collection
-                // (candidate for SS merge) - either way we can safely ignore.
+                // - either way we can safely ignore.
                 logger.warn(exception.toString())
             }
             mongoTemplate.findAllAndRemove(query(where("accession").in(ssToRemappedSVE.keySet())), DbsnpSubmittedVariantEntity.class)
@@ -118,7 +118,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         if (result.size() > 0) {
             return result.collectEntries { sve -> [hashToSS[sve.getHashedMessage()], sve] }
         }
-        logger.info("No SVE with same hash for this chunk: " + hashes)
+        logger.info("No SVE with same hash for this chunk!")
         return null
     }
 

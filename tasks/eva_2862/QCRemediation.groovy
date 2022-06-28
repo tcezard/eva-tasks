@@ -24,35 +24,29 @@ class QCRemediation implements CommandLineRunner {
 
     @Autowired
     private MongoTemplate mongoTemplate
-
-    @Value("${assembly}")
-    private String assembly
-
-    @Value("${unremappedVcf}")
-    private String unremappedVcf
     
 
     void run(String... args) {
+        String assembly = args[0]
         Query getOperationsQuery = query(where("_id").regex("^SS_SPLIT_.+").and("inactiveObjects.seq").is(assembly))
-        List<? extends SubmittedVariantOperationEntity> operations = this.mongoTemplate.find(getOperationsQuery, DbsnpSubmittedVariantOperationEntity.class)
+        List<DbsnpSubmittedVariantOperationEntity> operations = this.mongoTemplate.find(getOperationsQuery, DbsnpSubmittedVariantOperationEntity.class)
         List<Long> accessions = operations.collect{ it.getSplitInto() }
 
-        File unmappedFile = new File(unremappedVcf)
+        int evaAccessionsFound = 0
 
         // These accessions should be in either unremapped file, or EVA collection, but not in dbsnp
         for (Long accession : accessions) {
-            if (!unmappedFile.text.contains('ss' + accession)) {
-                Query findRemappedByAccession = query(where("accession").is(accession).and("remappedFrom").exists(true))
-                List<DbsnpSubmittedVariantEntity> dbsnpEntities = this.mongoTemplate.find(findRemappedByAccession, DbsnpSubmittedVariantEntity.class)
-                List<SubmittedVariantEntity> evaEntities = this.mongoTemplate.find(findRemappedByAccession, SubmittedVariantEntity.class)
-                if (dbsnpEntities.size() > 0) {
-                    logger.error("Found " + dbsnpEntities.size() + " dbSNP entries with accession " + accession)
-                }
-                if (evaEntities.size() == 0) {
-                    logger.error("Found no EVA entries with accession " + accession)
-                }
+            Query findRemappedByAccession = query(where("accession").is(accession).and("remappedFrom").exists(true))
+            List<DbsnpSubmittedVariantEntity> dbsnpEntities = this.mongoTemplate.find(findRemappedByAccession, DbsnpSubmittedVariantEntity.class)
+            List<SubmittedVariantEntity> evaEntities = this.mongoTemplate.find(findRemappedByAccession, SubmittedVariantEntity.class)
+            if (dbsnpEntities.size() > 0) {
+                logger.error("Found " + dbsnpEntities.size() + " dbSNP entries with accession " + accession)
+            }
+            if (evaEntities.size() > 0) {
+                evaAccessionsFound++
             }
         }
+        logger.info("Found " + evaAccessionsFound + " accessions in EVA collection (compare with ingestion logs)")
     }
 
 }
