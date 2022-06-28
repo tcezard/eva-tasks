@@ -93,7 +93,7 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
             ImmutablePair<List<? extends SubmittedVariantEntity>, String> svesAndLastSeenID =
                     getNextBatchOfDuplicateRemappedSVEs(lastSeenID, collectionClassToUse)
             if (svesAndLastSeenID != null) {
-                remediateDuplicateRemappedSSDueToNRA(svesAndLastSeenID.left, collectionClassToUse)
+                remediateDuplicateRemappedSSNotGeneratedByRemapping(svesAndLastSeenID.left, collectionClassToUse)
                 numSVEScanned += svesAndLastSeenID.left.size()
                 lastSeenID = svesAndLastSeenID.right
                 logger.info("Processed " + numSVEScanned + " remapped IDs in ${collectionClassToUse.getTypeName()}...")
@@ -124,8 +124,8 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
     }
 
     // Remapped variants due to Novel reference alleles (nra) can be deprecated
-    void remediateDuplicateRemappedSSDueToNRA(List<? extends SubmittedVariantEntity> sves,
-                                              Class<? extends  SubmittedVariantEntity> collectionClassToUse) {
+    void remediateDuplicateRemappedSSNotGeneratedByRemapping(List<? extends SubmittedVariantEntity> sves,
+                                                             Class<? extends  SubmittedVariantEntity> collectionClassToUse) {
         List<Long> ssIDsToFind = sves.collect{sve -> sve.getAccession()}.unique()
         Query queryToGetSVEsAlongWithTheirDuplicates =
                 query(this.criteriaToFindAssembly)
