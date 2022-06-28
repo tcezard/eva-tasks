@@ -53,7 +53,7 @@ class SSDeprecationWriter implements ItemWriter<SubmittedVariantEntity> {
         }
         def idsToWrite = svoesToWrite.collect{svoe -> svoe.getId()}.toSet()
         def alreadyExistingIds = this.mongoTemplate.find(query(where("_id").in(idsToWrite)),
-                svoeCollectionToUse).toSet()
+                svoeCollectionToUse).collect{svoe -> svoe.getId()}.toSet()
         idsToWrite = idsToWrite - alreadyExistingIds
         svoesToWrite = svoesToWrite.findAll{svoe -> idsToWrite.contains(svoe.getId())}
         this.mongoTemplate.insert(svoesToWrite, svoeCollectionToUse)
