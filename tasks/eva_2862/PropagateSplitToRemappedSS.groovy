@@ -10,6 +10,7 @@ import org.springframework.batch.item.ItemStreamReader
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Import
+import org.springframework.dao.DuplicateKeyException
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
@@ -97,10 +98,16 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         if (ssToRemappedSVE != null) {
             logger.info("Found " + ssToRemappedSVE.size() + " SVE with same hash")
             List<SubmittedVariantEntity> remappedSVEWithUpdatedSS = getUpdatedSVE(ssToRemappedSVE)
-            mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
-            mongoTemplate.findAndRemove(ssToRemappedSVE.entrySet(), DbsnpSubmittedVariantEntity.class)
+            try {
+                mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
+            } catch (DuplicateKeyException exception) {
+                // Duplicates on insertion either means we are rerunning, or (less likely) there is already a matching SVE in the EVA collection
+                // (candidate for SS merge) - either way we can safely ignore.
+                logger.warn(exception.toString())
+            }
+            mongoTemplate.findAllAndRemove(query(where("accession").in(ssToRemappedSVE.keySet())), DbsnpSubmittedVariantEntity.class)
         }
-}
+    }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     Map<Long, ? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves) {
@@ -117,7 +124,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
 
     List<? extends SubmittedVariantEntity> getUpdatedSVE(Map<Long, ? extends SubmittedVariantEntity> newSSToSVEWithOldSS) {
         List<SubmittedVariantEntity> updatedSVE = new ArrayList<>()
-        for (Map.Entry<> entry: newSSToSVEWithOldSS) {
+        for (entry in newSSToSVEWithOldSS.entrySet()) {
             Long newSS = entry.getKey()
             SubmittedVariantEntity sve = entry.getValue()
             SubmittedVariant variant = new SubmittedVariant(
