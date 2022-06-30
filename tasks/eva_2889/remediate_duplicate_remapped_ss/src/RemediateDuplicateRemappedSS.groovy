@@ -35,6 +35,8 @@ import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.service.nonhuman.SubmittedVariantAccessioningService
 import uk.ac.ebi.eva.commons.core.models.VariantCoreFields
+import uk.ac.ebi.eva.commons.core.models.VariantType
+import uk.ac.ebi.eva.commons.core.models.pipeline.Variant
 import uk.ac.ebi.eva.metrics.configuration.MetricConfiguration
 
 import static org.springframework.data.mongodb.core.query.Query.query
@@ -208,6 +210,13 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
             return !refAltPairsFromRemapping.contains(refAlt)
         }.values().flatten()
         if (svesNotGeneratedByRemapping.size() == svesWithTheAccessionGroupedByRefAlt.size()) {
+            def remappedSVEWithSameTypeAsSourceSVE =
+                    guessRemappedVariantWithSameTypeForSVE(svesWithTheAccession, correspondingEntriesInSourceAssembly)
+            svesNotGeneratedByRemapping = svesWithTheAccession.findAll{sve -> !sve.equals(remappedSVEWithSameTypeAsSourceSVE)}
+        }
+        // If we can't trace the source variant for a remapped variant even after the above guess
+        // report such a variant
+        if (svesNotGeneratedByRemapping.size() == svesWithTheAccessionGroupedByRefAlt.size()) {
             logger.error("None of the submitted variants with accession ${accession} in assembly ${assemblyToRemediate} " +
                     "could be derived via remapping...")
         }
@@ -258,6 +267,57 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
         // use VariantCoreFields as an indirect way to normalize alleles
         def dummyVariant = new VariantCoreFields("dummyChr", 100L, ref, alt)
         return [dummyVariant.getReference(), dummyVariant.getAlternate()]
+    }
+
+    static SubmittedVariantEntity guessRemappedVariantWithSameTypeForSVE(List<? extends SubmittedVariantEntity> remappedSVEsWithTheAccession,
+                                                                  List<? extends SubmittedVariantEntity> correspondingEntriesInSourceAssembly) {
+        // This only works in a very specific case where
+        // there is one variant in source assembly mapped to two or more variants in the remapped
+        // and only one of the remapped variants has the same type as the variant in the source assembly
+        // See Case 2 - https://docs.google.com/spreadsheets/d/1MTB1nwn7uooTk0uQzba_bmj5PTE6L_hhjKSj0Amj8Qo/edit#rangeid=1027635361
+        def sourceVariantSVE = correspondingEntriesInSourceAssembly[0]
+        if (correspondingEntriesInSourceAssembly.size() == 1) {
+            VariantType sourceVariantType = convertSVEToVariant(sourceVariantSVE).getType()
+            def remappedSVEsWithTheSameVariantType =
+                    remappedSVEsWithTheAccession.findAll{sve -> isCompatibleRemappedVariantType(sourceVariantType,
+                            convertSVEToVariant(sve).getType())}
+            if (remappedSVEsWithTheSameVariantType.size() > 1) {
+                logger.error("More than one remapped variant matched the variant type of source variant " +
+                        "for accession ${sourceVariantSVE.getAccession()} " +
+                        "in assembly ${sourceVariantSVE.getReferenceSequenceAccession()} when matching by type!!")
+                return null
+            }
+            if (remappedSVEsWithTheSameVariantType.size() == 0) {
+                logger.error("None of the remapped variants matched the variant type of the source variant " +
+                        "for accession ${sourceVariantSVE.getAccession()} " +
+                        "in assembly ${sourceVariantSVE.getReferenceSequenceAccession()} when matching by type!!")
+                return null
+            }
+            return remappedSVEsWithTheSameVariantType[0]
+        }
+        else {
+            logger.error("More than one source variant found for accession ${sourceVariantSVE.getAccession()} " +
+                    "in assembly ${sourceVariantSVE.getReferenceSequenceAccession()} when attempting to match by type!!")
+        }
+        return null
+    }
+
+    static boolean isCompatibleRemappedVariantType(VariantType sourceVariantType, VariantType remappedVariantType) {
+        if (sourceVariantType == remappedVariantType) {
+            return true
+        }
+        if ((sourceVariantType.equals(VariantType.INS) && remappedVariantType.equals(VariantType.INDEL)) ||
+                (sourceVariantType.equals(VariantType.DEL) && remappedVariantType.equals(VariantType.INDEL))) {
+            return true
+        }
+        return false
+    }
+
+    static Variant convertSVEToVariant(SubmittedVariantEntity sve) {
+        VariantCoreFields variantCoreFields = new VariantCoreFields(sve.getContig(), sve.getStart(),
+                sve.getReferenceAllele(), sve.getAlternateAllele())
+        return new Variant(variantCoreFields.getChromosome(), variantCoreFields.getStart(),
+                variantCoreFields.getEnd(), variantCoreFields.getReference(), variantCoreFields.getAlternate())
     }
 }
 
