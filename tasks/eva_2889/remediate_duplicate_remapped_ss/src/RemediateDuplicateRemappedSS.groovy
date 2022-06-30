@@ -263,7 +263,7 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
         return [refFromSourceAssembly, altFromSourceAssembly]
     }
 
-    static String[] normalizeAlleles(ref, alt) {
+    static List<String> normalizeAlleles(String ref, String alt) {
         // use VariantCoreFields as an indirect way to normalize alleles
         def dummyVariant = new VariantCoreFields("dummyChr", 100L, ref, alt)
         return [dummyVariant.getReference(), dummyVariant.getAlternate()]
