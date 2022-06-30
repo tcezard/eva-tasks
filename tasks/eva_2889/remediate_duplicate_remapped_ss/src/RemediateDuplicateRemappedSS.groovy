@@ -353,10 +353,14 @@ class RemappingOutputParams implements Comparable<RemappingOutputParams> {
 
     @Override
     int compareTo(RemappingOutputParams other) {
-        return ObjectUtils.compare(this.seq, other.seq) + ObjectUtils.compare(this.accession, other.accession) +
-                ObjectUtils.compare(this.strand, other.strand) +
-                ObjectUtils.compare(this.referenceAlleleChange, other.referenceAlleleChange) +
-                ObjectUtils.compare(this.novelReferenceAllele, other.novelReferenceAllele)
+        if(ObjectUtils.compare(this.seq, other.seq) == 0 &&
+                ObjectUtils.compare(this.accession, other.accession) == 0 &&
+                ObjectUtils.compare(this.strand, other.strand)  == 0 &&
+                ObjectUtils.compare(this.referenceAlleleChange, other.referenceAlleleChange)  == 0 &&
+                ObjectUtils.compare(this.novelReferenceAllele, other.novelReferenceAllele) == 0) {
+            return 0
+        }
+        return -1
     }
 }
 
