@@ -34,8 +34,11 @@ def load_assembly_to_contig_alias(assemblies, contig_alias_url, contig_alias_use
             # delete request for assembly
             del_request(assembly, full_url, contig_alias_user, contig_alias_pass)
 
-        # insert request for assembly
-        insert_request(assembly, full_url, contig_alias_user, contig_alias_pass)
+        try:
+            # insert request for assembly
+            insert_request(assembly, full_url, contig_alias_user, contig_alias_pass)
+        except InternalServerError as err:
+            logger.error(f'Could not save Assembly accession {assembly} to Contig-Alias DB. Error : {err}')
 
 
 @retry(InternalServerError, tries=3, delay=2, backoff=1.5, jitter=(1, 3))
@@ -50,7 +53,7 @@ def del_request(assembly, url, user, password):
         logger.error(f'Assembly accession {assembly} could not be deleted. Response: {response.text}')
 
 
-@retry(InternalServerError, tries=10, delay=2, backoff=1.5, jitter=(1, 3))
+@retry(InternalServerError, tries=3, delay=2, backoff=1.5, jitter=(1, 3))
 def insert_request(assembly, url, user, password):
     response = requests.put(url, auth=(user, password))
     if response.status_code == 200:
