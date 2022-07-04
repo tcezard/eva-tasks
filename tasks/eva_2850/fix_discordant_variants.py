@@ -50,15 +50,17 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
             logger.info(f"Processing Batch. Num_of_RS in batch : {len(rs_list)} \nRS_list -> {rs_list}")
 
-            dbsnp_rs_variants, eva_rs_variants, all_rs_variants = get_rs_variants(mongo_source, assembly, rs_list)
+            all_rs_variants = get_rs_variants(mongo_source, assembly, rs_list)
             dbsnp_ss_variants, eva_ss_variants, all_ss_variants = get_ss_variants(mongo_source, assembly, rs_list)
-            dbsnp_events, eva_events, all_events = get_rs_events(mongo_source, rs_list)
+            all_events = get_rs_events(mongo_source, rs_list)
 
             for rs in rs_list:
                 logger.info(f"Started Processing RS {rs}")
 
                 if rs not in all_rs_variants:
                     logger.error(f"No RS variant could be found for RS {rs}")
+                    # If no RS found in DB, check if the original RS has been merged to some other RS,
+                    # if yes, add the new RS to the list for processing
                     rs_events = all_events[rs]
                     for event in rs_events:
                         if event['accession'] == rs and event['eventType'] == 'MERGED':
@@ -95,13 +97,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                         process_all_ss_has_same_info(rs_variant, ss_records)
 
                     else:
-                        logger.error(f"Not all original SS has same info : \n {ss_records}")
-                        process_ss_diff_issue_rs_split(rs_variant, ss_records)
-
-
-def process_ss_diff_issue_rs_split(rs_variant, ss_records):
-    # TODO : Split RS for discordant SS variants
-    pass
+                        logger.error(f"For RS {rs}, Not all original SS has same info: \n {ss_records}")
 
 
 def process_all_ss_has_same_info(rs_variant, ss_records):
@@ -127,10 +123,10 @@ def correct_rs_start_and_insert(rs_variant, rs_with_new_start):
     drop_statements.append(pymongo.DeleteOne({'_id': rs_variant['_id']}))
     insert_statements.append(pymongo.InsertOne(rs_with_new_start))
 
-    # result_drop = dbsnp_cve_collection.bulk_write(requests=drop_statements, ordered=False)
-    # logger.info('There was %s old documents dropped' % result_drop.deleted_count)
-    # result_insert = dbsnp_cve_collection.bulk_write(requests=insert_statements, ordered=False)
-    # logger.info('There was %s new documents inserted' % result_insert.inserted_count)
+    result_drop = dbsnp_cve_collection.bulk_write(requests=drop_statements, ordered=False)
+    logger.info('There was %s old documents dropped' % result_drop.deleted_count)
+    result_insert = dbsnp_cve_collection.bulk_write(requests=insert_statements, ordered=False)
+    logger.info('There was %s new documents inserted' % result_insert.inserted_count)
 
 
 def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db):
@@ -149,20 +145,20 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         merge_event = create_merge_event(variant_in_db, rs_with_new_start)
         dbsnp_cvoe_insert_statements.append(pymongo.InsertOne(merge_event))
 
-        # result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
-        # logger.info('There was %s old documents dropped' % result_drop.deleted_count)
-        # result_cve_insert = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_insert_statements, ordered=False)
-        # logger.info('There was %s new documents inserted' % result_cve_insert.inserted_count)
-        # result_cvoe_insert = dbsnp_cvoe_collection.bulk_write(requests=dbsnp_cvoe_insert_statements, ordered=False)
-        # logger.info('There was %s new documents inserted' % result_cvoe_insert.inserted_count)
+        result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
+        logger.info('There was %s old documents dropped' % result_drop.deleted_count)
+        result_cve_insert = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_insert_statements, ordered=False)
+        logger.info('There was %s new documents inserted' % result_cve_insert.inserted_count)
+        result_cvoe_insert = dbsnp_cvoe_collection.bulk_write(requests=dbsnp_cvoe_insert_statements, ordered=False)
+        logger.info('There was %s new documents inserted' % result_cvoe_insert.inserted_count)
 
         update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'])
 
     else:
         dbsnp_cve_drop_statements.append(pymongo.DeleteOne({'_id': rs_variant['_id']}))
 
-        # result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
-        # logger.info('There was %s old documents dropped' % result_drop.deleted_count)
+        result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
+        logger.info('There was %s old documents dropped' % result_drop.deleted_count)
 
         update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'])
 
@@ -186,18 +182,16 @@ def update_ss_with_new_rs(old_rs, new_rs):
     filter_query = {'rs': old_rs}
     update_value = {'$set': {'rs': new_rs}}
 
-    # dbsnp_result_updated = dbsnp_sve_collection.update_many(filter_query, update_value)
-    # logger.info('There was %s documents dbsnp updated' % dbsnp_result_updated.modified_count)
-    # eva_result_updated = eva_sve_collection.update_many(filter_query, update_value)
-    # logger.info('There was %s documents eva updated' % eva_result_updated.modified_count)
+    dbsnp_result_updated = dbsnp_sve_collection.update_many(filter_query, update_value)
+    logger.info('There was %s documents dbsnp updated' % dbsnp_result_updated.modified_count)
+    eva_result_updated = eva_sve_collection.update_many(filter_query, update_value)
+    logger.info('There was %s documents eva updated' % eva_result_updated.modified_count)
 
 
 def get_rs_variants(mongo_source, assembly, rs_list):
     rs_filter_criteria = {'asm': assembly, 'accession': {'$in': rs_list}}
-    dbsnp_rs_variants = get_variants(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, 'accession')
-    eva_rs_variants = get_variants(mongo_source, EVA_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, 'accession')
-    all_rs_variants = merge_all_records(dbsnp_rs_variants, eva_rs_variants)
-    return dbsnp_rs_variants, eva_rs_variants, all_rs_variants
+    rs_variants = get_variants(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, 'accession')
+    return rs_variants
 
 
 def get_ss_variants(mongo_source, assembly, rs_list):
@@ -212,10 +206,8 @@ def get_rs_events(mongo_source, rs_list):
     event_filter_criteria = {'$or': [{'accession': {'$in': rs_list}},
                                      {'mergeInto': {'$in': rs_list}},
                                      {'splitInto': {'$in': rs_list}}]}
-    dbsnp_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
-    eva_events = get_events(mongo_source, EVA_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
-    all_events = merge_all_records(dbsnp_events, eva_events)
-    return dbsnp_events, eva_events, all_events
+    rs_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
+    return rs_events
 
 
 def get_events(mongo_source, collection_name, filter_criteria):
