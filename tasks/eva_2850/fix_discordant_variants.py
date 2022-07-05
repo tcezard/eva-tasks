@@ -44,33 +44,37 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
     with open(rs_file, 'r') as rs_file:
         while True:
-            rs_list = [int(rs.strip()) for rs in list(islice(rs_file, batch_size))]
-            if not rs_list:
+            rs_list_to_process = [int(rs.strip()) for rs in list(islice(rs_file, batch_size))]
+            if not rs_list_to_process:
                 break
 
-            logger.info(f"Processing Batch. Num_of_RS in batch : {len(rs_list)} \nRS_list -> {rs_list}")
+            rs_list = rs_list_to_process.copy()
+            rs_list_to_process.clear()
 
-            all_rs_variants = get_rs_variants(mongo_source, assembly, rs_list)
-            dbsnp_ss_variants, eva_ss_variants, all_ss_variants = get_ss_variants(mongo_source, assembly, rs_list)
-            all_events = get_rs_events(mongo_source, rs_list)
+            while rs_list:
+                logger.info(f"Processing Batch. Num_of_RS in batch : {len(rs_list)} \nRS_list -> {rs_list}")
 
-            for rs in rs_list:
-                logger.info(f"Started Processing RS {rs}")
+                all_rs_variants = get_rs_variants(mongo_source, assembly, rs_list)
+                dbsnp_ss_variants, eva_ss_variants, all_ss_variants = get_ss_variants(mongo_source, assembly, rs_list)
+                all_events = get_rs_events(mongo_source, rs_list)
 
-                if rs not in all_rs_variants:
-                    logger.error(f"No RS variant could be found for RS {rs}")
-                    # If no RS found in DB, check if the original RS has been merged to some other RS,
-                    # if yes, add the new RS to the list for processing
-                    rs_events = all_events[rs]
-                    for event in rs_events:
-                        if event['accession'] == rs and event['eventType'] == 'MERGED':
-                            merge_into_RS = event['mergeInto']
-                            logger.error(
-                                f"RS {rs} has been merged into RS {merge_into_RS}. Adding {merge_into_RS} to the list")
-                            rs_list.append(rs)
-                            break
-                    continue
-                else:
+                for rs in rs_list:
+                    logger.info(f"Started Processing RS {rs}")
+
+                    if rs not in all_rs_variants:
+                        logger.error(f"No RS variant could be found for RS {rs}")
+                        # If no RS found in DB, check if the original RS has been merged to some other RS,
+                        # if yes, add the new RS to the list for processing
+                        rs_events = all_events[rs]
+                        for event in rs_events:
+                            if event['accession'] == rs and event['eventType'] == 'MERGED':
+                                merge_into_RS = event['mergeInto']
+                                logger.error(
+                                    f"RS {rs} has been merged into RS {merge_into_RS}. Adding {merge_into_RS} to the list")
+                                rs_list_to_process.append(rs)
+                                break
+                        continue
+
                     rs_records = all_rs_variants[rs]
 
                     rs_without_map_weight = get_rs_without_map_weight(rs_records)
@@ -97,7 +101,13 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                         process_all_ss_has_same_info(rs_variant, ss_records)
 
                     else:
-                        logger.error(f"For RS {rs}, Not all original SS has same info: \n {ss_records}")
+                        logger.error(
+                            f"For RS {rs}, Not all original SS has same info. Case for Split: \nSS Records {ss_records}")
+
+                rs_list = rs_list_to_process.copy()
+                rs_list_to_process.clear()
+
+
 
 
 def process_all_ss_has_same_info(rs_variant, ss_records):
@@ -105,9 +115,9 @@ def process_all_ss_has_same_info(rs_variant, ss_records):
     rs_with_new_start['start'] = ss_records[0]['start']
     rs_with_new_start['_id'] = get_clustered_SHA1(rs_with_new_start)
 
-    result, variant_in_db = check_for_hash_collision(rs_with_new_start['_id'])
+    variant_in_db = check_for_hash_collision(rs_with_new_start['_id'])
 
-    if result:
+    if variant_in_db:
         logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} with RS {variant_in_db['accession']}")
         resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db)
     else:
@@ -304,9 +314,7 @@ def check_for_hash_collision(id):
     collision_records = find_documents(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
 
     if collision_records:
-        return True, collision_records[0]
-    else:
-        return False, None
+        return collision_records[0]
 
 
 if __name__ == "__main__":
