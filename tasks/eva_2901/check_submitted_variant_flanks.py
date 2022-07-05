@@ -1,9 +1,11 @@
 import argparse
 import os
+import sys
+
 import itertools
 
 from Bio import pairwise2
-
+from Bio.Seq import Seq
 from ebi_eva_common_pyutils.command_utils import run_command_with_output
 from ebi_eva_common_pyutils.config import cfg
 from ebi_eva_common_pyutils.config_utils import get_primary_mongo_creds_for_profile
@@ -13,54 +15,76 @@ from pymongo import MongoClient
 cache = {'scientific_name_from_taxonomy': {}}
 
 
-def get_genome(taxonomy, assembly_accession):
+def get_scientific_name_from_taxonomy(taxonomy):
     if taxonomy not in cache['scientific_name_from_taxonomy']:
         species_scientific_name = get_scientific_name_from_ensembl(taxonomy)
-        cache['scientific_name_from_taxonomy'][taxonomy] = os.path.join(
-            cfg.query('genome_downloader', 'output_directory'),
-            species_scientific_name.lower().replace(' ', '_'),
-            assembly_accession, assembly_accession + '.fa'
-        )
+        cache['scientific_name_from_taxonomy'][taxonomy] =species_scientific_name
     return cache['scientific_name_from_taxonomy'][taxonomy]
 
 
+def get_genome(taxonomy, assembly_accession):
+    return os.path.join(
+        cfg.query('genome_downloader', 'output_directory'),
+        get_scientific_name_from_taxonomy(taxonomy).lower().replace(' ', '_'),
+        assembly_accession, assembly_accession + '.fa'
+    )
+
+
 def compare_variant_flanks(sequence1, sequence2):
-    alignments = pairwise2.align.globalxx(sequence1, sequence2)
-    return max((a.score for a in alignments))
+    alignments1 = pairwise2.align.globalms(sequence1, sequence2, 1, -3, -10, -10, one_alignment_only=True)
+    alignments2 = pairwise2.align.globalms(sequence1, Seq(sequence2).reverse_complement(), 1, -3, -10, -10, one_alignment_only=True)
+
+    if alignments1 and alignments2:
+        if alignments2[0].score > alignments1[0].score:
+            return alignments2[0]
+        else:
+            return alignments1[0]
+    elif alignments1:
+        return alignments1
+    elif alignments2:
+        return alignments2
 
 
-def format_output(variant1, variant2, score):
-    print(variant1)
-    print(variant2)
-    print(score)
+def format_output(ssid, variant1, variant2, alignment, seq1, seq2):
+    out = [ssid,
+        variant1['seq'], variant1['contig'], variant1['start'], variant1['ref'], variant1['alt'],
+        variant2['seq'], variant2['contig'], variant2['start'], variant2['ref'], variant2['alt'],
+        alignment.score, alignment.seqA, alignment.seqB, seq1, seq2
+    ]
+    return '\t'.join([str(s) for s in out])
 
 
 def check_submitted_variant_flanks(mongo_client, ssid):
+    print(f'Process ss{ssid}', file=sys.stderr)
     samtools = cfg.query('executable', 'samtools', ret_default='samtools')
     sve_collection = mongo_client['eva_accession_sharded']['dbsnpSubmittedVariantEntity']
-    cursor = sve_collection.find({'accession': ssid, 'remappedFrom': {'$exists': False}})
+    cursor = sve_collection.find({'accession': int(ssid), 'remappedFrom': {'$exists': False}})
     flank_size = 50
     variant_records = list(cursor)
     id_2_info = {}
+    print(f'Found {len(variant_records)} variant for ss{ssid}', file=sys.stderr)
     for variant_rec in variant_records:
         flank_up_coord = f"{variant_rec['contig']}:{variant_rec['start'] - flank_size}-{variant_rec['start'] - 1}"
         flank_down_coord = f"{variant_rec['contig']}:{variant_rec['start'] + 1}-{variant_rec['start'] + flank_size}"
 
-        position = f"{variant_rec['contig']}:{variant_rec['start']}"
-        change = f"{variant_rec['ref']}-{variant_rec['alt']}"
-        genome_assembly_fasta = get_genome(assembly_accession=variant_rec['seq'])
-        commands = f"{samtools} faidx {genome_assembly_fasta} {flank_up_coord} | grep -v '^>' | sed 's/\n//' "
-        flank_up = run_command_with_output(f'Extract upstream sequence using {flank_up_coord}',  commands).upper()
-        commands = f"{samtools} faidx {genome_assembly_fasta} {flank_down_coord} | grep -v '^>' | sed 's/\n//' "
-        flank_down = run_command_with_output(f'Extract upstream sequence using {flank_down_coord}',  commands).upper()
+        # position = f"{variant_rec['contig']}:{variant_rec['start']}"
+        # change = f"{variant_rec['ref']}-{variant_rec['alt']}"
+        genome_assembly_fasta = get_genome(assembly_accession=variant_rec['seq'], taxonomy=variant_rec['tax'])
+        command = f"{samtools} faidx {genome_assembly_fasta} {flank_up_coord} | grep -v '^>' | sed 's/\\n//' "
+        flank_up = run_command_with_output(f'Extract upstream sequence using {flank_up_coord}',  command, return_process_output=True).strip().upper()
+        command = f"{samtools} faidx {genome_assembly_fasta} {flank_down_coord} | grep -v '^>' | sed 's/\\n//' "
+        flank_down = run_command_with_output(f'Extract upstream sequence using {flank_down_coord}',  command, return_process_output=True).strip().upper()
         id_2_info[variant_rec['_id']] = {'variant_rec': variant_rec, 'flank_up': flank_up, 'flank_down': flank_down}
 
     for variant_id1, variant_id2 in list(itertools.combinations(id_2_info, 2)):
-        score = compare_variant_flanks(
+        alignment = compare_variant_flanks(
             id_2_info[variant_id1]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id1]['flank_down'],
             id_2_info[variant_id2]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id2]['flank_down']
         )
-        format_output(variant_id1, variant_id2, score)
+        output = format_output(ssid, id_2_info[variant_id1]['variant_rec'], id_2_info[variant_id2]['variant_rec'], alignment,
+                      id_2_info[variant_id1]['flank_up'] + " " + id_2_info[variant_id1]['variant_rec']['ref'] + " " + id_2_info[variant_id1]['flank_down'],
+                      id_2_info[variant_id2]['flank_up'] + " " + id_2_info[variant_id1]['variant_rec']['ref'] + " " + id_2_info[variant_id2]['flank_down'])
+        print(output)
 
 
 def load_config(*args):
@@ -72,12 +96,17 @@ def load_config(*args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument("--profile_name",
-                        help="Maven profile to use when connecting to mongodb", default='development')
-    parser.add_argument("--ssid", help="single ssid to query",  required=True)
+                        help="Maven profile to use when connecting to mongodb")
+    parser.add_argument("--ssid_file", help="file containing a single ssid per line", type=str, required=True)
     args = parser.parse_args()
+    # Get the config file loaded
     load_config()
-    mongo_host, mongo_user, mongo_pass = get_primary_mongo_creds_for_profile(args.profile_name)
-    mongo_uri = f'mongodb://{mongo_user}:@{mongo_host}:27017/admin'
+    # Connect to mongodb database
+    profile_name = args.profile_name or cfg['maven']['environment']
+    mongo_host, mongo_user, mongo_pass = get_primary_mongo_creds_for_profile(profile_name, cfg['maven']['settings_file'])
+    mongo_uri = f'mongodb://{mongo_user}:@{mongo_host}:27017/eva_accession_sharded?authSource=admin'
     mongo_client = MongoClient(mongo_uri, password=mongo_pass)
-    check_submitted_variant_flanks(mongo_client, args.ssid)
+    with open(args.ssid_file) as open_file:
+        for line in open_file:
+            check_submitted_variant_flanks(mongo_client, line.strip())
     mongo_client.close()
