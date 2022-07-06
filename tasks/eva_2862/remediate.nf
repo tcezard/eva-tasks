@@ -191,6 +191,7 @@ process ingest_vcf_into_mongo {
     output:
     path "${remapped_vcf}_ingestion.properties" into ingestion_props
     path "${remapped_vcf}_ingestion.log" into ingestion_log_filename
+    path "uningested_variants.tsv" into uningested_filename
 
     publishDir "$params.output_dir/properties", overwrite: true, mode: "copy", pattern: "*.properties"
     publishDir "$params.output_dir/logs", overwrite: true, mode: "copy", pattern: "*.log*"
@@ -217,20 +218,19 @@ process ingest_vcf_into_mongo {
     """
 }
 
-/*
+
 process qc_remediation {
     memory '8GB'
 
     input:
     path unmapped_vcf from unmapped_vcfs
-    path ingestion_log from ingestion_log_filename
+    path uningested_file from uningested_filename
 
     publishDir "$params.output_dir/properties", overwrite: true, mode: "copy", pattern: "*.properties"
     publishDir "$params.output_dir/logs", overwrite: true, mode: "copy", pattern: "*.log*"
 
     """
     cp ${params.template_properties} ${params.source_assembly_accession}_qc.properties
-    export SPRING_CONFIG_LOCATION=${params.source_assembly_accession}_qc.properties && spring run $params.groovy.qc_remediation ${params.source_assembly_accession} > ${params.source_assembly_accession}_qc.log
+    export SPRING_CONFIG_LOCATION=${params.source_assembly_accession}_qc.properties && spring run $params.groovy.qc_remediation ${params.source_assembly_accession} ${unmapped_vcf} ${uningested_file} > ${params.source_assembly_accession}_qc.log
     """
 }
-*/

@@ -31,6 +31,8 @@ import uk.ac.ebi.eva.remapping.ingest.configuration.RemappingMetadataConfigurati
 import uk.ac.ebi.eva.remapping.ingest.parameters.InputParameters
 import uk.ac.ebi.eva.remapping.ingest.batch.processors.VariantToSubmittedVariantEntityRemappedProcessor
 
+import java.io.BufferedWriter
+
 import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 
@@ -69,6 +71,9 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
         ItemReader<Variant> vcfReader = getVcfItemReader(baseVcfReader)
         vcfReader.open(new ExecutionContext())
 
+        // File to write uningested ss to
+        BufferedWriter uningestedWriter = new File('uningested_variants.tsv').newWriter()
+
         Variant variant = vcfReader.read()
 
         while (variant != null) {
@@ -78,7 +83,7 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
                 chunk.add(sve)
                 count++
             } else {
-                processChunk(chunk)
+                processChunk(chunk, uningestedWriter)
                 count = 0
                 chunk = new ArrayList<>()
             }
@@ -87,34 +92,42 @@ class PropagateSplitToRemappedSS implements CommandLineRunner {
 
         // process the last chunk, if it exists
         if (!chunk.isEmpty()) {
-            processChunk(chunk)
+            processChunk(chunk, uningestedWriter)
         }
         vcfReader.close()
+        uningestedWriter.flush()
+        uningestedWriter.close()
     }
 
-    void processChunk(List<? extends SubmittedVariantEntity> chunk) {
+    void processChunk(List<? extends SubmittedVariantEntity> chunk, BufferedWriter uningestedWriter) {
         logger.info("Processing " + chunk.size() + " variants...")
-        Map<Long, ? extends SubmittedVariantEntity> ssToRemappedSVE = getSVEWithSameHash(chunk)
+        Map<Long, ? extends SubmittedVariantEntity> ssToRemappedSVE = getSVEWithSameHash(chunk, uningestedWriter)
         if (ssToRemappedSVE != null) {
             logger.info("Found " + ssToRemappedSVE.size() + " SVE with same hash")
             List<SubmittedVariantEntity> remappedSVEWithUpdatedSS = getUpdatedSVE(ssToRemappedSVE)
             try {
                 mongoTemplate.insert(remappedSVEWithUpdatedSS, SubmittedVariantEntity.class)
             } catch (DuplicateKeyException exception) {
-                // Duplicates on insertion either means we are rerunning, or (less likely) there is already a matching SVE in the EVA collection
-                // - either way we can safely ignore.
+                // Duplicates on insertion either means we are rerunning, or (less likely) there is already a matching
+                // SVE in the EVA collection - either way we can safely ignore.
                 logger.warn(exception.toString())
             }
-            mongoTemplate.findAllAndRemove(query(where("accession").in(ssToRemappedSVE.keySet())), DbsnpSubmittedVariantEntity.class)
+            mongoTemplate.findAllAndRemove(query(where("accession").in(ssToRemappedSVE.keySet())),
+                    DbsnpSubmittedVariantEntity.class)
         }
     }
 
     @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
-    Map<Long, ? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves) {
+    Map<Long, ? extends SubmittedVariantEntity> getSVEWithSameHash(List<? extends SubmittedVariantEntity> sves,
+                                                                   BufferedWriter uningestedWriter) {
         /* Returns map from provided SS to the SVE with the same hash */
         Map<String, Long> hashToSS = sves.collectEntries { sve -> [sve.getHashedMessage(), sve.getAccession()] }
         Query queryToGetNextBatchOfSVE = query(where("_id").in(hashToSS.keySet()))
-        List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE, DbsnpSubmittedVariantEntity.class)
+        List<? extends SubmittedVariantEntity> result = this.mongoTemplate.find(queryToGetNextBatchOfSVE,
+                DbsnpSubmittedVariantEntity.class)
+        Map<String, Long> hashAndSSNotFound = hashToSS.findAll { hashAndSS ->
+            !(hashAndSS.value in result.collect{ it.getAccession() }) }
+        hashAndSSNotFound.each { hashAndSS -> uningestedWriter.writeLine(hashAndSS.value + "\t" + hashAndSS.key) }
         if (result.size() > 0) {
             return result.collectEntries { sve -> [hashToSS[sve.getHashedMessage()], sve] }
         }
