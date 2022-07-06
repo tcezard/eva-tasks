@@ -62,7 +62,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                 for rs in rs_list:
                     logger.info(f"Started Processing RS {rs}")
 
-                    if rs not in all_rs_variants:
+                    if rs not in all_rs_variants or not all_rs_variants[rs]:
                         logger.error(f"No RS variant could be found for RS {rs}")
                         # If no RS found in DB, check if the original RS has been merged to some other RS,
                         # if yes, add the new RS to the list for processing
@@ -87,12 +87,12 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                                      f"\n {rs_without_map_weight}")
                         continue
 
-                    ss_records = all_ss_variants[rs]
-                    if not ss_records:
-                        logger.error(f"No original SS record found for RS {rs}, /n {ss_records}")
+                    if rs not in all_ss_variants or not all_ss_variants[rs]:
+                        logger.error(f"No original SS record found for RS {rs}")
                         continue
 
                     rs_variant = rs_records[0]
+                    ss_records = all_ss_variants[rs]
 
                     if check_all_ss_has_same_info(ss_records):
                         if rs_variant['start'] == ss_records[0]['start']:
