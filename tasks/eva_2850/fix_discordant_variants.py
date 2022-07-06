@@ -178,11 +178,11 @@ def update_ss_with_new_rs(old_rs, new_rs):
     update_value = {'$set': {'rs': new_rs}}
 
     dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"),
-                                      read_preference=pymongo.read_preferences.PrimaryPreferred,
+                                      read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED,
                                       write_concern=WriteConcern("majority")) \
         .update_many(filter_query, update_value)
     eva_sve_collection.with_options(read_concern=ReadConcern("majority"),
-                                    read_preference=pymongo.read_preferences.PrimaryPreferred,
+                                    read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED,
                                     write_concern=WriteConcern("majority")) \
         .update_many(filter_query, update_value)
 
@@ -251,7 +251,7 @@ def get_variants(mongo_source, collection_name, filter_criteria, key):
 def find_documents(mongo_source, collection_name, filter_criteria):
     collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
     cursor = collection.with_options(read_concern=ReadConcern("majority"),
-                                     read_preference=pymongo.read_preferences.PrimaryPreferred) \
+                                     read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED) \
         .find(filter_criteria, no_cursor_timeout=True)
     records = []
     try:
