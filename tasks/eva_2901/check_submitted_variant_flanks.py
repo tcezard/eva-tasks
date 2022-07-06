@@ -16,7 +16,7 @@ cache = {'scientific_name_from_taxonomy': {}}
 
 
 def revcomp(seq):
-    return Seq(seq).reverse_complement()
+    return str(Seq(seq).reverse_complement())
 
 
 def get_scientific_name_from_taxonomy(taxonomy):
@@ -66,14 +66,12 @@ def format_output(ssid, variant1, variant2, alignment, strand, flank_up1, flank_
 
 
 def check_submitted_variant_flanks(mongo_client, ssid):
-    print(f'Process ss{ssid}', file=sys.stderr)
     samtools = cfg.query('executable', 'samtools', ret_default='samtools')
     sve_collection = mongo_client['eva_accession_sharded']['dbsnpSubmittedVariantEntity']
     cursor = sve_collection.find({'accession': int(ssid), 'remappedFrom': {'$exists': False}})
     flank_size = 50
     variant_records = list(cursor)
     id_2_info = {}
-    print(f'Found {len(variant_records)} variant for ss{ssid}', file=sys.stderr)
     for variant_rec in variant_records:
         flank_up_coord = f"{variant_rec['contig']}:{variant_rec['start'] - flank_size}-{variant_rec['start'] - 1}"
         flank_down_coord = f"{variant_rec['contig']}:{variant_rec['start'] + 1}-{variant_rec['start'] + flank_size}"
@@ -116,7 +114,11 @@ if __name__ == '__main__':
     mongo_host, mongo_user, mongo_pass = get_primary_mongo_creds_for_profile(profile_name, cfg['maven']['settings_file'])
     mongo_uri = f'mongodb://{mongo_user}:@{mongo_host}:27017/eva_accession_sharded?authSource=admin'
     mongo_client = MongoClient(mongo_uri, password=mongo_pass)
+    nb_ssids = 0
     with open(args.ssid_file) as open_file:
         for line in open_file:
+            nb_ssids += 1
+            if nb_ssids % 1000 == 0 :
+                print(f'Processed {nb_ssids} ssids', file=sys.stderr)
             check_submitted_variant_flanks(mongo_client, line.strip())
     mongo_client.close()
