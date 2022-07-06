@@ -226,6 +226,10 @@ process qc_remediation {
     path unmapped_vcf from unmapped_vcfs
     path uningested_file from uningested_filename
 
+    output:
+    path "${params.source_assembly_accession}_qc.properties" into qc_props_filename
+    path "${params.source_assembly_accession}_qc.log" into qc_log_filename
+
     publishDir "$params.output_dir/properties", overwrite: true, mode: "copy", pattern: "*.properties"
     publishDir "$params.output_dir/logs", overwrite: true, mode: "copy", pattern: "*.log*"
 
