@@ -99,6 +99,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                             logger.error(f"RS {rs} and original SS's Start matches. Nothing to do")
                             continue
 
+                        logger.info(f"Correct Discordant variants for RS {rs}")
                         correct_discordant_rs_and_insert_into_db(rs_variant, ss_records)
 
                     else:
@@ -134,6 +135,8 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
     dbsnp_cvoe_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY]
 
+    # For priority refer to:
+    # https://github.com/EBIvariation/eva-accession/blob/0b2ae4cdb6f74152c5443c3831c02c1d76cf93f9/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/batch/io/ClusteredVariantMergingPolicy.java#L40
     if rs_with_new_start['accession'] < variant_in_db['accession']:
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
             .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
@@ -191,7 +194,8 @@ def get_rs_variants(mongo_source, assembly, rs_list):
 
 
 def get_ss_variants(mongo_source, assembly, rs_list):
-    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}}
+    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}, '$or': [{"allele_match": {"$exists": 'false'}},
+                                                                           {"allele_match": 'false'}]}
     dbsnp_ss_variants = get_variants(mongo_source, DBSNP_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     eva_ss_variants = get_variants(mongo_source, EVA_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     all_ss_variants = merge_all_records(dbsnp_ss_variants, eva_ss_variants)
