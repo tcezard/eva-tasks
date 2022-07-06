@@ -198,8 +198,8 @@ def get_rs_variants(mongo_source, assembly, rs_list):
 
 
 def get_ss_variants(mongo_source, assembly, rs_list):
-    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}, '$or': [{"allele_match": {"$exists": 'false'}},
-                                                                           {"allele_match": 'false'}]}
+    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}, '$or': [{"allele_match": {"$exists": False}},
+                                                                           {"allele_match": False}]}
     dbsnp_ss_variants = get_variants(mongo_source, DBSNP_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     eva_ss_variants = get_variants(mongo_source, EVA_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     all_ss_variants = merge_all_records(dbsnp_ss_variants, eva_ss_variants)
