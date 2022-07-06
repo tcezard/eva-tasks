@@ -57,13 +57,17 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
                 all_rs_variants = get_rs_variants(mongo_source, assembly, rs_list)
                 dbsnp_ss_variants, eva_ss_variants, all_ss_variants = get_ss_variants(mongo_source, assembly, rs_list)
-                all_events = get_rs_events(mongo_source, rs_list)
+                all_events = {}
 
                 for rs in rs_list:
                     logger.info(f"Started Processing RS {rs}")
 
                     if rs not in all_rs_variants or not all_rs_variants[rs]:
                         logger.error(f"No RS variant could be found for RS {rs}")
+
+                        if not all_events:
+                            all_events = get_rs_events(mongo_source, rs_list)
+
                         # If no RS found in DB, check if the original RS has been merged to some other RS,
                         # if yes, add the new RS to the list for processing
                         rs_events = all_events[rs]
