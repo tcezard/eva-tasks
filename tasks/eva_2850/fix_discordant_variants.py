@@ -5,10 +5,11 @@ import os
 import traceback
 from itertools import islice
 
-import pymongo
+import pymongo.read_preferences
 from ebi_eva_common_pyutils.logger import logging_config
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from pymongo.read_concern import ReadConcern
+from pymongo.write_concern import WriteConcern
 
 logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
@@ -95,10 +96,10 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
                     if check_all_ss_has_same_info(ss_records):
                         if rs_variant['start'] == ss_records[0]['start']:
-                            logger.error(f"RS's and original SS's Start matches. Nothing to do")
+                            logger.error(f"RS {rs} and original SS's Start matches. Nothing to do")
                             continue
 
-                        process_all_ss_has_same_info(rs_variant, ss_records)
+                        correct_discordant_rs_and_insert_into_db(rs_variant, ss_records)
 
                     else:
                         logger.error(
@@ -108,9 +109,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                 rs_list_to_process.clear()
 
 
-
-
-def process_all_ss_has_same_info(rs_variant, ss_records):
+def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
     rs_with_new_start = copy.copy(rs_variant)
     rs_with_new_start['start'] = ss_records[0]['start']
     rs_with_new_start['_id'] = get_clustered_SHA1(rs_with_new_start)
@@ -122,63 +121,46 @@ def process_all_ss_has_same_info(rs_variant, ss_records):
         resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db)
     else:
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
-        correct_rs_start_and_insert(rs_variant, rs_with_new_start)
-
-
-def correct_rs_start_and_insert(rs_variant, rs_with_new_start):
-    dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
-
-    drop_statements = []
-    insert_statements = []
-    drop_statements.append(pymongo.DeleteOne({'_id': rs_variant['_id']}))
-    insert_statements.append(pymongo.InsertOne(rs_with_new_start))
-
-    result_drop = dbsnp_cve_collection.bulk_write(requests=drop_statements, ordered=False)
-    logger.info('There was %s old documents dropped' % result_drop.deleted_count)
-    result_insert = dbsnp_cve_collection.bulk_write(requests=insert_statements, ordered=False)
-    logger.info('There was %s new documents inserted' % result_insert.inserted_count)
+        dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
+        # delete original rs
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+            .delete_one({'_id': rs_variant['_id']})
+        # insert rs with new hash
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+            .insert_one(rs_with_new_start)
 
 
 def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db):
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
     dbsnp_cvoe_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY]
 
-    dbsnp_cve_drop_statements = []
-    dbsnp_cve_insert_statements = []
-    dbsnp_cvoe_insert_statements = []
-
     if rs_with_new_start['accession'] < variant_in_db['accession']:
-        dbsnp_cve_drop_statements.append(pymongo.DeleteOne({'_id': rs_variant['_id']}))
-        dbsnp_cve_drop_statements.append(pymongo.DeleteOne({'_id': variant_in_db['_id']}))
-        dbsnp_cve_insert_statements.append(pymongo.InsertOne(rs_with_new_start))
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+            .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
+
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).insert_one(rs_with_new_start)
 
         merge_event = create_merge_event(variant_in_db, rs_with_new_start)
-        dbsnp_cvoe_insert_statements.append(pymongo.InsertOne(merge_event))
-
-        result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
-        logger.info('There was %s old documents dropped' % result_drop.deleted_count)
-        result_cve_insert = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_insert_statements, ordered=False)
-        logger.info('There was %s new documents inserted' % result_cve_insert.inserted_count)
-        result_cvoe_insert = dbsnp_cvoe_collection.bulk_write(requests=dbsnp_cvoe_insert_statements, ordered=False)
-        logger.info('There was %s new documents inserted' % result_cvoe_insert.inserted_count)
+        dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'])
 
     else:
-        dbsnp_cve_drop_statements.append(pymongo.DeleteOne({'_id': rs_variant['_id']}))
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).delete_one({'_id': rs_variant['_id']})
 
-        result_drop = dbsnp_cve_collection.bulk_write(requests=dbsnp_cve_drop_statements, ordered=False)
-        logger.info('There was %s old documents dropped' % result_drop.deleted_count)
+        merge_event = create_merge_event(rs_with_new_start, variant_in_db)
+        dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'])
 
 
 def create_merge_event(variant_merged, variant_retained):
     merge_event = {
+        "_id": f"EVA2850_MERGED_{variant_merged['accession']}",
         "eventType": "MERGED",
         "accession": variant_merged['accession'],
         "mergeInto": variant_retained['accession'],
-        "reason": "Merged after RS discordant correction",
+        "reason": "EVA2850: Merged because of RS discordant correction",
         "inactiveObjects": [variant_merged]
     }
 
@@ -192,10 +174,14 @@ def update_ss_with_new_rs(old_rs, new_rs):
     filter_query = {'rs': old_rs}
     update_value = {'$set': {'rs': new_rs}}
 
-    dbsnp_result_updated = dbsnp_sve_collection.update_many(filter_query, update_value)
-    logger.info('There was %s documents dbsnp updated' % dbsnp_result_updated.modified_count)
-    eva_result_updated = eva_sve_collection.update_many(filter_query, update_value)
-    logger.info('There was %s documents eva updated' % eva_result_updated.modified_count)
+    dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"),
+                                      read_preference=pymongo.read_preferences.PrimaryPreferred,
+                                      write_concern=WriteConcern("majority")) \
+        .update_many(filter_query, update_value)
+    eva_sve_collection.with_options(read_concern=ReadConcern("majority"),
+                                    read_preference=pymongo.read_preferences.PrimaryPreferred,
+                                    write_concern=WriteConcern("majority")) \
+        .update_many(filter_query, update_value)
 
 
 def get_rs_variants(mongo_source, assembly, rs_list):
@@ -260,7 +246,8 @@ def get_variants(mongo_source, collection_name, filter_criteria, key):
 
 def find_documents(mongo_source, collection_name, filter_criteria):
     collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
-    cursor = collection.with_options(read_concern=ReadConcern("majority")) \
+    cursor = collection.with_options(read_concern=ReadConcern("majority"),
+                                     read_preference=pymongo.read_preferences.PrimaryPreferred) \
         .find(filter_criteria, no_cursor_timeout=True)
     records = []
     try:
