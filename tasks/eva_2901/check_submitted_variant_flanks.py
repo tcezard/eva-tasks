@@ -15,6 +15,10 @@ from pymongo import MongoClient
 cache = {'scientific_name_from_taxonomy': {}}
 
 
+def revcomp(seq):
+    return Seq(seq).reverse_complement()
+
+
 def get_scientific_name_from_taxonomy(taxonomy):
     if taxonomy not in cache['scientific_name_from_taxonomy']:
         species_scientific_name = get_scientific_name_from_ensembl(taxonomy)
@@ -32,24 +36,31 @@ def get_genome(taxonomy, assembly_accession):
 
 def compare_variant_flanks(sequence1, sequence2):
     alignments1 = pairwise2.align.globalms(sequence1, sequence2, 1, -3, -10, -10, one_alignment_only=True)
-    alignments2 = pairwise2.align.globalms(sequence1, Seq(sequence2).reverse_complement(), 1, -3, -10, -10, one_alignment_only=True)
+    alignments2 = pairwise2.align.globalms(sequence1, revcomp(sequence2), 1, -3, -10, -10, one_alignment_only=True)
 
     if alignments1 and alignments2:
         if alignments2[0].score > alignments1[0].score:
-            return alignments2[0]
+            return alignments2[0], '-'
         else:
-            return alignments1[0]
+            return alignments1[0], '+'
     elif alignments1:
-        return alignments1
+        return alignments1, '+'
     elif alignments2:
-        return alignments2
+        return alignments2, '-'
 
 
-def format_output(ssid, variant1, variant2, alignment, seq1, seq2):
+def format_output(ssid, variant1, variant2, alignment, strand, flank_up1, flank_down1, flank_up2, flank_down2):
+    ref1 = ' '.join((flank_up1, variant1['ref'], flank_down1))
+    ref_bases = variant2['ref'] if strand == '+' else revcomp(variant2['ref'])
+    ref2 = ' '.join((flank_up2, ref_bases, flank_down2))
+    alt1 = ' '.join((flank_up1, variant1['alt'], flank_down1))
+    alt_bases = variant2['alt'] if strand == '+' else revcomp(variant2['alt'])
+    alt2 = ' '.join((flank_up2, alt_bases, flank_down2))
+
     out = [ssid,
         variant1['seq'], variant1['contig'], variant1['start'], variant1['ref'], variant1['alt'],
         variant2['seq'], variant2['contig'], variant2['start'], variant2['ref'], variant2['alt'],
-        alignment.score, alignment.seqA, alignment.seqB, seq1, seq2
+        alignment.score, strand, alignment.seqA, alignment.seqB, ref1, ref2, alt1, alt2
     ]
     return '\t'.join([str(s) for s in out])
 
@@ -66,9 +77,6 @@ def check_submitted_variant_flanks(mongo_client, ssid):
     for variant_rec in variant_records:
         flank_up_coord = f"{variant_rec['contig']}:{variant_rec['start'] - flank_size}-{variant_rec['start'] - 1}"
         flank_down_coord = f"{variant_rec['contig']}:{variant_rec['start'] + 1}-{variant_rec['start'] + flank_size}"
-
-        # position = f"{variant_rec['contig']}:{variant_rec['start']}"
-        # change = f"{variant_rec['ref']}-{variant_rec['alt']}"
         genome_assembly_fasta = get_genome(assembly_accession=variant_rec['seq'], taxonomy=variant_rec['tax'])
         command = f"{samtools} faidx {genome_assembly_fasta} {flank_up_coord} | grep -v '^>' | sed 's/\\n//' "
         flank_up = run_command_with_output(f'Extract upstream sequence using {flank_up_coord}',  command, return_process_output=True).strip().upper()
@@ -77,13 +85,15 @@ def check_submitted_variant_flanks(mongo_client, ssid):
         id_2_info[variant_rec['_id']] = {'variant_rec': variant_rec, 'flank_up': flank_up, 'flank_down': flank_down}
 
     for variant_id1, variant_id2 in list(itertools.combinations(id_2_info, 2)):
-        alignment = compare_variant_flanks(
+        alignment, strand = compare_variant_flanks(
             id_2_info[variant_id1]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id1]['flank_down'],
             id_2_info[variant_id2]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id2]['flank_down']
         )
-        output = format_output(ssid, id_2_info[variant_id1]['variant_rec'], id_2_info[variant_id2]['variant_rec'], alignment,
-                      id_2_info[variant_id1]['flank_up'] + " " + id_2_info[variant_id1]['variant_rec']['ref'] + " " + id_2_info[variant_id1]['flank_down'],
-                      id_2_info[variant_id2]['flank_up'] + " " + id_2_info[variant_id1]['variant_rec']['ref'] + " " + id_2_info[variant_id2]['flank_down'])
+        output = format_output(
+            ssid, id_2_info[variant_id1]['variant_rec'], id_2_info[variant_id2]['variant_rec'], alignment, strand,
+            id_2_info[variant_id1]['flank_up'], id_2_info[variant_id1]['flank_down'],
+            id_2_info[variant_id2]['flank_up'], id_2_info[variant_id2]['flank_down']
+        )
         print(output)
 
 
