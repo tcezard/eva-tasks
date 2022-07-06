@@ -48,7 +48,7 @@ class SSDeprecationWriter implements ItemWriter<SubmittedVariantEntity> {
             svoe.fill(EventType.DEPRECATED, sve.getAccession(), null,
                     "EVA2889: Deprecated since this variant was incorrectly remapped",
                     Collections.singletonList(new SubmittedVariantInactiveEntity(sve)))
-            svoe.setId("EVA2889_SS_DEPRECATED_${sve.getId()}")
+            svoe.setId("SS_DEPRECATED_EVA2889_${sve.getId()}")
             return svoe
         }
         def idsToWrite = svoesToWrite.collect{svoe -> svoe.getId()}.toSet()
