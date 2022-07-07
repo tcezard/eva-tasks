@@ -85,7 +85,7 @@ def check_submitted_variant_flanks(mongo_client, ssid):
     for variant_id1, variant_id2 in list(itertools.combinations(id_2_info, 2)):
         alignment, strand = compare_variant_flanks(
             id_2_info[variant_id1]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id1]['flank_down'],
-            id_2_info[variant_id2]['flank_up'] + id_2_info[variant_id1]['variant_rec']['ref'] + id_2_info[variant_id2]['flank_down']
+            id_2_info[variant_id2]['flank_up'] + id_2_info[variant_id2]['variant_rec']['ref'] + id_2_info[variant_id2]['flank_down']
         )
         output = format_output(
             ssid, id_2_info[variant_id1]['variant_rec'], id_2_info[variant_id2]['variant_rec'], alignment, strand,
