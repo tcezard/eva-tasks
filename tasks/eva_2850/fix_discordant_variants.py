@@ -182,11 +182,11 @@ def update_ss_with_new_rs(old_rs, new_rs):
     update_value = {'$set': {'rs': new_rs}}
 
     dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"),
-                                      read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED,
+                                      read_preference=pymongo.ReadPreference.PRIMARY,
                                       write_concern=WriteConcern("majority")) \
         .update_many(filter_query, update_value)
     eva_sve_collection.with_options(read_concern=ReadConcern("majority"),
-                                    read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED,
+                                    read_preference=pymongo.ReadPreference.PRIMARY,
                                     write_concern=WriteConcern("majority")) \
         .update_many(filter_query, update_value)
 
@@ -198,8 +198,8 @@ def get_rs_variants(mongo_source, assembly, rs_list):
 
 
 def get_ss_variants(mongo_source, assembly, rs_list):
-    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}, '$or': [{"allele_match": {"$exists": False}},
-                                                                           {"allele_match": False}]}
+    ss_filter_criteria = {'seq': assembly, 'rs': {'$in': rs_list}, '$or': [{"allelesMatch": {"$exists": False}},
+                                                                           {"allelesMatch": False}]}
     dbsnp_ss_variants = get_variants(mongo_source, DBSNP_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     eva_ss_variants = get_variants(mongo_source, EVA_SUBMITTED_VARIANT_ENTITY, ss_filter_criteria, 'rs')
     all_ss_variants = merge_all_records(dbsnp_ss_variants, eva_ss_variants)
@@ -255,7 +255,7 @@ def get_variants(mongo_source, collection_name, filter_criteria, key):
 def find_documents(mongo_source, collection_name, filter_criteria):
     collection = mongo_source.mongo_handle[mongo_source.db_name][collection_name]
     cursor = collection.with_options(read_concern=ReadConcern("majority"),
-                                     read_preference=pymongo.ReadPreference.PRIMARY_PREFERRED) \
+                                     read_preference=pymongo.ReadPreference.PRIMARY) \
         .find(filter_criteria, no_cursor_timeout=True)
     records = []
     try:
