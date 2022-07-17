@@ -1,6 +1,7 @@
 package src
 
 @Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-clustering', version = '0.6.10-SNAPSHOT')
+@Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-deprecate', version = '0.6.10-SNAPSHOT')
 @Grab(group = 'uk.ac.ebi.eva', module = 'eva-accession-core', version = '0.6.10-SNAPSHOT')
 @Grab(group = 'uk.ac.ebi.eva', module = 'variation-commons-batch', version = '0.8.1')
 
@@ -30,10 +31,14 @@ import org.springframework.stereotype.Component
 import uk.ac.ebi.eva.accession.clustering.configuration.InputParametersConfiguration
 import uk.ac.ebi.eva.accession.clustering.configuration.batch.io.SSSplitWriterConfiguration
 import uk.ac.ebi.eva.accession.clustering.configuration.batch.listeners.ListenersConfiguration
+import uk.ac.ebi.eva.accession.core.batch.io.SubmittedVariantDeprecationWriter
+import uk.ac.ebi.eva.accession.core.configuration.nonhuman.ClusteredVariantAccessioningConfiguration
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.SubmittedVariantAccessioningConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
+import uk.ac.ebi.eva.accession.core.service.nonhuman.ClusteredVariantAccessioningService
 import uk.ac.ebi.eva.accession.core.service.nonhuman.SubmittedVariantAccessioningService
+import uk.ac.ebi.eva.accession.deprecate.configuration.batch.io.SubmittedVariantDeprecationWriterConfiguration
 import uk.ac.ebi.eva.commons.core.models.VariantCoreFields
 import uk.ac.ebi.eva.commons.core.models.VariantType
 import uk.ac.ebi.eva.commons.core.models.pipeline.Variant
@@ -46,13 +51,17 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 @Component
 @Import(value=[SSSplitWriterConfiguration.class,
         InputParametersConfiguration.class, MetricConfiguration.class, ListenersConfiguration.class,
-        SubmittedVariantAccessioningConfiguration.class])
+        SubmittedVariantAccessioningConfiguration.class, ClusteredVariantAccessioningConfiguration.class,
+        SubmittedVariantDeprecationWriterConfiguration.class])
 class RemediateDuplicateRemappedSS implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(RemediateDuplicateRemappedSS.class)
 
     @Autowired
     private SubmittedVariantAccessioningService submittedVariantAccessioningService
+
+    @Autowired
+    private ClusteredVariantAccessioningService clusteredVariantAccessioningService
 
     @Autowired
     private MongoTemplate destinationMongoTemplate
@@ -68,20 +77,27 @@ class RemediateDuplicateRemappedSS implements CommandLineRunner {
     @Autowired
     private Long accessioningMonotonicInitSs
 
+    @Autowired
+    private Long accessioningMonotonicInitRs
+
     private Criteria criteriaToFindAssembly
 
     private Criteria criteriaToFindRemappedEntries
 
     private String remappedAttributesCollection = "remappedAttributes"
 
-    private SSDeprecationWriter ssDeprecationWriter
+    private SubmittedVariantDeprecationWriter ssDeprecationWriter
 
     void run(String... args) {
         this.criteriaToFindAssembly = where("seq").is(assemblyToRemediate)
         this.criteriaToFindRemappedEntries = where("remappedFrom").exists(true)
         this.devMongoTemplate = EVADatabaseEnvironment.parseFrom(devEnvPropertiesFile).mongoTemplate
         this.devMongoTemplate.setWriteConcern(WriteConcern.MAJORITY)
-        this.ssDeprecationWriter = new SSDeprecationWriter(this.destinationMongoTemplate, this.accessioningMonotonicInitSs)
+        this.ssDeprecationWriter = new SubmittedVariantDeprecationWriter(this.assemblyToRemediate,
+                this.destinationMongoTemplate, this.submittedVariantAccessioningService,
+                this.clusteredVariantAccessioningService, this.accessioningMonotonicInitSs,
+                this.accessioningMonotonicInitRs, "EVA2889", "Deprecated since this variant was incorrectly remapped"
+        )
 
         remediateDuplicateRemappedSSCollection(DbsnpSubmittedVariantEntity.class)
         remediateDuplicateRemappedSSCollection(SubmittedVariantEntity.class)
