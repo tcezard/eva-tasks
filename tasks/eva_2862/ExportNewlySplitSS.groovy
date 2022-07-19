@@ -70,7 +70,10 @@ class ExportNewlySplitSS implements CommandLineRunner {
                 List<? extends SubmittedVariantEntity> sves =
                         getNextBatchOfSplitEvaSVEs(splitOperationsAndLastSeenID.left)
                 if (sves != null) {
-                    variantContextWriter.write(sves.collect{ submittedVariantProcessor.process(it) })
+                    def processedVariants = sves.collect{ submittedVariantProcessor.process(it) }.findAll{ it != null}
+                    if (processedVariants != null && processedVariants.size() > 0) {
+                        variantContextWriter.write(processedVariants)
+                    }
                 } else {
                     logger.warn("Got split operations but found no EVA SVEs")
                 }
