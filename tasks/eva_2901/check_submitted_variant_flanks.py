@@ -79,7 +79,7 @@ def check_submitted_variant_flanks(mongo_client, ssid):
         command = f"{samtools} faidx {genome_assembly_fasta} {flank_up_coord} | grep -v '^>' | sed 's/\\n//' "
         flank_up = run_command_with_output(f'Extract upstream sequence using {flank_up_coord}',  command, return_process_output=True).strip().upper()
         command = f"{samtools} faidx {genome_assembly_fasta} {flank_down_coord} | grep -v '^>' | sed 's/\\n//' "
-        flank_down = run_command_with_output(f'Extract upstream sequence using {flank_down_coord}',  command, return_process_output=True).strip().upper()
+        flank_down = run_command_with_output(f'Extract downstream sequence using {flank_down_coord}',  command, return_process_output=True).strip().upper()
         id_2_info[variant_rec['_id']] = {'variant_rec': variant_rec, 'flank_up': flank_up, 'flank_down': flank_down}
 
     for variant_id1, variant_id2 in list(itertools.combinations(id_2_info, 2)):
