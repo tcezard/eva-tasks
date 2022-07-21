@@ -1,9 +1,9 @@
 package src
 
-import com.mongodb.MongoCursorNotFoundException
 import org.apache.commons.lang3.tuple.ImmutablePair
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.aggregation.Aggregation
@@ -55,7 +55,9 @@ class EVADataSet<T,T2> implements Iterable<T> {
             @Override
             boolean hasNext() {
                 getNextBatch()
-                return !(Objects.isNull(this.currentResult))
+                boolean result = !(Objects.isNull(this.currentResult))
+                if (!result) reset()
+                return result
             }
 
             @Override
@@ -65,7 +67,7 @@ class EVADataSet<T,T2> implements Iterable<T> {
         }
     }
 
-    public void reset() {
+    private void reset() {
         this.lastSeenID = null
         this.batchIndex = 0
         this.numEntriesScanned = 0
@@ -84,7 +86,7 @@ class EVADataSet<T,T2> implements Iterable<T> {
         this.currentResult = null
     }
 
-    @Retryable(value = MongoCursorNotFoundException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
+    @Retryable(value = DataAccessResourceFailureException.class, maxAttempts = 5, backoff = @Backoff(delay = 100L))
     private ImmutablePair<List<T>, T2> getNextBatchWithFind() {
         Query queryToGetNextBatch = new Query()
         if (Objects.nonNull(this.filterCriteria)) {
