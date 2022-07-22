@@ -128,9 +128,11 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
         dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
         # delete original rs
+        logger.info(f"delete rs with wrong start : {rs_variant}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
             .delete_one({'_id': rs_variant['_id']})
-        # insert rs with new hash
+        # insert rs with new
+        logger.info(f"Insert rs with new start and id(hash): {rs_with_new_start}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
             .insert_one(rs_with_new_start)
 
@@ -142,9 +144,12 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
     # For priority refer to:
     # https://github.com/EBIvariation/eva-accession/blob/0b2ae4cdb6f74152c5443c3831c02c1d76cf93f9/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/batch/io/ClusteredVariantMergingPolicy.java#L40
     if rs_with_new_start['accession'] < variant_in_db['accession']:
+        logger.info(
+            f"delete rs with wrong start and the one being merged: \nWrong start: {rs_variant} \nMerged: {variant_in_db}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
             .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
 
+        logger.info(f"insert rs with new start and hash : {rs_with_new_start}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).insert_one(rs_with_new_start)
 
         merge_event = create_merge_event(variant_in_db, rs_with_new_start)
@@ -153,6 +158,7 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'])
 
     else:
+        logger.info(f"delete rs with wrong start: {rs_variant}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).delete_one({'_id': rs_variant['_id']})
 
         merge_event = create_merge_event(rs_with_new_start, variant_in_db)
@@ -162,6 +168,8 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
 
 
 def create_merge_event(variant_merged, variant_retained):
+    logger.info(
+        f"creating merge event for accession: {variant_merged['accession']} mergeInto: {variant_retained['accession']}")
     merge_event = {
         "_id": f"EVA2850_MERGED_{variant_merged['accession']}",
         "eventType": "MERGED",
@@ -177,6 +185,8 @@ def create_merge_event(variant_merged, variant_retained):
 def update_ss_with_new_rs(old_rs, new_rs):
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_SUBMITTED_VARIANT_ENTITY]
     eva_sve_collection = mongo_source.mongo_handle[mongo_source.db_name][EVA_SUBMITTED_VARIANT_ENTITY]
+
+    logger.info(f"updating submittedVariantEntity with old_rs: {old_rs} to new_rs: {new_rs}")
 
     filter_query = {'rs': old_rs}
     update_value = {'$set': {'rs': new_rs}}
