@@ -76,7 +76,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                                 merge_into_RS = event['mergeInto']
                                 logger.error(
                                     f"RS {rs} has been merged into RS {merge_into_RS}. Adding {merge_into_RS} to the list")
-                                rs_list_to_process.append(rs)
+                                rs_list_to_process.append(merge_into_RS)
                                 break
                         continue
 
