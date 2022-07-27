@@ -15,4 +15,5 @@
 import os
 import argparse
 
+def collect_structural_variant_types(gvf_root_path):
 
