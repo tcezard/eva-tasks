@@ -1,0 +1,314 @@
+##gff-version 3
+##gvf-version 1.06
+##species http://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=9606
+##file-date 2014-04-25
+##genome-build NCBI NCBI36
+#Study_accession: estd208
+#Study_type: Case-Set
+#Display_name: Helbig_et_al_2013
+#Publication: PMID=24281369;Journal=European journal of human genetics : EJHG;Paper_title=Structural genomic variation in childhood epilepsies with complex phenotypes.;Publication_year=2013
+#Study: First_author=Ingo Helbig;Description=Genetics and particularly Copy Number Variations (CNVs) have emerged as significant genetic risk factors for epilepsy. This study aimed to clarify the relevance of CNVs in patients with unclassified epilepsies and complex phenotypes. In total 222 patients from three European countries, including patients with structural lesions on magnetic resonance imaging (MRI), dysmorphic features, and multiple congenital anomalies (MCA), were clinically evaluated and screened for CNVs. Array CGH uncovered 88 rare CNV). We conclude that Genome-wide screening methods for rare CNVs may provide clues for the genetic etiology in patients with a broad range of epilepsies.
+#Assembly_name: NCBI36
+#subject: subject_name=NL43;sex=Female
+#subject: subject_name=NL7;sex=Male
+#subject: subject_name=NL5;sex=Female
+#subject: subject_name=NL27;sex=Female
+#subject: subject_name=K1;sex=Female
+#subject: subject_name=NL17;sex=Male
+#subject: subject_name=NL4;sex=Male
+#subject: subject_name=NL1;sex=Male
+#subject: subject_name=NL29;sex=Male
+#subject: subject_name=NL23;sex=Female
+#subject: subject_name=D10;sex=Male
+#subject: subject_name=NL10;sex=Female
+#subject: subject_name=NL21;sex=Male
+#subject: subject_name=NL35;sex=Male
+#subject: subject_name=NL68;sex=Female
+#subject: subject_name=NL54;sex=Male
+#subject: subject_name=NL58;sex=Male
+#subject: subject_name=NL64;sex=Male
+#subject: subject_name=NL25;sex=Male
+#subject: subject_name=NL74;sex=Male
+#subject: subject_name=K22;sex=Male
+#subject: subject_name=NL51;sex=Male
+#subject: subject_name=NL47;sex=Male
+#subject: subject_name=NL72;sex=Male
+#subject: subject_name=NL45;sex=Male
+#subject: subject_name=NL11;sex=Male
+#subject: subject_name=NL16;sex=Male
+#subject: subject_name=NL59;sex=Male
+#subject: subject_name=K31;sex=Female
+#subject: subject_name=NL52;sex=Female
+#subject: subject_name=D39;sex=Male
+#subject: subject_name=NL44;sex=Female
+#subject: subject_name=NL37;sex=Male
+#subject: subject_name=NL26;sex=Male
+#subject: subject_name=NL46;sex=Female
+#subject: subject_name=K29;sex=Male
+#subject: subject_name=NL40;sex=Male
+#subject: subject_name=D5;sex=Male
+#subject: subject_name=NL41;sex=Male
+#subject: subject_name=NL32;sex=Male
+#subject: subject_name=NL3;sex=Female
+#subject: subject_name=NL33;sex=Male
+#subject: subject_name=NL31;sex=Female
+#subject: subject_name=NL62;sex=Male
+#subject: subject_name=NL6;sex=Male
+#subject: subject_name=NL14;sex=Female
+#subject: subject_name=D34;sex=Female
+#subject: subject_name=NL19;sex=Female
+#subject: subject_name=NL36;sex=Female
+#subject: subject_name=K12;sex=Male
+#subject: subject_name=NL60;sex=Male
+#subject: subject_name=NL67;sex=Male
+#subject: subject_name=NL20;sex=Female
+#subject: subject_name=NL49;sex=Female
+#subject: subject_name=D16;sex=Male
+#subject: subject_name=NL39;sex=Male
+#subject: subject_name=NL38;sex=Male
+#subject: subject_name=NL63;sex=Female
+#subject: subject_name=NL24;sex=Female
+#subject: subject_name=NL66;sex=Male
+#subject: subject_name=NL53;sex=Female
+#subject: subject_name=NL42;sex=Female
+#subject: subject_name=NL22;sex=Male
+#subject: subject_name=NL13;sex=Female
+#subject: subject_name=NL15;sex=Female
+#subject: subject_name=NL9;sex=Male
+#subject: subject_name=NL2;sex=Female
+#subject: subject_name=NL18;sex=Male
+#subject: subject_name=NL70;sex=Male
+#subject: subject_name=NL28;sex=Male
+#subject: subject_name=K13;sex=Male
+#sample: sample_name=K1;cell_type=Whole blood
+#sample: sample_name=NL41;cell_type=Whole blood
+#sample: sample_name=NL36;cell_type=Whole blood
+#sample: sample_name=NL32;cell_type=Whole blood
+#sample: sample_name=D5;cell_type=Whole blood
+#sample: sample_name=NL37;cell_type=Whole blood
+#sample: sample_name=K22;cell_type=Whole blood
+#sample: sample_name=NL45;cell_type=Whole blood
+#sample: sample_name=NL5;cell_type=Whole blood
+#sample: sample_name=K29;cell_type=Whole blood
+#sample: sample_name=NL35;cell_type=Whole blood
+#sample: sample_name=D39;cell_type=Whole blood
+#sample: sample_name=K12;cell_type=Whole blood
+#sample: sample_name=NL11;cell_type=Whole blood
+#sample: sample_name=NL21;cell_type=Whole blood
+#sample: sample_name=NL44;cell_type=Whole blood
+#sample: sample_name=D10;cell_type=Whole blood
+#sample: sample_name=NL40;cell_type=Whole blood
+#sample: sample_name=NL20;cell_type=Whole blood
+#sample: sample_name=NL52;cell_type=Whole blood
+#sample: sample_name=NL22;cell_type=Whole blood
+#sample: sample_name=NL47;cell_type=Whole blood
+#sample: sample_name=NL60;cell_type=Whole blood
+#sample: sample_name=NL74;cell_type=Whole blood
+#sample: sample_name=NL13;cell_type=Whole blood
+#sample: sample_name=NL39;cell_type=Whole blood
+#sample: sample_name=NL26;cell_type=Whole blood
+#sample: sample_name=NL23;cell_type=Whole blood
+#sample: sample_name=NL28;cell_type=Whole blood
+#sample: sample_name=D16;cell_type=Whole blood
+#sample: sample_name=NL16;cell_type=Whole blood
+#sample: sample_name=D34;cell_type=Whole blood
+#sample: sample_name=NL72;cell_type=Whole blood
+#sample: sample_name=NL9;cell_type=Whole blood
+#sample: sample_name=NL70;cell_type=Whole blood
+#sample: sample_name=NL53;cell_type=Whole blood
+#sample: sample_name=NL64;cell_type=Whole blood
+#sample: sample_name=NL18;cell_type=Whole blood
+#sample: sample_name=NL43;cell_type=Whole blood
+#sample: sample_name=NL7;cell_type=Whole blood
+#sample: sample_name=NL58;cell_type=Whole blood
+#sample: sample_name=NL62;cell_type=Whole blood
+#sample: sample_name=NL51;cell_type=Whole blood
+#sample: sample_name=NL14;cell_type=Whole blood
+#sample: sample_name=NL10;cell_type=Whole blood
+#sample: sample_name=NL4;cell_type=Whole blood
+#sample: sample_name=NL6;cell_type=Whole blood
+#sample: sample_name=NL67;cell_type=Whole blood
+#sample: sample_name=NL38;cell_type=Whole blood
+#sample: sample_name=NL49;cell_type=Whole blood
+#sample: sample_name=NL27;cell_type=Whole blood
+#sample: sample_name=NL68;cell_type=Whole blood
+#sample: sample_name=NL31;cell_type=Whole blood
+#sample: sample_name=NL46;cell_type=Whole blood
+#sample: sample_name=NL1;cell_type=Whole blood
+#sample: sample_name=NL33;cell_type=Whole blood
+#sample: sample_name=NL29;cell_type=Whole blood
+#sample: sample_name=K31;cell_type=Whole blood
+#sample: sample_name=NL19;cell_type=Whole blood
+#sample: sample_name=NL63;cell_type=Whole blood
+#sample: sample_name=NL59;cell_type=Whole blood
+#sample: sample_name=NL25;cell_type=Whole blood
+#sample: sample_name=NL54;cell_type=Whole blood
+#sample: sample_name=NL42;cell_type=Whole blood
+#sample: sample_name=NL15;cell_type=Whole blood
+#sample: sample_name=NL17;cell_type=Whole blood
+#sample: sample_name=NL24;cell_type=Whole blood
+#sample: sample_name=K13;cell_type=Whole blood
+#sample: sample_name=NL2;cell_type=Whole blood
+#sample: sample_name=NL66;cell_type=Whole blood
+#sample: sample_name=NL3;cell_type=Whole blood
+1	DGVa	duplication	45974948	46119954	.	+	.	ID=1;Name=essv7099999;Alias=97;variant_call_so_id=SO:1000035;parent=esv2830426;Start_range=.,45974948;End_range=46119954,.;submitter_variant_call_id=97;sample_name=K1;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+1	DGVa	copy_number_variation	45974948	46119954	.	+	.	ID=2;Name=esv2830426;Alias=72;variant_region_so_id=SO:0001019;Start_range=.,45974948;End_range=46119954,.;submitter_variant_region_id=72;assertion_method=Manual observation;Variant_seq=.
+1	DGVa	deletion	79083348	79328181	.	+	.	ID=3;Name=essv7100004;Alias=101;variant_call_so_id=SO:0000159;parent=esv2830430;Start_range=.,79083348;End_range=79328181,.;submitter_variant_call_id=101;sample_name=K29;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+1	DGVa	copy_number_variation	79083348	79328181	.	+	.	ID=4;Name=esv2830430;Alias=76;variant_region_so_id=SO:0001019;Start_range=.,79083348;End_range=79328181,.;submitter_variant_region_id=76;assertion_method=Manual observation;Variant_seq=.
+1	DGVa	duplication	144112595	144511100	.	+	.	ID=5;Name=essv7099967;Alias=56;variant_call_so_id=SO:1000035;parent=esv2830397;Start_range=.,144112595;End_range=144511100,.;submitter_variant_call_id=56;sample_name=NL43;var_origin=Maternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+1	DGVa	copy_number_variation	144112595	144511100	.	+	.	ID=6;Name=esv2830397;Alias=46;variant_region_so_id=SO:0001019;Start_range=.,144112595;End_range=144511100,.;submitter_variant_region_id=46;assertion_method=Manual observation;Variant_seq=.
+1	DGVa	duplication	151880017	151991631	.	+	.	ID=7;Name=essv7099982;Alias=73;variant_call_so_id=SO:1000035;parent=esv2830411;Start_range=.,151880017;End_range=151991631,.;submitter_variant_call_id=73;sample_name=NL53;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+1	DGVa	copy_number_variation	151880017	151991631	.	+	.	ID=8;Name=esv2830411;Alias=59;variant_region_so_id=SO:0001019;Start_range=.,151880017;End_range=151991631,.;submitter_variant_region_id=59;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	duplication	28644656	28765794	.	+	.	ID=9;Name=essv7099927;Alias=13;variant_call_so_id=SO:1000035;parent=esv2830359;Start_range=.,28644656;End_range=28765794,.;submitter_variant_call_id=13;sample_name=NL10;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+2	DGVa	copy_number_variation	28644656	28765794	.	+	.	ID=10;Name=esv2830359;Alias=11;variant_region_so_id=SO:0001019;Start_range=.,28644656;End_range=28765794,.;submitter_variant_region_id=11;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	deletion	50936914	51279675	.	+	.	ID=11;Name=essv7099943;Alias=30;variant_call_so_id=SO:0000159;parent=esv2830373;Start_range=.,50936914;End_range=51279675,.;submitter_variant_call_id=30;sample_name=NL25;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+2	DGVa	copy_number_variation	50936914	51279675	.	+	.	ID=12;Name=esv2830373;Alias=24;variant_region_so_id=SO:0001019;Start_range=.,50936914;End_range=51279675,.;submitter_variant_region_id=24;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	duplication	135978268	136110926	.	+	.	ID=13;Name=essv7099941;Alias=27;variant_call_so_id=SO:1000035;parent=esv2830371;Start_range=.,135978268;End_range=136110926,.;submitter_variant_call_id=27;sample_name=NL23;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+2	DGVa	copy_number_variation	135978268	136110926	.	+	.	ID=14;Name=esv2830371;Alias=22;variant_region_so_id=SO:0001019;Start_range=.,135978268;End_range=136110926,.;submitter_variant_region_id=22;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	deletion	155354970	159052999	.	+	.	ID=15;Name=essv7099952;Alias=39;variant_call_so_id=SO:0000159;parent=esv2830382;Start_range=.,155354970;End_range=159052999,.;submitter_variant_call_id=39;sample_name=NL32;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+2	DGVa	copy_number_variation	155354970	159052999	.	+	.	ID=16;Name=esv2830382;Alias=32;variant_region_so_id=SO:0001019;Start_range=.,155354970;End_range=159052999,.;submitter_variant_region_id=32;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	duplication	172490076	172660772	.	+	.	ID=17;Name=essv7099970;Alias=58;variant_call_so_id=SO:1000035;parent=esv2830399;Start_range=.,172490076;End_range=172660772,.;submitter_variant_call_id=58;sample_name=NL45;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+2	DGVa	copy_number_variation	172490076	172660772	.	+	.	ID=18;Name=esv2830399;Alias=48;variant_region_so_id=SO:0001019;Start_range=.,172490076;End_range=172660772,.;submitter_variant_region_id=48;assertion_method=Manual observation;Variant_seq=.
+2	DGVa	deletion	183009004	183253623	.	+	.	ID=19;Name=essv7100003;Alias=100;variant_call_so_id=SO:0000159;parent=esv2830429;Start_range=.,183009004;End_range=183253623,.;submitter_variant_call_id=100;sample_name=K22;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+2	DGVa	copy_number_variation	183009004	183253623	.	+	.	ID=20;Name=esv2830429;Alias=75;variant_region_so_id=SO:0001019;Start_range=.,183009004;End_range=183253623,.;submitter_variant_region_id=75;assertion_method=Manual observation;Variant_seq=.
+3	DGVa	deletion	1	10739022	.	+	.	ID=23;Name=essv7100009;Alias=106;variant_call_so_id=SO:0000159;parent=esv2830434;Start_range=.,1;End_range=10739022,.;submitter_variant_call_id=106;sample_name=D34;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+3	DGVa	copy_number_variation	1	10739022	.	+	.	ID=24;Name=esv2830434;Alias=80;variant_region_so_id=SO:0001019;Start_range=.,1;End_range=10739022,.;submitter_variant_region_id=80;assertion_method=Manual observation;Variant_seq=.
+3	DGVa	deletion	1578421	2588312	.	+	.	ID=25;Name=essv7099929;Alias=16;variant_call_so_id=SO:0000159;parent=esv2830361;Start_range=.,1578421;End_range=2588312,.;submitter_variant_call_id=16;sample_name=NL13;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+3	DGVa	copy_number_variation	1578421	2588312	.	+	.	ID=26;Name=esv2830361;Alias=13;variant_region_so_id=SO:0001019;Start_range=.,1578421;End_range=2588312,.;submitter_variant_region_id=13;assertion_method=Manual observation;Variant_seq=.
+3	DGVa	duplication	59198670	61701894	.	+	.	ID=27;Name=essv7099963;Alias=51;variant_call_so_id=SO:1000035;parent=esv2830393;Start_range=.,59198670;End_range=61701894,.;submitter_variant_call_id=51;sample_name=NL40;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+3	DGVa	copy_number_variation	59198670	61701894	.	+	.	ID=28;Name=esv2830393;Alias=42;variant_region_so_id=SO:0001019;Start_range=.,59198670;End_range=61701894,.;submitter_variant_region_id=42;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	deletion	62247	671939	.	+	.	ID=31;Name=essv7099996;Alias=92;variant_call_so_id=SO:0000159;parent=esv2830422;Start_range=.,62247;End_range=671939,.;submitter_variant_call_id=92;sample_name=NL70;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+4	DGVa	copy_number_variation	62247	671939	.	+	.	ID=32;Name=esv2830422;Alias=69;variant_region_so_id=SO:0001019;Start_range=.,62247;End_range=671939,.;submitter_variant_region_id=69;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	duplication	90304479	91141455	.	+	.	ID=33;Name=essv7099971;Alias=61;variant_call_so_id=SO:1000035;parent=esv2830400;Start_range=.,90304479;End_range=91141455,.;submitter_variant_call_id=61;sample_name=NL46;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+4	DGVa	copy_number_variation	90304479	91141455	.	+	.	ID=34;Name=esv2830400;Alias=49;variant_region_so_id=SO:0001019;Start_range=.,90304479;End_range=91141455,.;submitter_variant_region_id=49;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	duplication	94360678	94669129	.	+	.	ID=35;Name=essv7099972;Alias=62;variant_call_so_id=SO:1000035;parent=esv2830401;Start_range=.,94360678;End_range=94669129,.;submitter_variant_call_id=62;sample_name=NL25;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+4	DGVa	copy_number_variation	94360678	94669129	.	+	.	ID=36;Name=esv2830401;Alias=50;variant_region_so_id=SO:0001019;Start_range=.,94360678;End_range=94669129,.;submitter_variant_region_id=50;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	duplication	130004933	130124706	.	+	.	ID=39;Name=essv7099990;Alias=85;variant_call_so_id=SO:1000035;parent=esv2830419;Start_range=.,130004933;End_range=130124706,.;submitter_variant_call_id=85;sample_name=NL63;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+4	DGVa	copy_number_variation	130004933	130124706	.	+	.	ID=40;Name=esv2830419;Alias=66;variant_region_so_id=SO:0001019;Start_range=.,130004933;End_range=130124706,.;submitter_variant_region_id=66;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	duplication	157625342	158490598	.	+	.	ID=41;Name=essv7099935;Alias=22;variant_call_so_id=SO:1000035;parent=esv2830367;Start_range=.,157625342;End_range=158490598,.;submitter_variant_call_id=22;sample_name=NL18;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+4	DGVa	copy_number_variation	157625342	158490598	.	+	.	ID=42;Name=esv2830367;Alias=19;variant_region_so_id=SO:0001019;Start_range=.,157625342;End_range=158490598,.;submitter_variant_region_id=19;assertion_method=Manual observation;Variant_seq=.
+4	DGVa	duplication	181932249	183767928	.	+	.	ID=43;Name=essv7099938;Alias=24;variant_call_so_id=SO:1000035;parent=esv2830368;Start_range=.,181932249;End_range=183767928,.;submitter_variant_call_id=24;sample_name=NL20;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+4	DGVa	copy_number_variation	181932249	183767928	.	+	.	ID=44;Name=esv2830368;Alias=20;variant_region_so_id=SO:0001019;Start_range=.,181932249;End_range=183767928,.;submitter_variant_region_id=20;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	duplication	13846627	14225298	.	+	.	ID=45;Name=essv7099977;Alias=69;variant_call_so_id=SO:1000035;parent=esv2830407;Start_range=.,13846627;End_range=14225298,.;submitter_variant_call_id=69;sample_name=NL51;var_origin=Maternal;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+5	DGVa	copy_number_variation	13846627	14225298	.	+	.	ID=46;Name=esv2830407;Alias=55;variant_region_so_id=SO:0001019;Start_range=.,13846627;End_range=14225298,.;submitter_variant_region_id=55;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	duplication	43821305	44377388	.	+	.	ID=47;Name=essv7099944;Alias=31;variant_call_so_id=SO:1000035;parent=esv2830374;Start_range=.,43821305;End_range=44377388,.;submitter_variant_call_id=31;sample_name=NL26;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+5	DGVa	copy_number_variation	43821305	44377388	.	+	.	ID=48;Name=esv2830374;Alias=25;variant_region_so_id=SO:0001019;Start_range=.,43821305;End_range=44377388,.;submitter_variant_region_id=25;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	deletion	57929706	58591248	.	+	.	ID=49;Name=essv7099931;Alias=18;variant_call_so_id=SO:0000159;parent=esv2830363;Start_range=.,57929706;End_range=58591248,.;submitter_variant_call_id=18;sample_name=NL14;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+5	DGVa	copy_number_variation	57929706	58591248	.	+	.	ID=50;Name=esv2830363;Alias=15;variant_region_so_id=SO:0001019;Start_range=.,57929706;End_range=58591248,.;submitter_variant_region_id=15;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	deletion	115414560	115518445	.	+	.	ID=51;Name=essv7099974;Alias=65;variant_call_so_id=SO:0000159;parent=esv2830404;Start_range=.,115414560;End_range=115518445,.;submitter_variant_call_id=65;sample_name=NL49;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+5	DGVa	copy_number_variation	115414560	115518445	.	+	.	ID=52;Name=esv2830404;Alias=52;variant_region_so_id=SO:0001019;Start_range=.,115414560;End_range=115518445,.;submitter_variant_region_id=52;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	duplication	141971976	142430149	.	+	.	ID=53;Name=essv7099945;Alias=32;variant_call_so_id=SO:1000035;parent=esv2830375;Start_range=.,141971976;End_range=142430149,.;submitter_variant_call_id=32;sample_name=NL37;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+5	DGVa	copy_number_variation	141971976	142430149	.	+	.	ID=54;Name=esv2830375;Alias=26;variant_region_so_id=SO:0001019;Start_range=.,141971976;End_range=142430149,.;submitter_variant_region_id=26;assertion_method=Manual observation;Variant_seq=.
+5	DGVa	duplication	176424327	176816024	.	+	.	ID=55;Name=essv7099984;Alias=78;variant_call_so_id=SO:1000035;parent=esv2830414;Start_range=.,176424327;End_range=176816024,.;submitter_variant_call_id=78;sample_name=NL58;var_origin=de novo;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+5	DGVa	copy_number_variation	176424327	176816024	.	+	.	ID=56;Name=esv2830414;Alias=61;variant_region_so_id=SO:0001019;Start_range=.,176424327;End_range=176816024,.;submitter_variant_region_id=61;assertion_method=Manual observation;Variant_seq=.
+6	DGVa	deletion	2678369	3099132	.	+	.	ID=57;Name=essv7099957;Alias=45;variant_call_so_id=SO:0000159;parent=esv2830387;Start_range=.,2678369;End_range=3099132,.;submitter_variant_call_id=45;sample_name=NL37;var_origin=Paternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+6	DGVa	copy_number_variation	2678369	3099132	.	+	.	ID=58;Name=esv2830387;Alias=37;variant_region_so_id=SO:0001019;Start_range=.,2678369;End_range=3099132,.;submitter_variant_region_id=37;assertion_method=Manual observation;Variant_seq=.
+6	DGVa	deletion	158123426	170824447	.	+	.	ID=59;Name=essv7100007;Alias=104;variant_call_so_id=SO:0000159;parent=esv2830432;Start_range=.,158123426;End_range=170824447,.;submitter_variant_call_id=104;sample_name=D10;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+6	DGVa	copy_number_variation	158123426	170824447	.	+	.	ID=60;Name=esv2830432;Alias=78;variant_region_so_id=SO:0001019;Start_range=.,158123426;End_range=170824447,.;submitter_variant_region_id=78;assertion_method=Manual observation;Variant_seq=.
+7	DGVa	duplication	55177393	55324960	.	+	.	ID=61;Name=essv7099966;Alias=54;variant_call_so_id=SO:1000035;parent=esv2830396;Start_range=.,55177393;End_range=55324960,.;submitter_variant_call_id=54;sample_name=NL42;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+7	DGVa	copy_number_variation	55177393	55324960	.	+	.	ID=62;Name=esv2830396;Alias=45;variant_region_so_id=SO:0001019;Start_range=.,55177393;End_range=55324960,.;submitter_variant_region_id=45;assertion_method=Manual observation;Variant_seq=.
+7	DGVa	duplication	158218240	158458069	.	+	.	ID=63;Name=essv7099983;Alias=74;variant_call_so_id=SO:1000035;parent=esv2830412;Start_range=.,158218240;End_range=158458069,.;submitter_variant_call_id=74;sample_name=NL54;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+7	DGVa	copy_number_variation	158218240	158458069	.	+	.	ID=64;Name=esv2830412;Alias=60;variant_region_so_id=SO:0001019;Start_range=.,158218240;End_range=158458069,.;submitter_variant_region_id=60;assertion_method=Manual observation;Variant_seq=.
+8	DGVa	deletion	82455067	82574175	.	+	.	ID=65;Name=essv7099973;Alias=63;variant_call_so_id=SO:0000159;parent=esv2830403;Start_range=.,82455067;End_range=82574175,.;submitter_variant_call_id=63;sample_name=NL47;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+8	DGVa	copy_number_variation	82455067	82574175	.	+	.	ID=66;Name=esv2830403;Alias=51;variant_region_so_id=SO:0001019;Start_range=.,82455067;End_range=82574175,.;submitter_variant_region_id=51;assertion_method=Manual observation;Variant_seq=.
+8	DGVa	deletion	143586665	143689620	.	+	.	ID=67;Name=essv7099979;Alias=71;variant_call_so_id=SO:0000159;parent=esv2830409;Start_range=.,143586665;End_range=143689620,.;submitter_variant_call_id=71;sample_name=NL52;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+8	DGVa	copy_number_variation	143586665	143689620	.	+	.	ID=68;Name=esv2830409;Alias=57;variant_region_so_id=SO:0001019;Start_range=.,143586665;End_range=143689620,.;submitter_variant_region_id=57;assertion_method=Manual observation;Variant_seq=.
+9	DGVa	duplication	1988911	2109702	.	+	.	ID=69;Name=essv7099993;Alias=88;variant_call_so_id=SO:1000035;parent=esv2830420;Start_range=.,1988911;End_range=2109702,.;submitter_variant_call_id=88;sample_name=NL66;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+9	DGVa	copy_number_variation	1988911	2109702	.	+	.	ID=70;Name=esv2830420;Alias=67;variant_region_so_id=SO:0001019;Start_range=.,1988911;End_range=2109702,.;submitter_variant_region_id=67;assertion_method=Manual observation;Variant_seq=.
+9	DGVa	duplication	138158397	138373948	.	+	.	ID=71;Name=essv7099924;Alias=1;variant_call_so_id=SO:1000035;parent=esv2830357;Start_range=.,138158397;End_range=138373948,.;submitter_variant_call_id=1;sample_name=NL1;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+9	DGVa	copy_number_variation	138158397	138373948	.	+	.	ID=72;Name=esv2830357;Alias=1;variant_region_so_id=SO:0001019;Start_range=.,138158397;End_range=138373948,.;submitter_variant_region_id=1;assertion_method=Manual observation;Variant_seq=.
+11	DGVa	duplication	15098823	15400670	.	+	.	ID=73;Name=essv7099939;Alias=25;variant_call_so_id=SO:1000035;parent=esv2830370;Start_range=.,15098823;End_range=15400670,.;submitter_variant_call_id=25;sample_name=NL21;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+11	DGVa	duplication	15098823	15400670	.	+	.	ID=74;Name=essv7099940;Alias=26;variant_call_so_id=SO:1000035;parent=esv2830370;Start_range=.,15098823;End_range=15400670,.;submitter_variant_call_id=26;sample_name=NL22;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+11	DGVa	copy_number_variation	15098823	15400670	.	+	.	ID=75;Name=esv2830370;Alias=21;variant_region_so_id=SO:0001019;Start_range=.,15098823;End_range=15400670,.;submitter_variant_region_id=21;assertion_method=Manual observation;Variant_seq=.
+11	DGVa	duplication	56238531	56406700	.	+	.	ID=76;Name=essv7099976;Alias=68;variant_call_so_id=SO:1000035;parent=esv2830406;Start_range=.,56238531;End_range=56406700,.;submitter_variant_call_id=68;sample_name=NL27;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+11	DGVa	copy_number_variation	56238531	56406700	.	+	.	ID=77;Name=esv2830406;Alias=54;variant_region_so_id=SO:0001019;Start_range=.,56238531;End_range=56406700,.;submitter_variant_region_id=54;assertion_method=Manual observation;Variant_seq=.
+12	DGVa	duplication	100720498	100822892	.	+	.	ID=78;Name=essv7100001;Alias=99;variant_call_so_id=SO:1000035;parent=esv2830428;Start_range=.,100720498;End_range=100822892,.;submitter_variant_call_id=99;sample_name=K13;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+12	DGVa	copy_number_variation	100720498	100822892	.	+	.	ID=79;Name=esv2830428;Alias=74;variant_region_so_id=SO:0001019;Start_range=.,100720498;End_range=100822892,.;submitter_variant_region_id=74;assertion_method=Manual observation;Variant_seq=.
+13	DGVa	copy_number_variation	34936249	35039224	.	+	.	ID=82;Name=esv2830425;Alias=71;variant_region_so_id=SO:0001019;Start_range=.,34936249;End_range=35039224,.;submitter_variant_region_id=71;assertion_method=Manual observation;Variant_seq=.
+13	DGVa	deletion	34936249	35039224	.	+	.	ID=83;Name=essv7099998;Alias=96;variant_call_so_id=SO:0000159;parent=esv2830425;Start_range=.,34936249;End_range=35039224,.;submitter_variant_call_id=96;sample_name=NL74;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+14	DGVa	deletion	20049706	22153305	.	+	.	ID=84;Name=essv7099936;Alias=3;variant_call_so_id=SO:0000159;parent=esv2830369;Start_range=.,20049706;End_range=22153305,.;submitter_variant_call_id=3;sample_name=NL2;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+14	DGVa	copy_number_variation	20049706	22153305	.	+	.	ID=85;Name=esv2830369;Alias=3;variant_region_so_id=SO:0001019;Start_range=.,20049706;End_range=22153305,.;submitter_variant_region_id=3;assertion_method=Manual observation;Variant_seq=.
+14	DGVa	deletion	30708861	31069785	.	+	.	ID=86;Name=essv7100000;Alias=98;variant_call_so_id=SO:0000159;parent=esv2830427;Start_range=.,30708861;End_range=31069785,.;submitter_variant_call_id=98;sample_name=K12;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+14	DGVa	copy_number_variation	30708861	31069785	.	+	.	ID=87;Name=esv2830427;Alias=73;variant_region_so_id=SO:0001019;Start_range=.,30708861;End_range=31069785,.;submitter_variant_region_id=73;assertion_method=Manual observation;Variant_seq=.
+14	DGVa	duplication	52262082	52379139	.	+	.	ID=88;Name=essv7100011;Alias=11;variant_call_so_id=SO:1000035;parent=esv2830435;Start_range=.,52262082;End_range=52379139,.;submitter_variant_call_id=11;sample_name=NL9;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+14	DGVa	copy_number_variation	52262082	52379139	.	+	.	ID=89;Name=esv2830435;Alias=9;variant_region_so_id=SO:0001019;Start_range=.,52262082;End_range=52379139,.;submitter_variant_region_id=9;assertion_method=Manual observation;Variant_seq=.
+14	DGVa	duplication	56410088	56834848	.	+	.	ID=90;Name=essv7099926;Alias=12;variant_call_so_id=SO:1000035;parent=esv2830437;Start_range=.,56410088;End_range=56834848,.;submitter_variant_call_id=12;sample_name=D34;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+14	DGVa	copy_number_variation	56410088	56834848	.	+	.	ID=91;Name=esv2830437;Alias=10;variant_region_so_id=SO:0001019;Start_range=.,56410088;End_range=56834848,.;submitter_variant_region_id=10;assertion_method=Manual observation;Variant_seq=.
+15	DGVa	deletion	18835460	20851879	.	+	.	ID=92;Name=essv7099986;Alias=80;variant_call_so_id=SO:0000159;parent=esv2830416;Start_range=.,18835460;End_range=20851879,.;submitter_variant_call_id=80;sample_name=NL59;var_origin=Maternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+15	DGVa	copy_number_variation	18835460	20851879	.	+	.	ID=93;Name=esv2830416;Alias=63;variant_region_so_id=SO:0001019;Start_range=.,18835460;End_range=20851879,.;submitter_variant_region_id=63;assertion_method=Manual observation;Variant_seq=.
+15	DGVa	deletion	20249686	20851879	.	+	.	ID=94;Name=essv7099988;Alias=83;variant_call_so_id=SO:0000159;parent=esv2830416;Start_range=.,20249686;End_range=20851879,.;submitter_variant_call_id=83;sample_name=NL62;var_origin=Maternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+15	DGVa	deletion	26863066	28153156	.	+	.	ID=95;Name=essv7099947;Alias=4;variant_call_so_id=SO:0000159;parent=esv2830380;Start_range=.,26863066;End_range=28153156,.;submitter_variant_call_id=4;sample_name=NL3;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+15	DGVa	copy_number_variation	26863066	28153156	.	+	.	ID=96;Name=esv2830380;Alias=4;variant_region_so_id=SO:0001019;Start_range=.,26863066;End_range=28153156,.;submitter_variant_region_id=4;assertion_method=Manual observation;Variant_seq=.
+15	DGVa	deletion	28970939	30298295	.	+	.	ID=97;Name=essv7099958;Alias=5;variant_call_so_id=SO:0000159;parent=esv2830391;Start_range=.,28970939;End_range=30298295,.;submitter_variant_call_id=5;sample_name=NL7;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+15	DGVa	copy_number_variation	28970939	30298295	.	+	.	ID=98;Name=esv2830391;Alias=5;variant_region_so_id=SO:0001019;Start_range=.,28970939;End_range=30298295,.;submitter_variant_region_id=5;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	duplication	8739842	8866856	.	+	.	ID=99;Name=essv7100005;Alias=102;variant_call_so_id=SO:1000035;parent=esv2830431;Start_range=.,8739842;End_range=8866856,.;submitter_variant_call_id=102;sample_name=K31;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+16	DGVa	copy_number_variation	8739842	8866856	.	+	.	ID=100;Name=esv2830431;Alias=77;variant_region_so_id=SO:0001019;Start_range=.,8739842;End_range=8866856,.;submitter_variant_region_id=77;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	deletion	14742556	16564949	.	+	.	ID=101;Name=essv7100006;Alias=103;variant_call_so_id=SO:0000159;parent=esv2830366;Start_range=.,14742556;End_range=16564949,.;submitter_variant_call_id=103;sample_name=D5;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	copy_number_variation	14742556	16564949	.	+	.	ID=102;Name=esv2830366;Alias=18;variant_region_so_id=SO:0001019;Start_range=.,14742556;End_range=16564949,.;submitter_variant_region_id=18;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	deletion	14851860	16213377	.	+	.	ID=103;Name=essv7099934;Alias=21;variant_call_so_id=SO:0000159;parent=esv2830366;Start_range=.,14851860;End_range=16213377,.;submitter_variant_call_id=21;sample_name=NL17;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	duplication	15952415	16218712	.	+	.	ID=104;Name=essv7099992;Alias=86;variant_call_so_id=SO:1000035;parent=esv2830366;Start_range=.,15952415;End_range=16218712,.;submitter_variant_call_id=86;sample_name=NL64;var_origin=Maternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+16	DGVa	deletion	21858680	22355874	.	+	.	ID=105;Name=essv7099964;Alias=52;variant_call_so_id=SO:0000159;parent=esv2830394;Start_range=.,21858680;End_range=22355874,.;submitter_variant_call_id=52;sample_name=NL10;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	copy_number_variation	21858680	22355874	.	+	.	ID=106;Name=esv2830394;Alias=43;variant_region_so_id=SO:0001019;Start_range=.,21858680;End_range=22355874,.;submitter_variant_region_id=43;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	deletion	29527989	30106253	.	+	.	ID=107;Name=essv7099980;Alias=7;variant_call_so_id=SO:0000159;parent=esv2830413;Start_range=.,29527989;End_range=30106253,.;submitter_variant_call_id=7;sample_name=NL5;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	copy_number_variation	29527989	30107008	.	+	.	ID=108;Name=esv2830413;Alias=7;variant_region_so_id=SO:0001019;Start_range=.,29527989;End_range=30107008,.;submitter_variant_region_id=7;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	deletion	29563985	30107008	.	+	.	ID=109;Name=essv7099995;Alias=90;variant_call_so_id=SO:0000159;parent=esv2830413;Start_range=.,29563985;End_range=30107008,.;submitter_variant_call_id=90;sample_name=NL68;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	duplication	75572052	76215686	.	+	.	ID=110;Name=essv7099946;Alias=33;variant_call_so_id=SO:1000035;parent=esv2830376;Start_range=.,75572052;End_range=76215686,.;submitter_variant_call_id=33;sample_name=NL37;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+16	DGVa	copy_number_variation	75572052	76215686	.	+	.	ID=111;Name=esv2830376;Alias=27;variant_region_so_id=SO:0001019;Start_range=.,75572052;End_range=76215686,.;submitter_variant_region_id=27;assertion_method=Manual observation;Variant_seq=.
+16	DGVa	deletion	81398836	81507914	.	+	.	ID=112;Name=essv7099955;Alias=43;variant_call_so_id=SO:0000159;parent=esv2830385;Start_range=.,81398836;End_range=81507914,.;submitter_variant_call_id=43;sample_name=NL35;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+16	DGVa	copy_number_variation	81398836	81507914	.	+	.	ID=113;Name=esv2830385;Alias=35;variant_region_so_id=SO:0001019;Start_range=.,81398836;End_range=81507914,.;submitter_variant_region_id=35;assertion_method=Manual observation;Variant_seq=.
+17	DGVa	deletion	9276246	9470361	.	+	.	ID=114;Name=essv7099985;Alias=79;variant_call_so_id=SO:0000159;parent=esv2830415;Start_range=.,9276246;End_range=9470361,.;submitter_variant_call_id=79;sample_name=NL42;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+17	DGVa	copy_number_variation	9276246	9470361	.	+	.	ID=115;Name=esv2830415;Alias=62;variant_region_so_id=SO:0001019;Start_range=.,9276246;End_range=9470361,.;submitter_variant_region_id=62;assertion_method=Manual observation;Variant_seq=.
+17	DGVa	deletion	10543288	10648715	.	+	.	ID=116;Name=essv7099951;Alias=38;variant_call_so_id=SO:0000159;parent=esv2830381;Start_range=.,10543288;End_range=10648715,.;submitter_variant_call_id=38;sample_name=NL31;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+17	DGVa	copy_number_variation	10543288	10648715	.	+	.	ID=117;Name=esv2830381;Alias=31;variant_region_so_id=SO:0001019;Start_range=.,10543288;End_range=10648715,.;submitter_variant_region_id=31;assertion_method=Manual observation;Variant_seq=.
+17	DGVa	deletion	16543654	20234770	.	+	.	ID=118;Name=essv7099969;Alias=6;variant_call_so_id=SO:0000159;parent=esv2830402;Start_range=.,16543654;End_range=20234770,.;submitter_variant_call_id=6;sample_name=NL4;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+17	DGVa	copy_number_variation	16543654	20234770	.	+	.	ID=119;Name=esv2830402;Alias=6;variant_region_so_id=SO:0001019;Start_range=.,16543654;End_range=20234770,.;submitter_variant_region_id=6;assertion_method=Manual observation;Variant_seq=.
+18	DGVa	deletion	9167029	11667501	.	+	.	ID=120;Name=essv7099953;Alias=40;variant_call_so_id=SO:0000159;parent=esv2830383;Start_range=.,9167029;End_range=11667501,.;submitter_variant_call_id=40;sample_name=NL33;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+18	DGVa	copy_number_variation	9167029	11667501	.	+	.	ID=121;Name=esv2830383;Alias=33;variant_region_so_id=SO:0001019;Start_range=.,9167029;End_range=11667501,.;submitter_variant_region_id=33;assertion_method=Manual observation;Variant_seq=.
+19	DGVa	duplication	21549426	22804983	.	+	.	ID=122;Name=essv7099991;Alias=8;variant_call_so_id=SO:1000035;parent=esv2830424;Start_range=.,21549426;End_range=22804983,.;submitter_variant_call_id=8;sample_name=NL6;var_origin=Paternal;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+19	DGVa	duplication	21549426	22804983	.	+	.	ID=123;Name=essv7100002;Alias=9;variant_call_so_id=SO:1000035;parent=esv2830424;Start_range=.,21549426;End_range=22804983,.;submitter_variant_call_id=9;sample_name=NL7;var_origin=Paternal;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+19	DGVa	copy_number_variation	21549426	22804983	.	+	.	ID=124;Name=esv2830424;Alias=8;variant_region_so_id=SO:0001019;Start_range=.,21549426;End_range=22804983,.;submitter_variant_region_id=8;assertion_method=Manual observation;Variant_seq=.
+19	DGVa	duplication	58372944	58624959	.	+	.	ID=125;Name=essv7099930;Alias=17;variant_call_so_id=SO:1000035;parent=esv2830362;Start_range=.,58372944;End_range=58624959,.;submitter_variant_call_id=17;sample_name=NL51;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+19	DGVa	copy_number_variation	58372944	58624959	.	+	.	ID=126;Name=esv2830362;Alias=14;variant_region_so_id=SO:0001019;Start_range=.,58372944;End_range=58624959,.;submitter_variant_region_id=14;assertion_method=Manual observation;Variant_seq=.
+20	DGVa	duplication	9706602	9829345	.	+	.	ID=127;Name=essv7099981;Alias=72;variant_call_so_id=SO:1000035;parent=esv2830410;Start_range=.,9706602;End_range=9829345,.;submitter_variant_call_id=72;sample_name=NL35;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+20	DGVa	copy_number_variation	9706602	9829345	.	+	.	ID=128;Name=esv2830410;Alias=58;variant_region_so_id=SO:0001019;Start_range=.,9706602;End_range=9829345,.;submitter_variant_region_id=58;assertion_method=Manual observation;Variant_seq=.
+20	DGVa	duplication	35040613	35247059	.	+	.	ID=129;Name=essv7099956;Alias=44;variant_call_so_id=SO:1000035;parent=esv2830386;Start_range=.,35040613;End_range=35247059,.;submitter_variant_call_id=44;sample_name=NL36;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+20	DGVa	copy_number_variation	35040613	35247059	.	+	.	ID=130;Name=esv2830386;Alias=36;variant_region_so_id=SO:0001019;Start_range=.,35040613;End_range=35247059,.;submitter_variant_region_id=36;assertion_method=Manual observation;Variant_seq=.
+20	DGVa	deletion	61433260	61657432	.	+	.	ID=131;Name=essv7099989;Alias=84;variant_call_so_id=SO:0000159;parent=esv2830418;Start_range=.,61433260;End_range=61657432,.;submitter_variant_call_id=84;sample_name=NL45;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+20	DGVa	copy_number_variation	61433260	61657432	.	+	.	ID=132;Name=esv2830418;Alias=65;variant_region_so_id=SO:0001019;Start_range=.,61433260;End_range=61657432,.;submitter_variant_region_id=65;assertion_method=Manual observation;Variant_seq=.
+21	DGVa	duplication	35485875	37161230	.	+	.	ID=133;Name=essv7099928;Alias=14;variant_call_so_id=SO:1000035;parent=esv2830360;Start_range=.,35485875;End_range=37161230,.;submitter_variant_call_id=14;sample_name=NL11;var_origin=Paternal;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+21	DGVa	copy_number_variation	35485875	37161230	.	+	.	ID=134;Name=esv2830360;Alias=12;variant_region_so_id=SO:0001019;Start_range=.,35485875;End_range=37161230,.;submitter_variant_region_id=12;assertion_method=Manual observation;Variant_seq=.
+22	DGVa	deletion	17270071	20043211	.	+	.	ID=135;Name=essv7099954;Alias=42;variant_call_so_id=SO:0000159;parent=esv2830384;Start_range=.,17270071;End_range=20043211,.;submitter_variant_call_id=42;sample_name=NL58;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+22	DGVa	copy_number_variation	17270071	20043211	.	+	.	ID=136;Name=esv2830384;Alias=34;variant_region_so_id=SO:0001019;Start_range=.,17270071;End_range=20043211,.;submitter_variant_region_id=34;assertion_method=Manual observation;Variant_seq=.
+22	DGVa	deletion	18691503	19835557	.	+	.	ID=137;Name=essv7099937;Alias=23;variant_call_so_id=SO:0000159;parent=esv2830384;Start_range=.,18691503;End_range=19835557,.;submitter_variant_call_id=23;sample_name=NL19;var_origin=Paternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+22	DGVa	duplication	30807718	31097825	.	+	.	ID=138;Name=essv7099997;Alias=94;variant_call_so_id=SO:1000035;parent=esv2830423;Start_range=.,30807718;End_range=31097825,.;submitter_variant_call_id=94;sample_name=NL72;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+22	DGVa	copy_number_variation	30807718	31097825	.	+	.	ID=139;Name=esv2830423;Alias=70;variant_region_so_id=SO:0001019;Start_range=.,30807718;End_range=31097825,.;submitter_variant_region_id=70;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	deletion	891	767573	.	+	.	ID=140;Name=essv7099959;Alias=46;variant_call_so_id=SO:0000159;parent=esv2830388;Start_range=.,891;End_range=767573,.;submitter_variant_call_id=46;sample_name=D34;var_origin=de novo;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+X	DGVa	copy_number_variation	891	767573	.	+	.	ID=141;Name=esv2830388;Alias=38;variant_region_so_id=SO:0001019;Start_range=.,891;End_range=767573,.;submitter_variant_region_id=38;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	159791	1169638	.	+	.	ID=142;Name=essv7099978;Alias=70;variant_call_so_id=SO:1000035;parent=esv2830408;Start_range=.,159791;End_range=1169638,.;submitter_variant_call_id=70;sample_name=NL58;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	159791	1169638	.	+	.	ID=143;Name=esv2830408;Alias=56;variant_region_so_id=SO:0001019;Start_range=.,159791;End_range=1169638,.;submitter_variant_region_id=56;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	225426	690299	.	+	.	ID=144;Name=essv7099933;Alias=20;variant_call_so_id=SO:1000035;parent=esv2830365;Start_range=.,225426;End_range=690299,.;submitter_variant_call_id=20;sample_name=NL16;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	225426	690299	.	+	.	ID=145;Name=esv2830365;Alias=17;variant_region_so_id=SO:0001019;Start_range=.,225426;End_range=690299,.;submitter_variant_region_id=17;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	5628240	5892060	.	+	.	ID=146;Name=essv7099968;Alias=57;variant_call_so_id=SO:1000035;parent=esv2830398;Start_range=.,5628240;End_range=5892060,.;submitter_variant_call_id=57;sample_name=NL44;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	5628240	5892060	.	+	.	ID=147;Name=esv2830398;Alias=47;variant_region_so_id=SO:0001019;Start_range=.,5628240;End_range=5892060,.;submitter_variant_region_id=47;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	6481816	8091951	.	+	.	ID=148;Name=essv7099962;Alias=50;variant_call_so_id=SO:1000035;parent=esv2830392;Start_range=.,6481816;End_range=8091951,.;submitter_variant_call_id=50;sample_name=NL39;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	6481816	8091951	.	+	.	ID=149;Name=esv2830392;Alias=41;variant_region_so_id=SO:0001019;Start_range=.,6481816;End_range=8091951,.;submitter_variant_region_id=41;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	21956780	22751412	.	+	.	ID=150;Name=essv7100010;Alias=107;variant_call_so_id=SO:1000035;parent=esv2830436;Start_range=.,21956780;End_range=22751412,.;submitter_variant_call_id=107;sample_name=D39;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	21956780	22751412	.	+	.	ID=151;Name=esv2830436;Alias=81;variant_region_so_id=SO:0001019;Start_range=.,21956780;End_range=22751412,.;submitter_variant_region_id=81;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	24270886	24752300	.	+	.	ID=152;Name=essv7099925;Alias=2;variant_call_so_id=SO:1000035;parent=esv2830358;Start_range=.,24270886;End_range=24752300,.;submitter_variant_call_id=2;sample_name=D34;var_origin=Maternal;clinical_significance=pathogenic;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	24270886	24752300	.	+	.	ID=153;Name=esv2830358;Alias=2;variant_region_so_id=SO:0001019;Start_range=.,24270886;End_range=24752300,.;submitter_variant_region_id=2;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	deletion	31701764	31830951	.	+	.	ID=154;Name=essv7099965;Alias=53;variant_call_so_id=SO:0000159;parent=esv2830395;Start_range=.,31701764;End_range=31830951,.;submitter_variant_call_id=53;sample_name=NL41;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+X	DGVa	copy_number_variation	31701764	31830951	.	+	.	ID=155;Name=esv2830395;Alias=44;variant_region_so_id=SO:0001019;Start_range=.,31701764;End_range=31830951,.;submitter_variant_region_id=44;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	deletion	32164278	32291956	.	+	.	ID=156;Name=essv7100008;Alias=105;variant_call_so_id=SO:0000159;parent=esv2830433;Start_range=.,32164278;End_range=32291956,.;submitter_variant_call_id=105;sample_name=D16;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=-
+X	DGVa	copy_number_variation	32164278	32291956	.	+	.	ID=157;Name=esv2830433;Alias=79;variant_region_so_id=SO:0001019;Start_range=.,32164278;End_range=32291956,.;submitter_variant_region_id=79;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	63440527	64151139	.	+	.	ID=158;Name=essv7099949;Alias=35;variant_call_so_id=SO:1000035;parent=esv2830378;Start_range=.,63440527;End_range=64151139,.;submitter_variant_call_id=35;sample_name=NL28;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	63440527	64151139	.	+	.	ID=159;Name=esv2830378;Alias=29;variant_region_so_id=SO:0001019;Start_range=.,63440527;End_range=64151139,.;submitter_variant_region_id=29;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	75441714	76253588	.	+	.	ID=160;Name=essv7099948;Alias=34;variant_call_so_id=SO:1000035;parent=esv2830377;Start_range=.,75441714;End_range=76253588,.;submitter_variant_call_id=34;sample_name=NL27;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	75441714	76253588	.	+	.	ID=161;Name=esv2830377;Alias=28;variant_region_so_id=SO:0001019;Start_range=.,75441714;End_range=76253588,.;submitter_variant_region_id=28;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	107765123	107888037	.	+	.	ID=162;Name=essv7099975;Alias=66;variant_call_so_id=SO:1000035;parent=esv2830405;Start_range=.,107765123;End_range=107888037,.;submitter_variant_call_id=66;sample_name=NL27;var_origin=Paternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	107765123	107888037	.	+	.	ID=163;Name=esv2830405;Alias=53;variant_region_so_id=SO:0001019;Start_range=.,107765123;End_range=107888037,.;submitter_variant_region_id=53;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	152068073	152498352	.	+	.	ID=164;Name=essv7099994;Alias=89;variant_call_so_id=SO:1000035;parent=esv2830421;Start_range=.,152068073;End_range=152498352,.;submitter_variant_call_id=89;sample_name=NL67;var_origin=Maternal;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	152068073	152498352	.	+	.	ID=165;Name=esv2830421;Alias=68;variant_region_so_id=SO:0001019;Start_range=.,152068073;End_range=152498352,.;submitter_variant_region_id=68;assertion_method=Manual observation;Variant_seq=.
+X	DGVa	duplication	152773601	154582614	.	+	.	ID=166;Name=essv7099960;Alias=47;variant_call_so_id=SO:1000035;parent=esv2830389;Start_range=.,152773601;End_range=154582614,.;submitter_variant_call_id=47;sample_name=NL58;clinical_significance=uncertain significance;phenotype_link=HP:0001250;Variant_seq=.
+X	DGVa	copy_number_variation	152773601	154582614	.	+	.	ID=167;Name=esv2830389;Alias=39;variant_region_so_id=SO:0001019;Start_range=.,152773601;End_range=154582614,.;submitter_variant_region_id=39;assertion_method=Manual observation;Variant_seq=.
+Y	DGVa	deletion	4597774	6525699	.	+	.	ID=168;Name=essv7099961;Alias=48;variant_call_so_id=SO:0000159;parent=esv2830390;Start_range=.,4597774;End_range=6525699,.;submitter_variant_call_id=48;sample_name=NL38;var_origin=Paternal;clinical_significance=likely pathogenic;phenotype_link=HP:0001250;Variant_seq=-
+Y	DGVa	copy_number_variation	4597774	6525699	.	+	.	ID=169;Name=esv2830390;Alias=40;variant_region_so_id=SO:0001019;Start_range=.,4597774;End_range=6525699,.;submitter_variant_region_id=40;assertion_method=Manual observation;Variant_seq=.
