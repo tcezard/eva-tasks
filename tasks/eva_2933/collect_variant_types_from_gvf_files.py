@@ -43,7 +43,6 @@ def main():
 
     parser.add_argument("--output_path", type=str,
                         help="Path to the output .", required=True)
-
     args = parser.parse_args()
     variant_types = collect_structural_variant_types(args.gvf_root_path)
     with open(os.path.join(args.output_path, "output_file.txt"), 'w') as output_file:
