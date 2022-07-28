@@ -23,11 +23,11 @@ def sourceEnv = EVADatabaseEnvironment.createFromSpringContext(sourcePropertiesF
 def destinationEnv = (destinationPropertiesFile == sourcePropertiesFile)? sourceEnv: EVADatabaseEnvironment.createFromSpringContext(destinationPropertiesFile, Application.class)
 
 def logger = LoggerFactory.getLogger(this.class)
-def deprecatedSSDataset = new EVADataSet(null, sourceEnv.mongoTemplate, DuplicateSSCategory.class)
+def deprecableSSDataset = new EVADataSet(null, sourceEnv.mongoTemplate, DuplicateSSCategory.class)
 
 // Ensure that there are no remaining accessions
 // in the three categories mentioned here: https://docs.google.com/spreadsheets/d/1LZbUtamFtQH12SVTfCfYOjcIHWL1OOC_kYnieRLR9UA/edit#rangeid=1722186521
-deprecatedSSDataset.each{it.groupBy {it.getSeq()}.each{String assembly, List<DuplicateSSCategory> dupSSEntries ->
+deprecableSSDataset.each{it.groupBy {it.getSeq()}.each{String assembly, List<DuplicateSSCategory> dupSSEntries ->
     List<Long> ssIDs = dupSSEntries.collect{it.getAccession()}
     destinationEnv.submittedVariantAccessioningService.getAllActiveByAssemblyAndAccessionIn(assembly, ssIDs)
             .groupBy {it.getAccession()}.findAll{accession, sves ->
