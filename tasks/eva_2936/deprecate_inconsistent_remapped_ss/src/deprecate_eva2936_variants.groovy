@@ -47,9 +47,9 @@ assembliesToDeprecate.each {assembly ->
                     "EVA2936",
                     "Remapped variant had the same SS ID as the one imported from dbSNP. See EVA-2936.")
     logger.info("Deprecating impacted SS in assembly ${assembly}...")
-    def duplicateSSDataSet = new EVADataSet(where("seq").is(assembly), sourceEnv.mongoTemplate,
+    def deprecableSSDataSet = new EVADataSet(where("seq").is(assembly), sourceEnv.mongoTemplate,
             DuplicateSSCategory.class)
-    duplicateSSDataSet.each{duplicateSSEntries ->
+    deprecableSSDataSet.each{duplicateSSEntries ->
         List<Long> ssIDs = duplicateSSEntries.collect{it.accession}
         def svesToDeprecate = sourceEnv.submittedVariantAccessioningService.getAllActiveByAssemblyAndAccessionIn(assembly, ssIDs)
                 .findAll{Objects.nonNull(it.getData().getRemappedFrom())}
