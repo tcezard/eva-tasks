@@ -8,7 +8,7 @@ import src.DuplicateSSCategory
 import org.slf4j.LoggerFactory
 import uk.ac.ebi.eva.accession.deprecate.Application
 
-def cli = new CliBuilder(usage: 'deprecate_eva2936_variants <source properties file> <destination properties file>')
+def cli = new CliBuilder(usage: 'qc_deprecation <source properties file> <destination properties file>')
 def options = cli.parse(args)
 if (options.arguments().size() != 2) {
     cli.usage()
