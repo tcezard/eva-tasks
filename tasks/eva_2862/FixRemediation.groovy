@@ -2,11 +2,13 @@
 @Grab(group = 'uk.ac.ebi.eva', module = 'eva-remapping-ingest', version = '0.6.10-SNAPSHOT')
 
 import com.mongodb.MongoCursorNotFoundException
+import org.apache.commons.lang3.tuple.ImmutablePair
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.retry.annotation.Backoff
@@ -15,7 +17,9 @@ import org.springframework.stereotype.Component
 
 import uk.ac.ebi.eva.accession.core.configuration.nonhuman.MongoConfiguration
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantEntity
+import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
+import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.remapping.ingest.configuration.InputParametersConfiguration
 import uk.ac.ebi.eva.remapping.ingest.parameters.InputParameters
 
@@ -35,10 +39,12 @@ class FixRemediation implements CommandLineRunner {
     private InputParameters inputParameters
 
     // Can use the properties file from remapping ingestion, so we have these parameters
-    String sourceAssembly = inputParameters.getRemappedFrom()
-    String targetAssembly = inputParameters.getAssemblyAccession()
+    String sourceAssembly
+    String targetAssembly
 
     void run(String... args) {
+        sourceAssembly = inputParameters.getRemappedFrom()
+        targetAssembly = inputParameters.getAssemblyAccession()
         int numSplitOperations = 0
         int batchIndex = 0
         String lastSeenID = null
@@ -104,7 +110,7 @@ class FixRemediation implements CommandLineRunner {
         List<DbsnpSubmittedVariantEntity> removed = mongoTemplate.findAllAndRemove(
                 query(where("_id").in(hashes).and("seq").is(targetAssembly).and("remappedFrom").exists(true)),
                 DbsnpSubmittedVariantEntity.class)
-        logger.info("Removed " + removed.size() + "dbsnp SVEs")
+        logger.info("Removed " + removed.size() + " dbsnp SVEs")
     }
 
 }
