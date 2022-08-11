@@ -104,8 +104,16 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                             continue
 
                         logger.info(f"Correct Discordant variants for RS {rs}")
-                        correct_discordant_rs_and_insert_into_db(rs_variant, ss_records)
+                        merged_rs, merge_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records)
 
+                        # if any rs, present in current batch and scheduled to be processed later, is being merged,
+                        # it should be removed from this batch and the rs it merged into should be processed in next batch
+                        if merged_rs is not None and merged_rs in rs_list \
+                                and rs_list.index(merged_rs) > rs_list.index(rs):
+                            logger.info(f"Removing rs {merged_rs} from current batch as it is merged "
+                                        f"and putting rs {merge_into} for processing in the next batch")
+                            rs_list.remove(merged_rs)
+                            rs_list_to_process.append(merge_into)
                     else:
                         logger.error(
                             f"For RS {rs}, Not all original SS has same info. Case for Split: \nSS Records {ss_records}")
@@ -123,7 +131,7 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
 
     if variant_in_db:
         logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} with RS {variant_in_db['accession']}")
-        resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db)
+        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db)
     else:
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
         dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
@@ -135,6 +143,8 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
         logger.info(f"Insert rs with new start and id(hash): {rs_with_new_start}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
             .insert_one(rs_with_new_start)
+
+        return None, None
 
 
 def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db):
@@ -157,6 +167,8 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
 
         update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'])
 
+        return variant_in_db['accession'], rs_with_new_start['accession']
+
     else:
         logger.info(f"delete rs with wrong start: {rs_variant}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).delete_one({'_id': rs_variant['_id']})
@@ -165,6 +177,8 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'])
+
+        return rs_with_new_start['accession'], variant_in_db['accession']
 
 
 def create_merge_event(variant_merged, variant_retained):
