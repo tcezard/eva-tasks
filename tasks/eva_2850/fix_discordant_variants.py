@@ -104,7 +104,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                             continue
 
                         logger.info(f"Correct Discordant variants for RS {rs}")
-                        merged_rs, merge_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records)
+                        merged_rs, merge_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly)
 
                         # if any rs, present in current batch and scheduled to be processed later, is being merged,
                         # it should be removed from this batch and the rs it merged into should be processed in next batch
@@ -122,7 +122,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                 rs_list_to_process.clear()
 
 
-def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
+def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly):
     rs_with_new_start = copy.copy(rs_variant)
     rs_with_new_start['start'] = ss_records[0]['start']
     rs_with_new_start['_id'] = get_clustered_SHA1(rs_with_new_start)
@@ -131,7 +131,7 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
 
     if variant_in_db:
         logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} with RS {variant_in_db['accession']}")
-        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db)
+        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db, assembly)
     else:
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
         dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
@@ -147,7 +147,7 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records):
         return None, None
 
 
-def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db):
+def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db, assembly):
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
     dbsnp_cvoe_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY]
 
@@ -165,7 +165,7 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         merge_event = create_merge_event(variant_in_db, rs_with_new_start)
         dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
-        update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'])
+        update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'], assembly)
 
         return variant_in_db['accession'], rs_with_new_start['accession']
 
@@ -176,7 +176,7 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         merge_event = create_merge_event(rs_with_new_start, variant_in_db)
         dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
-        update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'])
+        update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'], assembly)
 
         return rs_with_new_start['accession'], variant_in_db['accession']
 
@@ -196,13 +196,13 @@ def create_merge_event(variant_merged, variant_retained):
     return merge_event
 
 
-def update_ss_with_new_rs(old_rs, new_rs):
+def update_ss_with_new_rs(old_rs, new_rs, assembly):
     dbsnp_sve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_SUBMITTED_VARIANT_ENTITY]
     eva_sve_collection = mongo_source.mongo_handle[mongo_source.db_name][EVA_SUBMITTED_VARIANT_ENTITY]
 
     logger.info(f"updating submittedVariantEntity with old_rs: {old_rs} to new_rs: {new_rs}")
 
-    filter_query = {'rs': old_rs}
+    filter_query = {'rs': old_rs, 'seq': assembly}
     update_value = {'$set': {'rs': new_rs}}
 
     dbsnp_sve_collection.with_options(read_concern=ReadConcern("majority"),
