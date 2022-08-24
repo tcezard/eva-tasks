@@ -3,6 +3,7 @@ import copy
 import hashlib
 import os
 import traceback
+from datetime import datetime
 from itertools import islice
 
 import pymongo.read_preferences
@@ -95,7 +96,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                         logger.error(f"No original SS record found for RS {rs}")
                         continue
 
-                    rs_variant = rs_records[0]
+                    rs_variant = rs_without_map_weight[0]
                     ss_records = all_ss_variants[rs]
 
                     if check_all_ss_has_same_info(ss_records):
@@ -108,12 +109,24 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
                         # if any rs, present in current batch and scheduled to be processed later, is being merged,
                         # it should be removed from this batch and the rs it merged into should be processed in next batch
-                        if merged_rs is not None and merged_rs in rs_list \
-                                and rs_list.index(merged_rs) > rs_list.index(rs):
-                            logger.info(f"Removing rs {merged_rs} from current batch as it is merged "
+                        if merged_rs is not None and merged_rs in rs_list:
+                            if rs_list.index(merged_rs) > rs_list.index(rs):
+                                logger.info(f"Removing rs {merged_rs} from current batch as it is merged "
                                         f"and putting rs {merge_into} for processing in the next batch")
-                            rs_list.remove(merged_rs)
-                            rs_list_to_process.append(merge_into)
+                                rs_list.remove(merged_rs)
+                                rs_list_to_process.append(merge_into)
+                            else:
+                                del all_rs_variants[merge_into]
+                                all_rs_variants.update(get_rs_variants(mongo_source, assembly, [merge_into]))
+
+                                del dbsnp_ss_variants[merge_into]
+                                del eva_ss_variants[merge_into]
+                                del all_ss_variants[merge_into]
+                                dbsnp_ss, eva_ss, all_ss = get_ss_variants(mongo_source, assembly, rs_list)
+                                dbsnp_ss_variants.update(dbsnp_ss)
+                                eva_ss_variants.update(eva_ss)
+                                all_ss_variants.update(all_ss)
+
                     else:
                         logger.error(
                             f"For RS {rs}, Not all original SS has same info. Case for Split: \nSS Records {ss_records}")
@@ -127,11 +140,12 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly):
     rs_with_new_start['start'] = ss_records[0]['start']
     rs_with_new_start['_id'] = get_clustered_SHA1(rs_with_new_start)
 
-    variant_in_db = check_for_hash_collision(rs_with_new_start['_id'])
+    variant_in_dbsnp, variant_in_eva = check_for_hash_collision(rs_with_new_start['_id'])
 
-    if variant_in_db:
-        logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} with RS {variant_in_db['accession']}")
-        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db, assembly)
+    if variant_in_dbsnp or variant_in_eva:
+        logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} "
+                    f"with RS {variant_in_dbsnp['accession'] if variant_in_dbsnp else variant_in_eva['accession']}")
+        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_dbsnp, variant_in_eva, assembly)
     else:
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
         dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
@@ -147,23 +161,34 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly):
         return None, None
 
 
-def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db, assembly):
+def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_dbsnp, variant_in_eva, assembly):
     dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
     dbsnp_cvoe_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY]
+    eva_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][EVA_CLUSTERED_VARIANT_ENTITY]
+    eva_cvoe_collection = mongo_source.mongo_handle[mongo_source.db_name][EVA_CLUSTERED_VARIANT_OPERATION_ENTITY]
+
+    variant_in_db = variant_in_dbsnp if variant_in_dbsnp else variant_in_eva
 
     # For priority refer to:
     # https://github.com/EBIvariation/eva-accession/blob/0b2ae4cdb6f74152c5443c3831c02c1d76cf93f9/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/batch/io/ClusteredVariantMergingPolicy.java#L40
     if rs_with_new_start['accession'] < variant_in_db['accession']:
         logger.info(
             f"delete rs with wrong start and the one being merged: \nWrong start: {rs_variant} \nMerged: {variant_in_db}")
-        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
-            .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
+        if variant_in_dbsnp:
+            dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+                .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
+            merge_event = create_merge_event(variant_in_db, rs_with_new_start)
+            dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
+        else:
+            dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+                .delete_many({'_id': {'$in': [rs_variant['_id']]}})
+            eva_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+                .delete_many({'_id': {'$in': [variant_in_db['_id']]}})
+            merge_event = create_merge_event(variant_in_db, rs_with_new_start)
+            eva_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         logger.info(f"insert rs with new start and hash : {rs_with_new_start}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).insert_one(rs_with_new_start)
-
-        merge_event = create_merge_event(variant_in_db, rs_with_new_start)
-        dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         update_ss_with_new_rs(variant_in_db['accession'], rs_with_new_start['accession'], assembly)
 
@@ -190,7 +215,8 @@ def create_merge_event(variant_merged, variant_retained):
         "accession": variant_merged['accession'],
         "mergeInto": variant_retained['accession'],
         "reason": "EVA2850: Merged because of RS discordant correction",
-        "inactiveObjects": [variant_merged]
+        "inactiveObjects": [variant_merged],
+        "createdDate": datetime.now()
     }
 
     return merge_event
@@ -330,10 +356,15 @@ def check_all_ss_has_same_info(ss_list):
 
 def check_for_hash_collision(id):
     hash_collision_filter_criteria = {'_id': id}
-    collision_records = find_documents(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
+    dbsnp_collision_records = find_documents(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
+    eva_collision_records = find_documents(mongo_source, EVA_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
 
-    if collision_records:
-        return collision_records[0]
+    if dbsnp_collision_records and not eva_collision_records:
+        return dbsnp_collision_records[0], None
+    elif not dbsnp_collision_records and eva_collision_records:
+        return None, dbsnp_collision_records
+    elif not dbsnp_collision_records and not eva_collision_records:
+        return None, None
 
 
 if __name__ == "__main__":
