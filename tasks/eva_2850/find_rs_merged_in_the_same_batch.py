@@ -1,19 +1,24 @@
 import argparse
 import os
+import signal
+from collections import defaultdict
 
 from ebi_eva_common_pyutils.logger import logging_config
+from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
+from ebi_eva_common_pyutils.network_utils import forward_remote_port_to_local_port, get_available_local_port
+from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
+from pymongo import MongoClient
 
 from tasks.eva_2850.fix_discordant_variants import get_variants, DBSNP_SUBMITTED_VARIANT_ENTITY, \
     EVA_SUBMITTED_VARIANT_ENTITY, merge_all_records, DBSNP_CLUSTERED_VARIANT_ENTITY, get_SHA1, \
-    DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, get_events
+    DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, find_documents
 
 logger = logging_config.get_logger(__name__)
 
 
 def merged_rs_ids_present_in_same_batch(all_log_files):
-    merged_rs_ids = []
-    merged_rs_ids_no_further_hash_collision = []
+    merged_rs_ids = {}
     merged_rs_with_further_hash_collision = []
 
     for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
@@ -21,7 +26,6 @@ def merged_rs_ids_present_in_same_batch(all_log_files):
             curr_rs_id_batch = []
             for line in log_file:
                 if "RS_list ->" in line:
-                    # logger.info(curr_rs_id_batch)
                     rs_id_list = line[line.find('['):].split(",")
                     rs_id_list = [s.replace("[", "") for s in rs_id_list]
                     rs_id_list = [s.replace("]", "") for s in rs_id_list]
@@ -31,39 +35,44 @@ def merged_rs_ids_present_in_same_batch(all_log_files):
                         continue
                     curr_rs_id_batch = rs_id_list
                 if "creating merge event for" in line:
-                    # logger.info(line)
                     merged_rs = line[line.index("creating merge event for"):].split(":")[1].split(" ")[1].strip()
                     merged_into = line[line.index("creating merge event for"):].split(":")[2].strip()
-
-                    # check if the variants (which should have been deleted) are involved in another hash collision
+                    # check if the variants are involved in another hash collision
                     if merged_rs in merged_rs_ids:
                         merged_rs_with_further_hash_collision.append(merged_rs)
                     if merged_into in merged_rs_ids:
                         merged_rs_with_further_hash_collision.append(merged_into)
 
                     if merged_rs in curr_rs_id_batch and merged_into in curr_rs_id_batch:
-                        # logger.info(curr_rs_id_batch)
-                        if curr_rs_id_batch.index(merged_rs) > curr_rs_id_batch.index(merged_into):
-                            logger.error(f"Merged RS : {merged_rs} Merged Into: {merged_into}")
-                            # logger.error(f"grep -n -E \"{merged_rs}|{merged_into}\" {os.path.basename(log_file_path)}")
-                            merged_rs_ids.append(merged_rs)
+                        merged_rs_ids[merged_rs] = merged_into
 
-                if "No hash collision for RS" in line:
-                    rs_id = line.split(" ")[-1].strip()
-                    if rs_id in merged_rs_ids:
-                        merged_rs_ids_no_further_hash_collision.append(rs_id)
+    logger.info(f"All rs ids merged in same batch. Total=> {len(merged_rs_ids.keys())} RS=> {merged_rs_ids}")
+    rs_not_involved_in_further_merge = list(set(merged_rs_ids.keys()) - set(merged_rs_with_further_hash_collision))
+    logger.info(f"RS ids not involved in further merge events: {rs_not_involved_in_further_merge}")
+    logger.info(f"RS ids involved in further merge events: {set(merged_rs_with_further_hash_collision)}")
 
-    logger.info(f"All rs ids merged in same batch: {sorted(merged_rs_ids)}")
-    logger.info(f"RS ids not involved in further merge events: "
-                f"{sorted(set(merged_rs_ids_no_further_hash_collision) - set(merged_rs_with_further_hash_collision))}")
-    logger.info(f"RS ids involved in further merge events: "
-                f"{sorted(set(merged_rs_with_further_hash_collision) - set(merged_rs_ids_no_further_hash_collision))}")
-    logger.info(f"RS ids processed twice - "
-                f"once not involved in any merge and again involved in another merge event"
-                f"{sorted(set(merged_rs_ids_no_further_hash_collision).intersection(set(merged_rs_with_further_hash_collision)))}")
+    # get logs and remediation commands for "RS not involved in further merge"
+    # remediation of RS involved in further merge needs to be done manually
+    rs_logs = defaultdict(list)
+    for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
+        with open(log_file_path, 'r') as log_file:
+            for line in log_file:
+                split_line = [s.strip() for s in line.split(" ")]
+                split_line = [s.replace(",", "") for s in line.split(" ")]
+                if "RS_list ->" in line:
+                    continue
+                for rs in rs_not_involved_in_further_merge:
+                    if rs in split_line or merged_rs_ids[rs] in split_line:
+                        rs_logs[rs].append(line)
+
+    # print logs for each merged rs (rs not involved in any further merge events)
+    for rs, logs in rs_logs.items():
+        print(f"New RS -> {rs}")
+        for log_line in logs:
+            print(log_line)
 
 
-def correct_sve_with_wrong_rs(all_log_files, mongo_source):
+def correct_sve_with_wrong_rs(all_log_files, mongo_source, private_config_xml_file):
     rs_list = []
 
     # go through each of the log files and find all rs for which sve has been updated
@@ -109,30 +118,76 @@ def correct_sve_with_wrong_rs(all_log_files, mongo_source):
 
     print("\n")
     ss_list = [sve for sve_list in all_ss_variants.values() for sve in sve_list]
-    sve_for_which_cve_not_found = check_ss_for_correction(ss_list, False)
+    logger.info(f"No of ss needed to be checked for correction : {len(ss_list)}")
 
-    print("\n")
-    logger.info(f"After start correction : (adding 1 to the start) ")
-    print("\n")
+    all_hashes_from_sve = list(set([get_rs_hash_from_sve(sve) for sve in ss_list]))
+    all_cve_for_sve = get_rs_variants_with_hashes(mongo_source, all_hashes_from_sve, DBSNP_CLUSTERED_VARIANT_ENTITY)
 
-    sve_for_which_cve_not_found = check_ss_for_correction(sve_for_which_cve_not_found, True)
+    sve_for_which_cve_not_found = check_ss_for_correction(ss_list, all_cve_for_sve)
 
-    print("\nSVE for which CVE is not found even after 'start' correction: ")
-    for sve in sve_for_which_cve_not_found:
-        logger.info(sve)
+    if sve_for_which_cve_not_found:
+        all_cve_for_sve = get_rs_variants_with_hashes_from_tempmongo(sve_for_which_cve_not_found,
+                                                                     private_config_xml_file)
+        sve_for_which_cve_not_found = check_ss_for_correction(ss_list, all_cve_for_sve)
+
+        if sve_for_which_cve_not_found:
+            logger.info(f"There are still some sve for which cve could not be found (after checking tempmongo)")
+            logger.info(f"total => {len(sve_for_which_cve_not_found)} SVE List => {sve_for_which_cve_not_found}")
 
 
-def check_ss_for_correction(ss_list, start_correction):
-    logger.info(f"No of ss in list : {len(ss_list)}")
-    all_hashes_from_sve = list(set([get_rs_hash_from_sve(sve, start_correction) for sve in ss_list]))
-    logger.info(f"No of unique cve hashes from sve:  {len(all_hashes_from_sve)}")
-    all_cve_for_sve = get_rs_variants_with_hashes(mongo_source, all_hashes_from_sve)
-    logger.info(f"No of cve found for sve using hashes:  {len(all_cve_for_sve)}")
+def get_rs_variants_with_hashes_from_tempmongo(sve_list, private_config_xml_file):
+    tax_sve_list = defaultdict(list)
+    for sve in sve_list:
+        tax_sve_list[sve['tax']].append(sve)
 
+    tax_tempmongo = get_tax_tempmongo(private_config_xml_file)
+
+    cve_from_tempmongo = {}
+    for tax, sve_list_for_tax in tax_sve_list.items():
+        tempmongo = tax_tempmongo[tax]
+        all_hashes_from_sve = list(set([get_rs_hash_from_sve(sve) for sve in sve_list_for_tax]))
+        cve_from_tempmongo.update(
+            get_variants_from_tempmongo(all_hashes_from_sve, tax, tempmongo, private_config_xml_file))
+
+    return cve_from_tempmongo
+
+
+def get_variants_from_tempmongo(all_hashes_from_sve, tax, tempmongo_instance, private_config_xml_file):
+    MONGO_PORT = 27017
+    local_forwarded_port = get_available_local_port(MONGO_PORT)
+    try:
+        logger.info("Forwarding remote MongoDB port 27017 to local port {0}...".format(local_forwarded_port))
+        port_forwarding_process_id = forward_remote_port_to_local_port(tempmongo_instance, MONGO_PORT,
+                                                                       local_forwarded_port)
+        mongo_source = MongoClient(f"mongodb://localhost:{local_forwarded_port}/?authSource=admin")
+    finally:
+        close_mongo_port_to_tempmongo(port_forwarding_process_id)
+
+
+def close_mongo_port_to_tempmongo(port_forwarding_process_id):
+    os.kill(port_forwarding_process_id, signal.SIGTERM)
+    os.system('echo -e "Killed port forwarding from remote port with signal 1 - SIGTERM. '
+              '\\033[31;1;4mIGNORE OS MESSAGE '  # escape sequences for bold red and underlined text
+              '\'Killed by Signal 1\' in the preceding/following text\\033[0m".')
+
+
+def get_tax_tempmongo(private_config_xml_file):
+    tax_tempmongo = {}
+    with get_metadata_connection_handle('production_processing', private_config_xml_file) as pg_conn:
+        query = f"select distinct taxonomy, tempmongo_instance from eva_progress_tracker.clustering_release_tracker crt " \
+                f"where release_version = 3 and tempmongo_instance is not null order by taxonomy  "
+        for taxonomy, tempmongo in get_all_results_for_query(pg_conn, query):
+            tax_tempmongo[taxonomy] = tempmongo
+
+    return tax_tempmongo
+
+
+def check_ss_for_correction(ss_list, all_cve_for_sve):
     sve_for_which_cve_not_found = []
     sve_with_wrong_rs = []
+
     for sve in ss_list:
-        cve_hash_from_sve = get_rs_hash_from_sve(sve, start_correction)
+        cve_hash_from_sve = get_rs_hash_from_sve(sve)
         if cve_hash_from_sve not in all_cve_for_sve:
             sve_for_which_cve_not_found.append(sve)
         else:
@@ -140,11 +195,57 @@ def check_ss_for_correction(ss_list, start_correction):
             if sve['rs'] != cve[0]['accession']:
                 sve_with_wrong_rs.append(sve)
                 # logger.info(f"SVE RS {sve['rs']} does not match with CVE accession {cve[0]['accession']}")
+                # logger.info(f"SVE: {sve} \nCVE: {cve[0]}")
 
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
     logger.info(f"SVE for which CVE is not found: {len(sve_for_which_cve_not_found)}")
 
     return sve_for_which_cve_not_found
+
+
+def check_if_any_newly_added_rs_has_collision_in_eva_cve(all_log_files, mongo_source):
+    inserted_rs_id_list = []
+    for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
+        with open(log_file_path, 'r') as log_file:
+            for line in log_file:
+                if "Insert rs with new start and id" in line:
+                    id_field = line[line.index("{"):].split(",")[0]
+                    id = id_field.split(":")[1].replace("'", "").strip()
+                    inserted_rs_id_list.append(id)
+                    continue
+                if "insert rs with new start and hash :" in line:
+                    id_field = line[line.index("{"):].split(",")[0]
+                    id = id_field.split(":")[1].replace("'", "").strip()
+                    inserted_rs_id_list.append(id)
+
+    eva_rs_variants = get_rs_variants_with_hashes(mongo_source, inserted_rs_id_list, "clusteredVariantEntity")
+    logger.info(f"No of rs ids found in eva : {len(eva_rs_variants)}")
+    for id, cve in eva_rs_variants.items():
+        logger.info(f"{cve}")
+
+
+def check_if_all_processed_rs_was_supposed_to_be_processed(all_log_files, mongo_source):
+    asm_rs_list = {}
+    curr_asm = ""
+    for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
+        with open(log_file_path, 'r') as log_file:
+            for line in log_file:
+                if 'Started processing assembly :' in line:
+                    curr_asm = line.split(':')[1].strip()
+                    asm_rs_list[curr_asm] = []
+                if "Correct Discordant variants for RS" in line:
+                    rs = line[line.index("Correct Discordant variants for RS"):].split(" ")[-1].strip()
+                    asm_rs_list[curr_asm].append(int(rs))
+
+    for asm, rs_list in asm_rs_list.items():
+        rs_variants = get_rs_variants_with_asm(mongo_source, asm, list(set(rs_list)))
+        for rs, cve_list in rs_variants.items():
+            if len(cve_list) > 1:
+                logger.info(f"RS {rs}, cve_list_length : {len(cve_list)}")
+                for cve in cve_list:
+                    logger.info(f"{cve}")
+
+    logger.info("finished")
 
 
 def get_rs_with_hash(rs_list, hash):
@@ -155,13 +256,10 @@ def get_rs_with_hash(rs_list, hash):
     return None
 
 
-def get_rs_hash_from_sve(sve, start_correction):
+def get_rs_hash_from_sve(sve):
     asm = sve['seq']
     contig = sve['contig']
-    if start_correction:
-        start = sve['start'] + 1
-    else:
-        start = sve['start']
+    start = sve['start']
     type = get_variant_type(sve)
 
     fields = [asm, contig, start, type]
@@ -193,6 +291,12 @@ def get_ss_variants(mongo_source, rs_list):
     return dbsnp_ss_variants, eva_ss_variants, all_ss_variants
 
 
+def get_rs_variants_with_asm(mongo_source, assembly, rs_list):
+    rs_filter_criteria = {'asm': assembly, 'accession': {'$in': rs_list}}
+    rs_variants = get_variants(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, 'accession')
+    return rs_variants
+
+
 def get_rs_variants(mongo_source, rs_list):
     rs_filter_criteria = {'accession': {'$in': rs_list}}
     rs_variants = get_variants(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, 'accession')
@@ -200,20 +304,32 @@ def get_rs_variants(mongo_source, rs_list):
 
 
 def get_rs_merge_events(mongo_source, rs_list):
-    event_filter_criteria = {'accession': {'$in': rs_list}}
+    event_filter_criteria = {'accession': {'$in': rs_list}, 'eventType': 'MERGED'}
     rs_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
     return rs_events
 
 
-def get_rs_variants_with_hashes(mongo_source, rs_hash_list):
+def get_events(mongo_source, collection_name, filter_criteria):
+    records = {}
+    for event in find_documents(mongo_source, collection_name, filter_criteria):
+        if event['accession'] in records:
+            records[event['accession']].append(event)
+        else:
+            records[event['accession']] = [event]
+
+    return records
+
+
+def get_rs_variants_with_hashes(mongo_source, rs_hash_list, collection):
     rs_filter_criteria = {'_id': {'$in': rs_hash_list}}
-    rs_variants = get_variants(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, rs_filter_criteria, '_id')
+    rs_variants = get_variants(mongo_source, collection, rs_filter_criteria, '_id')
     return rs_variants
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Find variants which are part of the same batch and involved in merge', add_help=False)
+    parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
     parser.add_argument("--mongo-source-uri",
                         help="Mongo Source URI (ex: mongodb://user:@mongos-source-host:27017/admin)", required=True)
     parser.add_argument("--mongo-source-secrets-file",
@@ -228,5 +344,7 @@ if __name__ == "__main__":
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva_accession_sharded")
 
-    # merged_rs_ids_present_in_same_batch(all_log_files)
-    correct_sve_with_wrong_rs(all_log_files, mongo_source)
+    merged_rs_ids_present_in_same_batch(all_log_files)
+    correct_sve_with_wrong_rs(all_log_files, mongo_source, args.private_config_xml_file)
+    check_if_any_newly_added_rs_has_collision_in_eva_cve(all_log_files, mongo_source)
+    check_if_all_processed_rs_was_supposed_to_be_processed(all_log_files, mongo_source)
