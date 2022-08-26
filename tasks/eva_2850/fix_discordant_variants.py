@@ -105,14 +105,15 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                             continue
 
                         logger.info(f"Correct Discordant variants for RS {rs}")
-                        merged_rs, merge_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly)
+                        merged_rs, merge_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records,
+                                                                                         assembly)
 
                         # if any rs, present in current batch and scheduled to be processed later, is being merged,
                         # it should be removed from this batch and the rs it merged into should be processed in next batch
                         if merged_rs is not None and merged_rs in rs_list:
                             if rs_list.index(merged_rs) > rs_list.index(rs):
                                 logger.info(f"Removing rs {merged_rs} from current batch as it is merged "
-                                        f"and putting rs {merge_into} for processing in the next batch")
+                                            f"and putting rs {merge_into} for processing in the next batch")
                                 rs_list.remove(merged_rs)
                                 rs_list_to_process.append(merge_into)
                             else:
@@ -145,7 +146,8 @@ def correct_discordant_rs_and_insert_into_db(rs_variant, ss_records, assembly):
     if variant_in_dbsnp or variant_in_eva:
         logger.warn(f"Hash collision will occur for RS {rs_variant['accession']} "
                     f"with RS {variant_in_dbsnp['accession'] if variant_in_dbsnp else variant_in_eva['accession']}")
-        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_dbsnp, variant_in_eva, assembly)
+        return resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_dbsnp, variant_in_eva,
+                                               assembly)
     else:
         logger.info(f"No hash collision for RS {rs_variant['accession']}")
         dbsnp_cve_collection = mongo_source.mongo_handle[mongo_source.db_name][DBSNP_CLUSTERED_VARIANT_ENTITY]
@@ -172,20 +174,22 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
     # For priority refer to:
     # https://github.com/EBIvariation/eva-accession/blob/0b2ae4cdb6f74152c5443c3831c02c1d76cf93f9/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/batch/io/ClusteredVariantMergingPolicy.java#L40
     if rs_with_new_start['accession'] < variant_in_db['accession']:
-        logger.info(
-            f"delete rs with wrong start and the one being merged: \nWrong start: {rs_variant} \nMerged: {variant_in_db}")
         if variant_in_dbsnp:
-            dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
-                .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
             merge_event = create_merge_event(variant_in_db, rs_with_new_start)
             dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
+            logger.info(
+                f"delete rs with wrong start and the one being merged: \nWrong start: {rs_variant} \nMerged: {variant_in_db}")
+            dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
+                .delete_many({'_id': {'$in': [rs_variant['_id'], variant_in_db['_id']]}})
         else:
+            merge_event = create_merge_event(variant_in_db, rs_with_new_start)
+            eva_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
+            logger.info(
+                f"delete rs with wrong start and the one being merged: \nWrong start: {rs_variant} \nMerged: {variant_in_db}")
             dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")) \
                 .delete_many({'_id': {'$in': [rs_variant['_id']]}})
             eva_cve_collection.with_options(write_concern=WriteConcern("majority")) \
                 .delete_many({'_id': {'$in': [variant_in_db['_id']]}})
-            merge_event = create_merge_event(variant_in_db, rs_with_new_start)
-            eva_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
 
         logger.info(f"insert rs with new start and hash : {rs_with_new_start}")
         dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).insert_one(rs_with_new_start)
@@ -195,11 +199,11 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
         return variant_in_db['accession'], rs_with_new_start['accession']
 
     else:
-        logger.info(f"delete rs with wrong start: {rs_variant}")
-        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).delete_one({'_id': rs_variant['_id']})
-
         merge_event = create_merge_event(rs_with_new_start, variant_in_db)
         dbsnp_cvoe_collection.with_options(write_concern=WriteConcern("majority")).insert_one(merge_event)
+
+        logger.info(f"delete rs with wrong start: {rs_variant}")
+        dbsnp_cve_collection.with_options(write_concern=WriteConcern("majority")).delete_one({'_id': rs_variant['_id']})
 
         update_ss_with_new_rs(rs_with_new_start['accession'], variant_in_db['accession'], assembly)
 
@@ -356,15 +360,18 @@ def check_all_ss_has_same_info(ss_list):
 
 def check_for_hash_collision(id):
     hash_collision_filter_criteria = {'_id': id}
-    dbsnp_collision_records = find_documents(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
+    dbsnp_collision_records = find_documents(mongo_source, DBSNP_CLUSTERED_VARIANT_ENTITY,
+                                             hash_collision_filter_criteria)
     eva_collision_records = find_documents(mongo_source, EVA_CLUSTERED_VARIANT_ENTITY, hash_collision_filter_criteria)
 
     if dbsnp_collision_records and not eva_collision_records:
         return dbsnp_collision_records[0], None
     elif not dbsnp_collision_records and eva_collision_records:
-        return None, dbsnp_collision_records
+        return None, eva_collision_records[0]
     elif not dbsnp_collision_records and not eva_collision_records:
         return None, None
+    else:
+        raise Exception(f"CVE variant with {id}  is present in both dbsnp cve and eva cve")
 
 
 if __name__ == "__main__":

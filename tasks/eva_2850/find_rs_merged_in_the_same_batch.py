@@ -124,7 +124,7 @@ def correct_sve_with_wrong_rs(all_log_files, mongo_source, private_config_xml_fi
     sve_for_which_cve_not_found = check_sve_with_cve_for_correction(ss_list, all_cve_for_sve)
 
     if sve_for_which_cve_not_found:
-        logger.info("Getting CVE from tempmongo")
+        logger.info("Getting SVE from tempmongo")
         all_sve_from_tempmongo = get_sve_from_tempmongo(sve_for_which_cve_not_found, private_config_xml_file)
         logger.info(f"Total SVE found in tempmongo: {len(all_sve_from_tempmongo)}")
         sve_not_found_in_tempmongo = check_sve_with_sve_for_correction(sve_for_which_cve_not_found,
@@ -133,7 +133,8 @@ def correct_sve_with_wrong_rs(all_log_files, mongo_source, private_config_xml_fi
         if sve_not_found_in_tempmongo:
             logger.info(f"There are some sve which could not be found in tempmongo")
             logger.info(f"total => {len(sve_not_found_in_tempmongo)}")
-            logger.info(f"SVE List => {sve_not_found_in_tempmongo}")
+            for sve in sve_not_found_in_tempmongo:
+                logger.info(f"{sve}")
 
     logger.info("Finished")
 
