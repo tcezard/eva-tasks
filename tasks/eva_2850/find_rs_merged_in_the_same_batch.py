@@ -8,7 +8,6 @@ from ebi_eva_common_pyutils.metadata_utils import get_metadata_connection_handle
 from ebi_eva_common_pyutils.mongodb import MongoDatabase
 from ebi_eva_common_pyutils.network_utils import forward_remote_port_to_local_port, get_available_local_port
 from ebi_eva_common_pyutils.pg_utils import get_all_results_for_query
-from pymongo import MongoClient
 
 from tasks.eva_2850.fix_discordant_variants import get_variants, DBSNP_SUBMITTED_VARIANT_ENTITY, \
     EVA_SUBMITTED_VARIANT_ENTITY, merge_all_records, DBSNP_CLUSTERED_VARIANT_ENTITY, get_SHA1, \
@@ -51,25 +50,24 @@ def merged_rs_ids_present_in_same_batch(all_log_files):
     logger.info(f"RS ids not involved in further merge events: {rs_not_involved_in_further_merge}")
     logger.info(f"RS ids involved in further merge events: {set(merged_rs_with_further_hash_collision)}")
 
-    # get logs and remediation commands for "RS not involved in further merge"
-    # remediation of RS involved in further merge needs to be done manually
+    # get logs for each rs involved
     rs_logs = defaultdict(list)
     for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
         with open(log_file_path, 'r') as log_file:
             for line in log_file:
-                split_line = [s.strip() for s in line.split(" ")]
-                split_line = [s.replace(",", "") for s in line.split(" ")]
+                split_line = [s.strip().replace(",", "") for s in line.split(" ")]
                 if "RS_list ->" in line:
                     continue
-                for rs in rs_not_involved_in_further_merge:
+                for rs in merged_rs_ids:
                     if rs in split_line or merged_rs_ids[rs] in split_line:
                         rs_logs[rs].append(line)
 
-    # print logs for each merged rs (rs not involved in any further merge events)
+    # print logs for each rs
     for rs, logs in rs_logs.items():
-        print(f"New RS -> {rs}")
+        print(f"------------------------------------------------------------------------------------------------------")
+        print(f"logs grep command : grep -n -E \"{rs}|{merged_rs_ids[rs]}\"\n")
         for log_line in logs:
-            print(log_line)
+            print(log_line.replace("\n", ""))
 
 
 def correct_sve_with_wrong_rs(all_log_files, mongo_source, private_config_xml_file):
@@ -126,18 +124,22 @@ def correct_sve_with_wrong_rs(all_log_files, mongo_source, private_config_xml_fi
     sve_for_which_cve_not_found = check_ss_for_correction(ss_list, all_cve_for_sve)
 
     if sve_for_which_cve_not_found:
-        all_cve_for_sve = get_rs_variants_with_hashes_from_tempmongo(sve_for_which_cve_not_found,
-                                                                     private_config_xml_file)
-        sve_for_which_cve_not_found = check_ss_for_correction(ss_list, all_cve_for_sve)
+        logger.info("Getting CVE from tempmongo")
+        all_cve_for_sve_from_tempmongo = get_rs_variants_with_hashes_from_tempmongo(sve_for_which_cve_not_found,
+                                                                                    private_config_xml_file)
+        logger.info(f"Total CVE found in tempmongo: {len(all_cve_for_sve_from_tempmongo)}")
+        sve_for_which_cve_not_found_after_tempmongo = check_ss_for_correction(sve_for_which_cve_not_found,
+                                                                              all_cve_for_sve_from_tempmongo)
 
-        if sve_for_which_cve_not_found:
+        if sve_for_which_cve_not_found_after_tempmongo:
             logger.info(f"There are still some sve for which cve could not be found (after checking tempmongo)")
-            logger.info(f"total => {len(sve_for_which_cve_not_found)} SVE List => {sve_for_which_cve_not_found}")
+            logger.info(f"total => {len(sve_for_which_cve_not_found_after_tempmongo)} "
+                        f"SVE List => {sve_for_which_cve_not_found_after_tempmongo}")
 
 
-def get_rs_variants_with_hashes_from_tempmongo(sve_list, private_config_xml_file):
+def get_rs_variants_with_hashes_from_tempmongo(sve_list_for_tempmongo, private_config_xml_file):
     tax_sve_list = defaultdict(list)
-    for sve in sve_list:
+    for sve in sve_list_for_tempmongo:
         tax_sve_list[sve['tax']].append(sve)
 
     tax_tempmongo = get_tax_tempmongo(private_config_xml_file)
@@ -145,21 +147,27 @@ def get_rs_variants_with_hashes_from_tempmongo(sve_list, private_config_xml_file
     cve_from_tempmongo = {}
     for tax, sve_list_for_tax in tax_sve_list.items():
         tempmongo = tax_tempmongo[tax]
-        all_hashes_from_sve = list(set([get_rs_hash_from_sve(sve) for sve in sve_list_for_tax]))
-        cve_from_tempmongo.update(
-            get_variants_from_tempmongo(all_hashes_from_sve, tax, tempmongo, private_config_xml_file))
+        logger.info(
+            f"Connecting to tempmongo {tempmongo} for taxonomy {tax} with sve list of len {len(sve_list_for_tax)}")
+        all_hashes_from_sve_for_tempmongo = list(set([get_rs_hash_from_sve(sve) for sve in sve_list_for_tax]))
+        cve_from_tempmongo.update(get_variants_from_tempmongo(all_hashes_from_sve_for_tempmongo, tax, tempmongo))
 
     return cve_from_tempmongo
 
 
-def get_variants_from_tempmongo(all_hashes_from_sve, tax, tempmongo_instance, private_config_xml_file):
+def get_variants_from_tempmongo(all_hashes_from_sve, taxonomy, tempmongo_instance):
     MONGO_PORT = 27017
     local_forwarded_port = get_available_local_port(MONGO_PORT)
     try:
         logger.info("Forwarding remote MongoDB port 27017 to local port {0}...".format(local_forwarded_port))
         port_forwarding_process_id = forward_remote_port_to_local_port(tempmongo_instance, MONGO_PORT,
                                                                        local_forwarded_port)
-        mongo_source = MongoClient(f"mongodb://localhost:{local_forwarded_port}/?authSource=admin")
+        mongo_source = MongoDatabase(uri=f"mongodb://localhost:{local_forwarded_port}/?authSource=admin",
+                                     secrets_file=None, db_name=f"acc_{taxonomy}")
+        all_cve_for_sve_from_tempmongo = get_rs_variants_with_hashes(mongo_source, all_hashes_from_sve,
+                                                                     DBSNP_CLUSTERED_VARIANT_ENTITY)
+        logger.info(f"For {taxonomy} in {tempmongo_instance} retrieved a total of  {len(all_cve_for_sve_from_tempmongo)} CVE")
+        return all_cve_for_sve_from_tempmongo
     finally:
         close_mongo_port_to_tempmongo(port_forwarding_process_id)
 
@@ -194,8 +202,8 @@ def check_ss_for_correction(ss_list, all_cve_for_sve):
             cve = all_cve_for_sve[cve_hash_from_sve]
             if sve['rs'] != cve[0]['accession']:
                 sve_with_wrong_rs.append(sve)
-                # logger.info(f"SVE RS {sve['rs']} does not match with CVE accession {cve[0]['accession']}")
-                # logger.info(f"SVE: {sve} \nCVE: {cve[0]}")
+                logger.info(f"SVE: {sve} \nCVE: {cve[0]}")
+                logger.info(f"SVE RS {sve['rs']} does not match with CVE accession {cve[0]['accession']}")
 
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
     logger.info(f"SVE for which CVE is not found: {len(sve_for_which_cve_not_found)}")
