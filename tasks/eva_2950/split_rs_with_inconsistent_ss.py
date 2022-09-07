@@ -19,14 +19,16 @@ logging_config.add_stdout_handler()
 def leftalign(chrom, pos, ref, alt, fa, max_shift=1000):
     # Add the context base if it is not there already
     if ref == '':
-        ref = fa[chrom][pos - 2]  # -1 because pos is 1-based and -1 because we want the base before
+        ref = fa[chrom][pos - 2].upper()  # -1 because pos is 1-based and -1 because we want the base before
         pos -= 1
         alt = ref + alt
     if alt == '':
-        alt = fa[chrom][pos - 2]
+        alt = fa[chrom][pos - 2].upper()
         pos -= 1
         ref = alt + ref
-    seq = fa[chrom][max(0, pos - max_shift - 1):pos + len(ref) - 1]
+    seq = fa[chrom][max(0, pos - max_shift - 1):pos + len(ref) - 1].upper()
+    ref = ref.upper()
+    alt = alt.upper()
     assert seq.endswith(ref), (chrom, pos, ref, alt, seq[-10:])
     return _leftalign(pos, ref, alt, seq)[:3]
 
@@ -134,8 +136,23 @@ def leftnorm(chrom, pos, ref, alt, fa=None):
     return normalize(*leftalign(chrom, pos, ref, alt, fa), left_only=True)
 
 
+def add_contex_base(fa, chrom, pos, ref, alt):
+    # Add the context base if it is not there already
+    if ref == '':
+        ref = fa[chrom][pos - 2].upper()  # -1 because pos is 1-based and -1 because we want the base before
+        pos -= 1
+        alt = ref + alt
+    if alt == '':
+        alt = fa[chrom][pos - 2].upper()
+        pos -= 1
+        ref = alt + ref
+    return pos, ref, alt
+
 def ast_parse_with_datetime(astr):
-    """Based on https://stackoverflow.com/questions/4235606/way-to-use-ast-literal-eval-to-convert-string-into-a-datetime"""
+    """
+    Parse a string representing a python data structure into a python data structure
+    Based on https://stackoverflow.com/questions/4235606/way-to-use-ast-literal-eval-to-convert-string-into-a-datetime
+    """
     try:
         tree = ast.parse(astr)
     except SyntaxError:
@@ -144,7 +161,7 @@ def ast_parse_with_datetime(astr):
         if isinstance(node, (ast.Module, ast.Expr, ast.Dict, ast.Str, ast.List, ast.Constant,
                             ast.Attribute, ast.Num, ast.Name, ast.Load, ast.Tuple)):
             continue
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'datetime'):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'datetime':
             continue
         raise ValueError(astr)
     return eval(astr)
@@ -183,21 +200,66 @@ def get_genome_object(ref_genome_directory, genome_accession):
     return genome_cache[genome_accession]
 
 
+def variant_type(ref, alt):
+    if len(ref) == len(alt) == 1:
+        return 'SNP'
+    if len(ref) > 1 and len(alt) > 1:
+        return 'MNP'
+    if len(ref) > 1:
+        return 'DEL'
+    return 'INS'
+
+
 def process_diagnostic_log(log_file, ref_genome_directory):
     for rsid, list_of_ss_entities in parse_eva2850_diagnositc_log(log_file):
         variant_to_entities = defaultdict(list)
         for ss_entity in list_of_ss_entities:
             genome_object = get_genome_object(ref_genome_directory, ss_entity['seq'])
-            normalised_variant_definition = leftnorm(
-                ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt'], fa=genome_object
+            context_pos, context_ref, context_alt = add_contex_base(
+                genome_object, ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt']
             )
+            normalised_pos, normalised_ref, normalised_alt = leftnorm(
+                ss_entity['contig'], context_pos, context_ref, context_alt, fa=genome_object
+            )
+            context_entity = {'start': context_pos, 'ref': context_ref, 'alt': context_alt}
+            normalised_clustered_variant_definition = (normalised_pos, variant_type(normalised_ref, normalised_alt))
             ss_entity['contig'] + str(ss_entity['start']) + ss_entity['ref'] + ss_entity['alt']
+            normalised_entity = {'start': normalised_pos, 'ref': normalised_ref, 'alt': normalised_alt}
 
-            variant_to_entities[normalised_variant_definition].append(ss_entity)
-        if len(variant_to_entities) == 1:
-            logger.info(f'No split required for rs{rsid}')
-        else:
-            logger.info(f'rs{rsid} must be split in {len(variant_to_entities)} ')
+            variant_to_entities[normalised_clustered_variant_definition].append((ss_entity, context_entity, normalised_entity))
+        process_renormalisation(variant_to_entities)
+        process_split(rsid, variant_to_entities)
+
+
+def process_split(rsid, variant_to_entities):
+    if len(variant_to_entities) == 1:
+        logger.info(f'No split required for rs{rsid}')
+    else:
+        logger.info(f'rs{rsid} must be split in {len(variant_to_entities)}')
+        # smallest SSids keeps the rs
+        cluster_priority = sorted(
+            variant_to_entities,
+            key=lambda x: min([ss_entity['accession'] for ss_entity, _, _ in variant_to_entities[x]]),
+        )
+        for ss_entity, context_entity, normalised_entity in variant_to_entities[cluster_priority[0]]:
+            logger.info(f'ss{ss_entity["accession"]} rs field remain the same.')
+
+        for cluster in cluster_priority[1:]:
+            for ss_entity, context_entity, normalised_entity in variant_to_entities[cluster]:
+                logger.info(f'ss{ss_entity["accession"]} rs field needs to be updated')
+
+
+def process_renormalisation(variant_to_entities):
+    for clustered_variant_entity in variant_to_entities:
+        normalised_pos, vtype = clustered_variant_entity
+        logger.info(f'  * {vtype} at {normalised_pos}')
+        for original_variant, context_entity, normalised_variant in variant_to_entities[clustered_variant_entity]:
+            if context_entity['start'] != normalised_variant['start']:
+                logger.info(f'    ** ss{original_variant["accession"]} variant change from '
+                            f'{context_entity["start"]}-{normalised_variant["ref"]}-{normalised_variant["alt"]} to '
+                            f'{normalised_variant["start"]}-{context_entity["ref"]}-{context_entity["alt"]}')
+            else:
+                logger.info(f'    ** ss{original_variant["accession"]} does not need to be normalised')
 
 
 def main():
