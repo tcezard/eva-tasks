@@ -71,6 +71,10 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
                         # If no RS found in DB, check if the original RS has been merged to some other RS,
                         # if yes, add the new RS to the list for processing
+                        if rs not in all_events:
+                            logger.error(f"No RS merge events could be found for RS {rs}")
+                            continue
+
                         rs_events = all_events[rs]
                         for event in rs_events:
                             if event['accession'] == rs and event['eventType'] == 'MERGED':
@@ -386,9 +390,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
-                                 db_name="eva_accession_sharded")
+                                 db_name="eva2959_accession_sharded")
 
     all_files = [os.path.join(args.discordant_rs_dir, filename) for filename in os.listdir(args.discordant_rs_dir)]
     for file in sorted(all_files, key=lambda x: os.stat(x).st_size):
         assembly = os.path.basename(file)
         fix_discordant_variants(mongo_source, assembly, os.path.join(args.discordant_rs_dir, assembly))
+
+    logger.info(f"Process Finished")
