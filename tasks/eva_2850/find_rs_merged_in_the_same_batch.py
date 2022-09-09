@@ -45,6 +45,20 @@ def merged_rs_ids_present_in_same_batch(all_log_files):
                     if merged_rs in curr_rs_id_batch and merged_into in curr_rs_id_batch:
                         merged_rs_ids[merged_rs] = merged_into
 
+    # sundar_merged_rs_accession_set = set()
+    # sundar_merged_rs_hashes_set = set()
+    # for rs in merged_rs_ids:
+    #     sundar_merged_rs_accession_set.add(int(rs))
+    #     sundar_merged_rs_accession_set.add(int(merged_rs_ids[rs]))
+    #
+    # all_variants = get_rs_variants(mongo_source, list(sundar_merged_rs_accession_set))
+    # for accession, rs_variants  in all_variants.items():
+    #     for rs_variant in rs_variants:
+    #         sundar_merged_rs_hashes_set.add(rs_variant['_id'])
+    #
+    # print(f"Sundar merged rs accession: {sundar_merged_rs_accession_set}")
+    # print(f"Sundar merged rs hashes: {sundar_merged_rs_hashes_set}")
+
     logger.info(f"All rs ids merged in same batch. Total=> {len(merged_rs_ids.keys())} RS=> {merged_rs_ids}")
     rs_not_involved_in_further_merge = list(set(merged_rs_ids.keys()) - set(merged_rs_with_further_hash_collision))
     logger.info(f"RS ids not involved in further merge events: {rs_not_involved_in_further_merge}")
@@ -150,10 +164,9 @@ def get_sve_from_tempmongo(sve_list_for_tempmongo, private_config_xml_file):
     for tax, sve_list_for_tax in tax_sve_list.items():
         for tempmongo in tax_tempmongo[tax]:
             logger.info(
-                    f"Connecting to tempmongo {tempmongo} for taxonomy {tax} with sve list of len {len(sve_list_for_tax)}")
+                f"Connecting to tempmongo {tempmongo} for taxonomy {tax} with sve list of len {len(sve_list_for_tax)}")
             all_sve_ids_for_tempmongo = list(set([sve['_id'] for sve in sve_list_for_tax]))
             sve_from_tempmongo.update(get_sve_for_taxonomy_from_tempmongo(all_sve_ids_for_tempmongo, tax, tempmongo))
-
 
     return sve_from_tempmongo
 
@@ -220,6 +233,7 @@ def check_sve_with_cve_for_correction(ss_list, all_cve_for_sve):
                 print("-----------------------------------------------------------------------------------------------")
 
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
+    # print(f"Sundar sve hashes: {[sve['_id'] for sve in sve_with_wrong_rs]}")
     logger.info(f"SVE for which CVE is not found: {len(sve_for_which_cve_not_found)}")
 
     return sve_for_which_cve_not_found
@@ -278,6 +292,7 @@ def check_sve_with_sve_for_correction(ss_list, all_sve_from_tempmongo):
 
     logger.info(f"SVE for which SVE is not found  in tempmongo: {len(sve_not_found)}")
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
+    # print(f"Sundar sve hashes: {[sve['_id'] for sve in sve_with_wrong_rs]}")
     logger.info(
         f"SVE for which tempmongo RS was merged but final merged RS is no longer in db: {len(tempmongo_merged_rs_not_found_in_db)}\n"
         f"{tempmongo_merged_rs_not_found_in_db}")
@@ -347,6 +362,50 @@ def check_if_all_processed_rs_was_supposed_to_be_processed(all_log_files, mongo_
                     logger.info(f"{cve}")
 
     logger.info("finished")
+
+
+def check_if_correct_merge_rs_was_picked(all_log_files, mongo_source):
+    asm_rs_list = defaultdict(lambda: defaultdict())
+    curr_asm = ""
+    for log_file_path in sorted(all_log_files, key=lambda x: os.stat(x).st_size):
+        with open(log_file_path, 'r') as log_file:
+            for line in log_file:
+                if 'Started processing assembly :' in line:
+                    curr_asm = line.split(':')[1].strip()
+                    continue
+                if "has been merged into RS" in line:
+                    merged_rs = line[line.index("RS"):].split(" ")[1].strip()
+                    new_rs = line[line.index("RS"):].split(" ")[7].replace(".", "").strip()
+                    # print(f"Merged RS {merged_rs}, New RS {new_rs}")
+                    asm_rs_list[curr_asm][int(merged_rs)] = int(new_rs)
+
+    for asm in asm_rs_list:
+        print(f"Assembly: {asm}")
+        for merged_rs, new_rs in asm_rs_list[asm].items():
+            rs_merge_events = get_rs_merge_events(mongo_source, [merged_rs])
+            if merged_rs not in rs_merge_events or not rs_merge_events[merged_rs] \
+                    or len(rs_merge_events[merged_rs]) < 1:
+                print(f"Merge event not found for RS {merged_rs}")
+            elif len(rs_merge_events[merged_rs]) == 1:
+                merged_into_rs = rs_merge_events[merged_rs][0]['mergeInto']
+                asm_of_event = rs_merge_events[merged_rs][0]['inactiveObjects'][0]['asm']
+                if asm != asm_of_event or new_rs != merged_into_rs:
+                    print(f"Error: asm {asm} asm_of_event {asm_of_event} "
+                          f"merged_rs {merged_rs} new_rs {new_rs} merged_into_rs {merged_into_rs} ")
+            elif len(rs_merge_events[merged_rs]) > 1:
+                found = False
+                for event in rs_merge_events[merged_rs]:
+                    if new_rs == event['mergeInto']:
+                        asm_from_event = event['inactiveObjects'][0]['asm']
+                        if asm == asm_from_event:
+                            found = True
+                if not found:
+                    print(f"Merged_RS {merged_rs} picked up wrong new_rs {new_rs}")
+                    for event in rs_merge_events[merged_rs]:
+                        if merged_rs == event['accession'] and asm == event['inactiveObjects'][0]['asm']:
+                            print(f"Merged RS {merged_rs} Should have picked up {event['mergeInto']}")
+
+    print("Finished")
 
 
 def get_rs_with_hash(rs_list, hash):
@@ -457,7 +516,8 @@ if __name__ == "__main__":
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva_accession_sharded")
 
-    merged_rs_ids_present_in_same_batch(all_log_files)
-    correct_sve_with_wrong_rs(all_log_files, mongo_source, args.private_config_xml_file)
-    check_if_any_newly_added_rs_has_collision_in_eva_cve(all_log_files, mongo_source)
-    check_if_all_processed_rs_was_supposed_to_be_processed(all_log_files, mongo_source)
+    # merged_rs_ids_present_in_same_batch(all_log_files)
+    # correct_sve_with_wrong_rs(all_log_files, mongo_source, args.private_config_xml_file)
+    # check_if_any_newly_added_rs_has_collision_in_eva_cve(all_log_files, mongo_source)
+    # check_if_all_processed_rs_was_supposed_to_be_processed(all_log_files, mongo_source)
+    check_if_correct_merge_rs_was_picked(all_log_files, mongo_source)

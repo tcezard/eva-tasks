@@ -123,16 +123,17 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                             # if the current RS is the one being merged and the RS it got merged into is in the same
                             # batch later, we need to update the info associated with that merged_into RS in memory
                             # as some of it might have changed because of the merge
-                            # E.g. SVE with RS=merged_rs will have changed to RS=merged_into associating new
+                            # E.g. SVE with RS=merged_rs will have changed to RS=merged_into, associating new
                             # SVE with merged_into RS, which we need to pick up
                             else:
+                                logger.info(f"Updating info in memory for RS ")
                                 del all_rs_variants[merged_into]
                                 all_rs_variants.update(get_rs_variants(mongo_source, assembly, [merged_into]))
 
                                 del dbsnp_ss_variants[merged_into]
                                 del eva_ss_variants[merged_into]
                                 del all_ss_variants[merged_into]
-                                dbsnp_ss, eva_ss, all_ss = get_ss_variants(mongo_source, assembly, rs_list)
+                                dbsnp_ss, eva_ss, all_ss = get_ss_variants(mongo_source, assembly, [merged_into])
                                 dbsnp_ss_variants.update(dbsnp_ss)
                                 eva_ss_variants.update(eva_ss)
                                 all_ss_variants.update(all_ss)
