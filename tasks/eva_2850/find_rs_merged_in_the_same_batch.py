@@ -209,8 +209,15 @@ def check_sve_with_cve_for_correction(ss_list, all_cve_for_sve):
             cve = all_cve_for_sve[cve_hash_from_sve]
             if sve['rs'] != cve[0]['accession']:
                 sve_with_wrong_rs.append(sve)
+                print("-----------------------------------------------------------------------------------------------")
                 logger.info(f"SVE: {sve} \nCVE: {cve[0]}")
                 logger.info(f"SVE RS {sve['rs']} does not match with CVE accession {cve[0]['accession']}")
+                print("\n")
+                print("db.submittedVariantEntity.updateOne({'_id': '" + sve['_id'] + "' },{'$set': {'rs': " + str(
+                    cve[0]['accession']) + "}})")
+                print("db.dbsnpSubmittedVariantEntity.updateOne({'_id': '" + sve['_id'] + "' },{'$set': {'rs': " + str(
+                    cve[0]['accession']) + "}})")
+                print("-----------------------------------------------------------------------------------------------")
 
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
     logger.info(f"SVE for which CVE is not found: {len(sve_for_which_cve_not_found)}")
@@ -221,22 +228,80 @@ def check_sve_with_cve_for_correction(ss_list, all_cve_for_sve):
 def check_sve_with_sve_for_correction(ss_list, all_sve_from_tempmongo):
     sve_not_found = []
     sve_with_wrong_rs = []
+    tempmongo_rs_not_found_in_db_nor_merged = []
+    tempmongo_merged_rs_not_found_in_db = []
 
     for sve in ss_list:
         if sve['_id'] not in all_sve_from_tempmongo:
             sve_not_found.append(sve)
         else:
             sve_from_tempmongo = all_sve_from_tempmongo[sve['_id']]
-            if sve['rs'] != sve_from_tempmongo[0]['rs']:
+            rs_from_tempmongo = sve_from_tempmongo[0]['rs']
+            if sve['rs'] != rs_from_tempmongo:
                 sve_with_wrong_rs.append(sve)
+                print("-----------------------------------------------------------------------------------------------")
                 logger.info(f"SVE: {sve} \nSVE from Tempmongo: {sve_from_tempmongo[0]}")
                 logger.info(
-                    f"SVE RS {sve['rs']} does not match with SVE RS from tempmongo {sve_from_tempmongo[0]['rs']}")
+                    f"SVE RS {sve['rs']} does not match with SVE RS from tempmongo {rs_from_tempmongo}")
+                print("\n")
 
+                rs_from_db = get_rs_variants_with_asm(mongo_source, sve['seq'], [rs_from_tempmongo])
+
+                if rs_from_tempmongo in rs_from_db:
+                    print("db.submittedVariantEntity.updateOne({'_id': '" + sve['_id'] + "' },{'$set': {'rs': " + str(
+                        rs_from_tempmongo) + "}})")
+                    print("db.dbsnpSubmittedVariantEntity.updateOne({'_id': '" + sve[
+                        '_id'] + "' },{'$set': {'rs': " + str(
+                        rs_from_tempmongo) + "}})")
+                    print("-------------------------------------------------------------------------------------------")
+                else:
+                    logger.info(f"RS {rs_from_tempmongo} not present in Mongo Prod")
+                    merged_rs = check_and_get_final_merged_rs(rs_from_tempmongo, sve['seq'])
+                    if merged_rs is not None:
+                        merged_rs_from_db = get_rs_variants_with_asm(mongo_source, sve['seq'], [merged_rs])
+                        if merged_rs in merged_rs_from_db:
+                            print(
+                                "db.submittedVariantEntity.updateOne({'_id': '" + sve['_id'] + "' },{'$set': {'rs': " +
+                                str(merged_rs) + "}})")
+                            print(
+                                "db.dbsnpSubmittedVariantEntity.updateOne({'_id': '" + sve[
+                                    '_id'] + "' },{'$set': {'rs': "
+                                + str(merged_rs) + "}})")
+                            print("-----------------------------------------------------------------------------------")
+                        else:
+                            logger.info(
+                                f"Tempmongo merged RS {merged_rs} found in merged operations but is not present in prod db")
+                            tempmongo_merged_rs_not_found_in_db.append(sve)
+                    else:
+                        logger.info(f"Tempmongo RS {rs_from_tempmongo} was not found in merged operations")
+                        tempmongo_rs_not_found_in_db_nor_merged.append(sve)
+
+    logger.info(f"SVE for which SVE is not found  in tempmongo: {len(sve_not_found)}")
     logger.info(f"SVE needs to be corrected: {len(sve_with_wrong_rs)}")
-    logger.info(f"SVE for which CVE is not found: {len(sve_not_found)}")
+    logger.info(
+        f"SVE for which tempmongo RS was merged but final merged RS is no longer in db: {len(tempmongo_merged_rs_not_found_in_db)}\n"
+        f"{tempmongo_merged_rs_not_found_in_db}")
+    logger.info(
+        f"SVE for which tempmongo RS not found in DB nor merged : {len(tempmongo_rs_not_found_in_db_nor_merged)}\n"
+        f"{tempmongo_rs_not_found_in_db_nor_merged}")
 
     return sve_not_found
+
+
+def check_and_get_final_merged_rs(org_rs, asm):
+    logger.info(f"Checking if RS {org_rs} is merged into another RS")
+    final_rs = None
+    while org_rs is not None:
+        merge_event = get_rs_merge_events_with_asm(mongo_source, [org_rs], asm)
+        if org_rs in merge_event:
+            mergedInto_rs = merge_event[org_rs][0]['mergeInto']
+            logger.info(f"RS {org_rs} merged into RS {mergedInto_rs}")
+            final_rs = mergedInto_rs
+            org_rs = mergedInto_rs
+        else:
+            break
+
+    return final_rs
 
 
 def check_if_any_newly_added_rs_has_collision_in_eva_cve(all_log_files, mongo_source):
@@ -341,6 +406,12 @@ def get_rs_variants(mongo_source, rs_list):
 
 def get_rs_merge_events(mongo_source, rs_list):
     event_filter_criteria = {'accession': {'$in': rs_list}, 'eventType': 'MERGED'}
+    rs_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
+    return rs_events
+
+
+def get_rs_merge_events_with_asm(mongo_source, rs_list, asm):
+    event_filter_criteria = {'accession': {'$in': rs_list}, 'eventType': 'MERGED', "inactiveObjects.asm": asm}
     rs_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
     return rs_events
 

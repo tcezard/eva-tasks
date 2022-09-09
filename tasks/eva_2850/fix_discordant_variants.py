@@ -67,7 +67,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
                         logger.error(f"No RS variant could be found for RS {rs}")
 
                         if not all_events:
-                            all_events = get_rs_events(mongo_source, rs_list)
+                            all_events = get_rs_events(mongo_source, rs_list, assembly)
 
                         # If no RS found in DB, check if the original RS has been merged to some other RS,
                         # if yes, add the new RS to the list for processing
@@ -269,10 +269,8 @@ def get_ss_variants(mongo_source, assembly, rs_list):
     return dbsnp_ss_variants, eva_ss_variants, all_ss_variants
 
 
-def get_rs_events(mongo_source, rs_list):
-    event_filter_criteria = {'$or': [{'accession': {'$in': rs_list}},
-                                     {'mergeInto': {'$in': rs_list}},
-                                     {'splitInto': {'$in': rs_list}}]}
+def get_rs_events(mongo_source, rs_list, asm):
+    event_filter_criteria = {"inactiveObjects.asm": asm, 'accession': {'$in': rs_list}, 'eventType': 'MERGED'}
     rs_events = get_events(mongo_source, DBSNP_CLUSTERED_VARIANT_OPERATION_ENTITY, event_filter_criteria)
     return rs_events
 
