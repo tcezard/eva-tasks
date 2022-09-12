@@ -114,7 +114,7 @@ def fix_discordant_variants(mongo_source, assembly, rs_file, batch_size=1000):
 
                         logger.info(f"Correct Discordant variants for RS {rs}")
                         merged_rs, merged_into = correct_discordant_rs_and_insert_into_db(rs_variant, ss_records,
-                                                                                         assembly)
+                                                                                          assembly)
 
                         # check if any merge has happened and
                         # if the merged_rs and the merged_into rs are both in the same batch
@@ -223,6 +223,8 @@ def resolve_collision_and_insert_rs(rs_variant, rs_with_new_start, variant_in_db
 def create_merge_event(variant_merged, variant_retained):
     logger.info(
         f"creating merge event for accession: {variant_merged['accession']} mergeInto: {variant_retained['accession']}")
+
+    variant_merged['hashedmessage'] = variant_merged['_id']
     merge_event = {
         "_id": f"EVA2850_MERGED_{variant_merged['accession']}_{variant_retained['_id']}",
         "eventType": "MERGED",
@@ -231,7 +233,6 @@ def create_merge_event(variant_merged, variant_retained):
         "reason": "EVA2850: Merged because of RS discordant correction",
         "inactiveObjects": [variant_merged],
         "createdDate": datetime.now(),
-        "hashedMessage": variant_merged['_id']
     }
 
     return merge_event
@@ -406,7 +407,8 @@ if __name__ == "__main__":
                                  db_name="eva2959_accession_sharded")
 
     # Sometimes the cluster creates hidden files like .nfs<numeric ID> in the folder when a file is being read. So we just want to focus on the ones that start with GCA
-    all_files = [os.path.join(args.discordant_rs_dir, filename) for filename in os.listdir(args.discordant_rs_dir) if filename.startswith("GCA")]
+    all_files = [os.path.join(args.discordant_rs_dir, filename) for filename in os.listdir(args.discordant_rs_dir) if
+                 filename.startswith("GCA")]
     for file in sorted(all_files, key=lambda x: os.stat(x).st_size):
         assembly = os.path.basename(file)
         fix_discordant_variants(mongo_source, assembly, os.path.join(args.discordant_rs_dir, assembly))
