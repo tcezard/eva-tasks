@@ -224,7 +224,7 @@ def create_merge_event(variant_merged, variant_retained):
     logger.info(
         f"creating merge event for accession: {variant_merged['accession']} mergeInto: {variant_retained['accession']}")
 
-    variant_merged['hashedmessage'] = variant_merged['_id']
+    variant_merged['hashedMessage'] = variant_merged['_id']
     merge_event = {
         "_id": f"EVA2850_MERGED_{variant_merged['accession']}_{variant_retained['_id']}",
         "eventType": "MERGED",
