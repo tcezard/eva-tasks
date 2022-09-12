@@ -5,17 +5,18 @@ import json
 from argparse import ArgumentParser
 from collections import defaultdict
 
+from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config
-from itertools import combinations
 import datetime
 
 from pyfaidx import Fasta
+from pymongo import MongoClient
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
+
+
 # Code from VCFtidy (https://github.com/quinlan-lab/vcftidy/blob/master/vcftidy.py)
-
-
 def leftalign(chrom, pos, ref, alt, fa, max_shift=1000):
     # Add the context base if it is not there already
     if ref == '':
@@ -210,10 +211,23 @@ def variant_type(ref, alt):
     return 'INS'
 
 
-def process_diagnostic_log(log_file, ref_genome_directory):
+def shelve_submitted_variant_entities(mongo_handle, submitted_variant_ids):
+    output_collection = 'eva2950_dbsnpSubmittedVariantEntity'
+    query_match = {'_id': {'$in': submitted_variant_ids}}
+    mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].aggregate([{'$match': query_match}, {'$out': output_collection}])
+    nb_sve = mongo_handle["eva_accession_sharded"][output_collection].estimated_document_count()
+    assert nb_sve == len(submitted_variant_ids), 'Not all variants were transfer to the output collection ' + output_collection
+    response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_match)
+    assert response.deleted_count == len(submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
+
+
+def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
+    count_normalisation = count_splits = 0
+    all_submitted_variant_ids = []
     for rsid, list_of_ss_entities in parse_eva2850_diagnositc_log(log_file):
         variant_to_entities = defaultdict(list)
         for ss_entity in list_of_ss_entities:
+            all_submitted_variant_ids.append(ss_entity['_id'])
             genome_object = get_genome_object(ref_genome_directory, ss_entity['seq'])
             context_pos, context_ref, context_alt = add_contex_base(
                 genome_object, ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt']
@@ -227,11 +241,18 @@ def process_diagnostic_log(log_file, ref_genome_directory):
             normalised_entity = {'start': normalised_pos, 'ref': normalised_ref, 'alt': normalised_alt}
 
             variant_to_entities[normalised_clustered_variant_definition].append((ss_entity, context_entity, normalised_entity))
-        process_renormalisation(variant_to_entities)
-        process_split(rsid, variant_to_entities)
+        count_normalisation += process_renormalisation(variant_to_entities)
+        count_splits += process_split(rsid, variant_to_entities)
+
+    logger.info(f'{count_normalisation} submitted variants need to be renormalised')
+    logger.info(f'{count_splits} clustered variants need to be created')
+
+    if mongo_handle:
+        shelve_submitted_variant_entities(mongo_handle, all_submitted_variant_ids)
 
 
 def process_split(rsid, variant_to_entities):
+    count_split = 0
     if len(variant_to_entities) == 1:
         logger.info(f'No split required for rs{rsid}')
     else:
@@ -247,9 +268,12 @@ def process_split(rsid, variant_to_entities):
         for cluster in cluster_priority[1:]:
             for ss_entity, context_entity, normalised_entity in variant_to_entities[cluster]:
                 logger.info(f'ss{ss_entity["accession"]} rs field needs to be updated')
+            count_split += 1
+    return count_split
 
 
 def process_renormalisation(variant_to_entities):
+    count_normalisation = 0
     for clustered_variant_entity in variant_to_entities:
         normalised_pos, vtype = clustered_variant_entity
         logger.info(f'  * {vtype} at {normalised_pos}')
@@ -258,17 +282,25 @@ def process_renormalisation(variant_to_entities):
                 logger.info(f'    ** ss{original_variant["accession"]} variant change from '
                             f'{context_entity["start"]}-{normalised_variant["ref"]}-{normalised_variant["alt"]} to '
                             f'{normalised_variant["start"]}-{context_entity["ref"]}-{context_entity["alt"]}')
+                count_normalisation += 1
             else:
                 logger.info(f'    ** ss{original_variant["accession"]} does not need to be normalised')
+    return count_normalisation
 
 
 def main():
     parser = ArgumentParser()
     parser.add_argument('--diagnostic_file')
     parser.add_argument('--ref_genome_directory')
+    parser.add_argument('--settings_xml_file')
+    parser.add_argument('--profile', default='development')
     args = parser.parse_args()
-
-    process_diagnostic_log(args.diagnostic_file, args.ref_genome_directory)
+    if args.settings_xml_file:
+        mongo_uri = get_mongo_uri_for_eva_profile(args.profile, args.settings_xml_file)
+        with MongoClient(mongo_uri) as mongo_handle:
+            process_diagnostic_log(args.diagnostic_file, args.ref_genome_directory, mongo_handle)
+    else:
+        process_diagnostic_log(args.diagnostic_file, args.ref_genome_directory)
 
 
 if __name__ == '__main__':
