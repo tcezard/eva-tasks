@@ -404,9 +404,8 @@ if __name__ == "__main__":
     mongo_source = MongoDatabase(uri=args.mongo_source_uri, secrets_file=args.mongo_source_secrets_file,
                                  db_name="eva2959_accession_sharded")
 
-    # Sometimes the cluster creates hidden files in the folder when a file is being read. So we just want to focus on the ones that start with GCA
-    all_files = [os.path.join(args.discordant_rs_dir, filename) for filename in os.listdir(args.discordant_rs_dir) if
-                 filename.startswith("GCA")]
+    # Sometimes the cluster creates hidden files like .nfs<numeric ID> in the folder when a file is being read. So we just want to focus on the ones that start with GCA
+    all_files = [os.path.join(args.discordant_rs_dir, filename) for filename in os.listdir(args.discordant_rs_dir) if filename.startswith("GCA")]
     for file in sorted(all_files, key=lambda x: os.stat(x).st_size):
         assembly = os.path.basename(file)
         fix_discordant_variants(mongo_source, assembly, os.path.join(args.discordant_rs_dir, assembly))
