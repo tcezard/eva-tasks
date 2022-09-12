@@ -230,7 +230,8 @@ def create_merge_event(variant_merged, variant_retained):
         "mergeInto": variant_retained['accession'],
         "reason": "EVA2850: Merged because of RS discordant correction",
         "inactiveObjects": [variant_merged],
-        "createdDate": datetime.now()
+        "createdDate": datetime.now(),
+        "hashedMessage": variant_merged['_id']
     }
 
     return merge_event
