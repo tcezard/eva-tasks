@@ -168,7 +168,7 @@ def ast_parse_with_datetime(astr):
     return eval(astr)
 
 
-def parse_eva2850_diagnositc_log(log_file):
+def parse_eva2850_diagnostic_log(log_file):
     rsid = None
     with open(log_file) as open_file:
         for line in open_file:
