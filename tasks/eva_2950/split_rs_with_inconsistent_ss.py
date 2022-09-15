@@ -1,9 +1,9 @@
 import os
 import ast
 import glob
-import json
 from argparse import ArgumentParser
 from collections import defaultdict
+from itertools import zip_longest
 
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config
@@ -30,7 +30,8 @@ def leftalign(chrom, pos, ref, alt, fa, max_shift=1000):
     seq = fa[chrom][max(0, pos - max_shift - 1):pos + len(ref) - 1].upper()
     ref = ref.upper()
     alt = alt.upper()
-    assert seq.endswith(ref), (chrom, pos, ref, alt, seq[-10:])
+    if not seq.endswith(ref):
+        raise ReferenceError('The reference bases in the variant are different from the reference sequence ' + str((chrom, pos, ref, alt, seq[-10:])))
     return _leftalign(pos, ref, alt, seq)[:3]
 
 
@@ -149,6 +150,7 @@ def add_contex_base(fa, chrom, pos, ref, alt):
         ref = alt + ref
     return pos, ref, alt
 
+
 def ast_parse_with_datetime(astr):
     """
     Parse a string representing a python data structure into a python data structure
@@ -211,39 +213,50 @@ def variant_type(ref, alt):
     return 'INS'
 
 
+def grouper(iterable, n, fillvalue=None):
+    args = [iter(iterable)] * n
+    return zip_longest(fillvalue=fillvalue, *args)
+
+
 def shelve_submitted_variant_entities(mongo_handle, submitted_variant_ids):
     output_collection = 'eva2950_dbsnpSubmittedVariantEntity'
-    query_match = {'_id': {'$in': submitted_variant_ids}}
-    mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].aggregate([{'$match': query_match}, {'$out': output_collection}])
-    nb_sve = mongo_handle["eva_accession_sharded"][output_collection].estimated_document_count()
-    assert nb_sve == len(submitted_variant_ids), 'Not all variants were transfer to the output collection ' + output_collection
-    response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_match)
-    assert response.deleted_count == len(submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
+    batch_size = 1000
+    for batch_sve_ids in grouper(submitted_variant_ids, batch_size):
+        query_filter = {'_id': {'$in': batch_sve_ids}}
+        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].find(query_filter)]
+        mongo_handle["eva_accession_sharded"][output_collection].insert(documents)
+        nb_sve = mongo_handle["eva_accession_sharded"][output_collection].estimated_document_count()
+        assert nb_sve == len(batch_sve_ids), 'Not all variants were transfer to the output collection ' + output_collection
+        response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_filter)
+        assert response.deleted_count == len(batch_sve_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
 
 
 def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
     count_normalisation = count_splits = 0
     all_submitted_variant_ids = []
-    for rsid, list_of_ss_entities in parse_eva2850_diagnositc_log(log_file):
-        variant_to_entities = defaultdict(list)
-        for ss_entity in list_of_ss_entities:
-            all_submitted_variant_ids.append(ss_entity['_id'])
-            genome_object = get_genome_object(ref_genome_directory, ss_entity['seq'])
-            context_pos, context_ref, context_alt = add_contex_base(
-                genome_object, ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt']
-            )
-            normalised_pos, normalised_ref, normalised_alt = leftnorm(
-                ss_entity['contig'], context_pos, context_ref, context_alt, fa=genome_object
-            )
-            context_entity = {'start': context_pos, 'ref': context_ref, 'alt': context_alt}
-            normalised_clustered_variant_definition = (normalised_pos, variant_type(normalised_ref, normalised_alt))
-            ss_entity['contig'] + str(ss_entity['start']) + ss_entity['ref'] + ss_entity['alt']
-            normalised_entity = {'start': normalised_pos, 'ref': normalised_ref, 'alt': normalised_alt}
+    for rsid, list_of_ss_entities in parse_eva2850_diagnostic_log(log_file):
+        try:
 
-            variant_to_entities[normalised_clustered_variant_definition].append((ss_entity, context_entity, normalised_entity))
-        count_normalisation += process_renormalisation(variant_to_entities)
-        count_splits += process_split(rsid, variant_to_entities)
-
+            variant_to_entities = defaultdict(list)
+            for ss_entity in list_of_ss_entities:
+                all_submitted_variant_ids.append(ss_entity['_id'])
+                genome_object = get_genome_object(ref_genome_directory, ss_entity['seq'])
+                context_pos, context_ref, context_alt = add_contex_base(
+                    genome_object, ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt']
+                )
+                normalised_pos, normalised_ref, normalised_alt = leftnorm(
+                    ss_entity['contig'], context_pos, context_ref, context_alt, fa=genome_object
+                )
+                context_entity = {'start': context_pos, 'ref': context_ref, 'alt': context_alt}
+                normalised_clustered_variant_definition = (normalised_pos, variant_type(normalised_ref, normalised_alt))
+                ss_entity['contig'] + str(ss_entity['start']) + ss_entity['ref'] + ss_entity['alt']
+                normalised_entity = {'start': normalised_pos, 'ref': normalised_ref, 'alt': normalised_alt}
+                variant_to_entities[normalised_clustered_variant_definition].append((ss_entity, context_entity, normalised_entity))
+            count_normalisation += process_renormalisation(variant_to_entities)
+            count_splits += process_split(rsid, variant_to_entities)
+        except ReferenceError as e:
+            logger.error(f'Cannot Process rs{rsid} because one of the ssid cannot be normalised')
+            logger.error(str(e))
     logger.info(f'{count_normalisation} submitted variants need to be renormalised')
     logger.info(f'{count_splits} clustered variants need to be created')
 
