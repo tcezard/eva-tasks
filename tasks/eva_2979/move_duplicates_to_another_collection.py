@@ -2,9 +2,13 @@ from argparse import ArgumentParser
 from collections import Counter, defaultdict
 
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
+from ebi_eva_common_pyutils.logger import logging_config
 from itertools import zip_longest
 from pymongo import MongoClient
 
+
+logger = logging_config.get_logger(__name__)
+logging_config.add_stdout_handler()
 
 def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
@@ -25,6 +29,8 @@ def check_submitted_variant_have_duplicates(submitted_variant_records):
     for ssid in count_per_ssid:
         if count_per_ssid[ssid] > 1:
             duplicated_variants.extend(ssid_to_variant_list[ssid])
+        else:
+            logger.warning(f'Found only {count_per_ssid.get(ssid, 0)} variant for ss{ssid}')
     return duplicated_variants
 
 
@@ -32,12 +38,16 @@ def shelve_submitted_variant_entities(mongo_handle, submitted_variant_accession,
     output_collection = 'eva2979_dbsnpSubmittedVariantEntity'
     batch_size = 1000
     for batch_sve_accs in grouper(submitted_variant_accession, batch_size):
+        # remove None
+        batch_sve_accs = [acc for acc in batch_sve_accs if acc]
         query_filter = {'seq': assembly_accession, 'accession': {'$in': batch_sve_accs}}
         documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].find(query_filter)]
+        logger.info(f'Found {len(documents)} documents for {len(batch_sve_accs)} accessions')
         duplicated_submitted_variant_ids = check_submitted_variant_have_duplicates(documents)
-        mongo_handle["eva_accession_sharded"][output_collection].insert(duplicated_submitted_variant_ids)
-        response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many({'_id': {'$in': duplicated_submitted_variant_ids}})
-        assert response.deleted_count == len(duplicated_submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
+        if duplicated_submitted_variant_ids:
+            mongo_handle["eva_accession_sharded"][output_collection].insert_many(duplicated_submitted_variant_ids)
+            response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many({'_id': {'$in': duplicated_submitted_variant_ids}})
+            assert response.deleted_count == len(duplicated_submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
 
 
 def parse_duplicate_list(duplicates_file):
@@ -46,13 +56,12 @@ def parse_duplicate_list(duplicates_file):
     assembly_accession = None
     with open(duplicates_file) as open_file:
         for line in open_file:
-            sp_line = line.strip().split('\t')
+            sp_line = line.strip().split()
             if sp_line[2] not in ignored_type:
-                duplicated_accessions.append(sp_line[0])
-                if assembly_accession:
-                    assert assembly_accession == sp_line[1]
-                assembly_accession = sp_line[1]
-
+                duplicated_accessions.append(int(sp_line[0]))
+            if assembly_accession:
+                assert assembly_accession == sp_line[1]
+            assembly_accession = sp_line[1]
     return duplicated_accessions, assembly_accession
 
 
@@ -65,7 +74,11 @@ def main():
     mongo_uri = get_mongo_uri_for_eva_profile(args.profile, args.settings_xml_file)
     with MongoClient(mongo_uri) as mongo_handle:
         duplicated_accessions, assembly_accession = parse_duplicate_list(args.duplicates_file)
-        shelve_submitted_variant_entities(mongo_handle, duplicated_accessions, assembly_accession)
+        if duplicated_accessions:
+            logger.info(f'Will attempt to shelf {len(duplicated_accessions)} for assembly {assembly_accession}')
+            shelve_submitted_variant_entities(mongo_handle, duplicated_accessions, assembly_accession)
+        else:
+            logger.info(f'No suplidated variants for assembly {assembly_accession}')
 
 
 if __name__ == '__main__':
