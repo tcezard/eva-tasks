@@ -4,11 +4,12 @@ from collections import Counter, defaultdict
 from ebi_eva_common_pyutils.config_utils import get_mongo_uri_for_eva_profile
 from ebi_eva_common_pyutils.logger import logging_config
 from itertools import zip_longest
-from pymongo import MongoClient
-
+from pymongo import MongoClient, WriteConcern, ReadPreference
+from pymongo.read_concern import ReadConcern
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
+
 
 def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
@@ -41,13 +42,19 @@ def shelve_submitted_variant_entities(mongo_handle, submitted_variant_accession,
         # remove None
         batch_sve_accs = [acc for acc in batch_sve_accs if acc]
         query_filter = {'seq': assembly_accession, 'accession': {'$in': batch_sve_accs}}
-        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].find(query_filter)]
+        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].
+                     with_options(read_concern=ReadConcern("majority"), read_preference=ReadPreference.PRIMARY).
+                     find(query_filter)]
         logger.info(f'Found {len(documents)} documents for {len(batch_sve_accs)} accessions')
         duplicated_submitted_variant_ids = check_submitted_variant_have_duplicates(documents)
         if duplicated_submitted_variant_ids:
-            mongo_handle["eva_accession_sharded"][output_collection].insert_many(duplicated_submitted_variant_ids)
-            response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many({'_id': {'$in': duplicated_submitted_variant_ids}})
-            assert response.deleted_count == len(duplicated_submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
+            mongo_handle["eva_accession_sharded"][output_collection].\
+                with_options(write_concern=WriteConcern("majority")).\
+                insert_many(duplicated_submitted_variant_ids)
+            # response = mongo_handle['dbsnpSubmittedVariantEntity'].\
+            #     with_options(write_concern=WriteConcern("majority")).\
+            #     delete_many({'_id': {'$in': duplicated_submitted_variant_ids}})
+            # assert response.deleted_count == len(duplicated_submitted_variant_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
 
 
 def parse_duplicate_list(duplicates_file):
@@ -78,7 +85,7 @@ def main():
             logger.info(f'Will attempt to shelf {len(duplicated_accessions)} for assembly {assembly_accession}')
             shelve_submitted_variant_entities(mongo_handle, duplicated_accessions, assembly_accession)
         else:
-            logger.info(f'No suplidated variants for assembly {assembly_accession}')
+            logger.info(f'No duplicated variants for assembly {assembly_accession}')
 
 
 if __name__ == '__main__':
