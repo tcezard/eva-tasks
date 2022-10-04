@@ -241,7 +241,6 @@ def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
     all_submitted_variant_ids = []
     for rsid, list_of_ss_entities in parse_eva2850_diagnostic_log(log_file):
         try:
-
             variant_to_entities = defaultdict(list)
             for ss_entity in list_of_ss_entities:
                 all_submitted_variant_ids.append(ss_entity['_id'])
@@ -267,6 +266,7 @@ def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
 
     if mongo_handle:
         shelve_submitted_variant_entities(mongo_handle, all_submitted_variant_ids)
+    logger.info(f'{all_submitted_variant_ids} submitted variant have been shelved to a separate collection')
 
 
 def process_split(rsid, variant_to_entities):
