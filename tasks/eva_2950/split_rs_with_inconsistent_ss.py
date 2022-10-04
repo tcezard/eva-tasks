@@ -10,7 +10,8 @@ from ebi_eva_common_pyutils.logger import logging_config
 import datetime
 
 from pyfaidx import Fasta
-from pymongo import MongoClient
+from pymongo import MongoClient, WriteConcern, ReadPreference
+from pymongo.read_concern import ReadConcern
 
 logger = logging_config.get_logger(__name__)
 logging_config.add_stdout_handler()
@@ -223,12 +224,16 @@ def shelve_submitted_variant_entities(mongo_handle, submitted_variant_ids):
     batch_size = 1000
     for batch_sve_ids in grouper(submitted_variant_ids, batch_size):
         query_filter = {'_id': {'$in': batch_sve_ids}}
-        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].find(query_filter)]
-        mongo_handle["eva_accession_sharded"][output_collection].insert(documents)
+        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].
+                     with_options(read_concern=ReadConcern("majority"), read_preference=ReadPreference.PRIMARY).
+                     find(query_filter)]
+        mongo_handle["eva_accession_sharded"][output_collection].\
+            with_options(write_concern=WriteConcern("majority")).\
+            insert(documents)
         nb_sve = mongo_handle["eva_accession_sharded"][output_collection].estimated_document_count()
         assert nb_sve == len(batch_sve_ids), 'Not all variants were transfer to the output collection ' + output_collection
-        response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_filter)
-        assert response.deleted_count == len(batch_sve_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
+        # response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_filter)
+        # assert response.deleted_count == len(batch_sve_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
 
 
 def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
