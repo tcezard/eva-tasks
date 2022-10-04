@@ -266,7 +266,7 @@ def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
 
     if mongo_handle:
         shelve_submitted_variant_entities(mongo_handle, all_submitted_variant_ids)
-    logger.info(f'{all_submitted_variant_ids} submitted variant have been shelved to a separate collection')
+    logger.info(f'{len(all_submitted_variant_ids)} submitted variant have been shelved to a separate collection')
 
 
 def process_split(rsid, variant_to_entities):
