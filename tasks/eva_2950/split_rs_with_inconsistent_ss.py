@@ -219,31 +219,45 @@ def grouper(iterable, n, fillvalue=None):
     return zip_longest(fillvalue=fillvalue, *args)
 
 
-def shelve_submitted_variant_entities(mongo_handle, submitted_variant_ids):
-    output_collection = 'eva2950_dbsnpSubmittedVariantEntity'
+def shelve_submitted_variant_entities(mongo_handle, submitted_variant_ids, input_collection='dbsnpSubmittedVariantEntity'):
+    output_collection = 'eva2950_' + input_collection
     batch_size = 1000
+    missing_ids = set()
+    logger.info(f'Will Shelve {len(submitted_variant_ids)}')
     for batch_sve_ids in grouper(submitted_variant_ids, batch_size):
+        # remove None
+        batch_sve_ids = [sve for sve in batch_sve_ids if sve]
+
         query_filter = {'_id': {'$in': batch_sve_ids}}
-        documents = [d for d in mongo_handle["eva_accession_sharded"]['dbsnpSubmittedVariantEntity'].
+        documents = [d for d in mongo_handle["eva_accession_sharded"][input_collection].
                      with_options(read_concern=ReadConcern("majority"), read_preference=ReadPreference.PRIMARY).
                      find(query_filter)]
-        mongo_handle["eva_accession_sharded"][output_collection].\
+        insert_results = mongo_handle["eva_accession_sharded"][output_collection].\
             with_options(write_concern=WriteConcern("majority")).\
-            insert(documents)
-        nb_sve = mongo_handle["eva_accession_sharded"][output_collection].estimated_document_count()
-        assert nb_sve == len(batch_sve_ids), 'Not all variants were transfer to the output collection ' + output_collection
+            insert_many(documents)
+        if len(insert_results.inserted_ids) != len(batch_sve_ids):
+            logger.error(f'Only {len(insert_results.inserted_ids)} variants out of {len(batch_sve_ids)} were transfer '
+                         f'to the output collection {output_collection}')
+            missing_ids.update(set(batch_sve_ids) - set(insert_results.inserted_ids))
+    if missing_ids and input_collection == 'dbsnpSubmittedVariantEntity':
+        logger.warning(f'{len(missing_ids)} variants were not transfer to the output collection {output_collection}')
+        logger.warning('Attempting to shelve from EVA variant')
+        shelve_submitted_variant_entities(mongo_handle, missing_ids, input_collection='submittedVariantEntity')
+    elif missing_ids:
+        logger.error(f'{len(missing_ids)} variants were not transfer to the output collection {output_collection}')
+        logger.error(str(missing_ids))
         # response = mongo_handle['dbsnpSubmittedVariantEntity'].delete_many(query_filter)
         # assert response.deleted_count == len(batch_sve_ids), 'Not all variants were deleted from dbsnpSubmittedVariantEntity'
 
 
 def process_diagnostic_log(log_file, ref_genome_directory, mongo_handle=None):
     count_normalisation = count_splits = 0
-    all_submitted_variant_ids = []
+    all_submitted_variant_ids = set()
     for rsid, list_of_ss_entities in parse_eva2850_diagnostic_log(log_file):
         try:
             variant_to_entities = defaultdict(list)
             for ss_entity in list_of_ss_entities:
-                all_submitted_variant_ids.append(ss_entity['_id'])
+                all_submitted_variant_ids.add(ss_entity['_id'])
                 genome_object = get_genome_object(ref_genome_directory, ss_entity['seq'])
                 context_pos, context_ref, context_alt = add_contex_base(
                     genome_object, ss_entity['contig'], ss_entity['start'], ss_entity['ref'], ss_entity['alt']
