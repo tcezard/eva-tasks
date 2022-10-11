@@ -6,7 +6,9 @@ package uk.ac.ebi.eva.eva3004
 
 import groovy.cli.picocli.CliBuilder
 import org.springframework.data.mongodb.core.query.Query
+import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.deprecate.Application
+import uk.ac.ebi.eva.eva3004.EVADatabaseEnvironment
 
 import static uk.ac.ebi.eva.eva3004.EVADatabaseEnvironment.*
 import static org.springframework.data.mongodb.core.query.Criteria.where
@@ -38,22 +40,31 @@ def allRSToCheck = ["bash", "-c",
 println(allRSToCheck.values().flatten().size())
 def shelvedCollectionDbsnpSve = "eva2706_shelved_dbsnpsve_multi_position_rs"
 def shelvedCollectionSve = "eva2706_shelved_sve_multi_position_rs"
+def shelvedCollectionDbsnpCve = "eva2706_shelved_dbsnpcve_multi_position_rs"
 def batchIndex = 0
 allRSToCheck.each{assembly, allRSIDs -> allRSIDs.collate(1000).each { rsIDs ->
-    def allSvesWithRS = [sveClass, dbsnpSveClass].collect{prodEnv.mongoTemplate.find(query(where("seq").is(assembly)
+    List<SubmittedVariantEntity> allSvesWithRS = [sveClass, dbsnpSveClass].collect{prodEnv.mongoTemplate.find(query(where("seq").is(assembly)
             .and("rs").in(rsIDs)), it)}.flatten()
     // Ensure that the RS reported with multiple positions among the SS still holds true in the current SVE collections
     def allSvesToShelve = allSvesWithRS.groupBy{it.clusteredVariantAccession}.findAll{k, v ->
-        v.unique{toClusteredVariantEntity(it).hashedMessage}.size() > 1}.values().flatten()
+        v.collect{sve -> EVADatabaseEnvironment.toClusteredVariantEntity(sve).hashedMessage}.unique().size() > 1}.values().flatten()
+    def allDbsnpRSIDsToShelve = allSvesToShelve.collect{it.clusteredVariantAccession}.toSet()
+    def allDbsnpCvesToShelve = prodEnv.mongoTemplate.find(query(where("asm").is(assembly)
+            .and("accession").in(allDbsnpRSIDsToShelve)), dbsnpCveClass)
 
-    prodEnv.bulkInsertIgnoreDuplicates(dbsnpSveClass, allSvesToShelve.findAll{it.accession < 5e9}, shelvedCollectionDbsnpSve)
-    prodEnv.bulkInsertIgnoreDuplicates(sveClass, allSvesToShelve.findAll{it.accession >= 5e9}, shelvedCollectionSve)
+    def dbsnpSvesToShelve = allSvesToShelve.findAll{it.accession < 5e9}
+    def evaSvesToShelve = allSvesToShelve.findAll{it.accession >= 5e9}
 
+    prodEnv.bulkInsertIgnoreDuplicates(dbsnpSvesToShelve, dbsnpSveClass, shelvedCollectionDbsnpSve)
+    prodEnv.bulkInsertIgnoreDuplicates(evaSvesToShelve, sveClass, shelvedCollectionSve)
+    prodEnv.bulkInsertIgnoreDuplicates(allDbsnpCvesToShelve, dbsnpCveClass, shelvedCollectionDbsnpCve)
+
+    println("Shelved ${allDbsnpCvesToShelve.size()} dbsnp CVEs in batch ${batchIndex}...")
     println("Shelved ${dbsnpSvesToShelve.size()} dbsnp SVEs in batch ${batchIndex}...")
     println("Shelved ${evaSvesToShelve.size()} EVA SVEs in batch ${batchIndex}...")
     batchIndex += 1
 }}
-//478,810
+//505,169
 println(prodEnv.mongoTemplate.count(new Query(), sveClass, shelvedCollectionSve))
-//21,657,719
+//32,103,259
 println(prodEnv.mongoTemplate.count(new Query(), dbsnpSveClass, shelvedCollectionDbsnpSve))

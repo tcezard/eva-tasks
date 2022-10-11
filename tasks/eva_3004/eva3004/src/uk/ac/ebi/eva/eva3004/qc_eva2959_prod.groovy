@@ -6,6 +6,8 @@ package uk.ac.ebi.eva.eva3004
 import groovy.cli.picocli.CliBuilder
 import org.springframework.data.mongodb.core.query.Query
 import uk.ac.ebi.eva.accession.deprecate.Application
+import uk.ac.ebi.eva.eva3004.EVADatabaseEnvironment
+import uk.ac.ebi.eva.eva3004.EVALoggingUtils
 
 import static uk.ac.ebi.eva.eva3004.EVADatabaseEnvironment.*
 import static org.springframework.data.mongodb.core.query.Criteria.where
@@ -34,8 +36,12 @@ def allRSToCheck = ["bash", "-c",
     ]}
 // 6,629,703
 println(allRSToCheck.values().flatten().size())
+
 // If some of these RS IDs were merged into others include those too
 prodEnv.mongoTemplate.find(query(where("_id").regex("EVA2850_MERGED.*")), dbsnpCvoeClass).each{
+    allRSToCheck[it.inactiveObjects[0].assemblyAccession].addAll([it.accession, it.mergedInto].toSet())
+}
+prodEnv.mongoTemplate.find(query(where("_id").regex("EVA2850_MERGED.*")), cvoeClass).each{
     allRSToCheck[it.inactiveObjects[0].assemblyAccession].addAll([it.accession, it.mergedInto].toSet())
 }
 def batchIndex = 0
@@ -48,7 +54,7 @@ allRSToCheck.each{assembly, allRSIDs -> allRSIDs.collate(1000).each{rsIDs ->
         it.isAllelesMatch() && Objects.isNull(it.mapWeight)}
     def rsGroupedByHashAndAccessionFromSVE =
             sves.collectEntries{sve ->
-                def cve = toClusteredVariantEntity(sve)
+                def cve = EVADatabaseEnvironment.toClusteredVariantEntity(sve)
                 return ["${cve.hashedMessage}_${cve.accession}", sve]
             }
     def rsHashesToLookUp = rsGroupedByHashAndAccessionFromSVE.keySet().collect{it.split("_")[0]}
@@ -65,11 +71,11 @@ allRSToCheck.each{assembly, allRSIDs -> allRSIDs.collate(1000).each{rsIDs ->
                 "and RS ${rsAccession} and RS hash ${rsHash}...")
         scriptLogger.info("Shelving SS ${impactedSS.accession} with SS hash ${impactedSS.hashedMessage} with  a mismatched locus...")
     }
-    prodEnv.bulkInsertIgnoreDuplicates(dbsnpSveClass, allImpactedSS.findAll{it.accession < 5e9}, shelvedCollectionDbsnpSve)
-    prodEnv.bulkInsertIgnoreDuplicates(sveClass, allImpactedSS.findAll{it.accession >= 5e9}, shelvedCollectionSve)
+    prodEnv.bulkInsertIgnoreDuplicates(allImpactedSS.findAll{it.accession < 5e9}, dbsnpSveClass, shelvedCollectionDbsnpSve)
+    prodEnv.bulkInsertIgnoreDuplicates(allImpactedSS.findAll{it.accession >= 5e9}, sveClass, shelvedCollectionSve)
     batchIndex += 1
 }}
 //65
 println(prodEnv.mongoTemplate.count(new Query(), sveClass, shelvedCollectionSve))
-//169,512
+//184,496
 println(prodEnv.mongoTemplate.count(new Query(), dbsnpSveClass, shelvedCollectionDbsnpSve))

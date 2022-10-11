@@ -12,21 +12,22 @@ import org.springframework.retry.annotation.Retryable
 class EVACursor<T> implements Iterable<T> {
     CriteriaDefinition filterCriteria
     MongoTemplate mongoTemplate
+    final String collectionName
     final Class<T> collectionClass
     final int pageSize
     MongoCursor<Document> resultIterator
 
     EVACursor() {}
 
-    EVACursor(CriteriaDefinition filterCriteria, MongoTemplate mongoTemplate, Class<T> collectionClass, int pageSize = 1000) {
+    EVACursor(CriteriaDefinition filterCriteria, MongoTemplate mongoTemplate, Class<T> collectionClass, int pageSize = 1000, String collectionName = null) {
         this.filterCriteria = filterCriteria
         this.mongoTemplate = mongoTemplate
         this.collectionClass = collectionClass
         this.pageSize = pageSize
+        this.collectionName = Objects.isNull(collectionName)? this.mongoTemplate.getCollectionName(this.collectionClass): collectionName
 
-        this.resultIterator = this.mongoTemplate.getCollection(this.mongoTemplate
-                .getCollectionName(this.collectionClass))
-                .find(this.filterCriteria.criteriaObject).noCursorTimeout(true).batchSize(pageSize).iterator()
+        this.resultIterator = this.mongoTemplate.getCollection(collectionName).find(
+                this.filterCriteria.criteriaObject).noCursorTimeout(true).batchSize(pageSize).iterator()
     }
 
     @Override
