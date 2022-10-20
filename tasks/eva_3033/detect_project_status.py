@@ -47,27 +47,33 @@ class ProjectStatusDetector:
         return get_mongo_connection_handle(self.maven_profile, self.maven_config)
 
     def detect_project_status(self):
+        print('\t'.join(["Project", "Analysis", "Taxonomy", "Submitted assembly", "Remapped assembly",
+                         "Accessioning status","Accessioning ssid found", "Remapping status", "Remapping ssid found",
+                         "Clustering status", "Clustering ssid found"]))
         for analysis, source_assembly, taxonomy, filenames in self.project_information():
             accessioning_status = remapping_status = clustering_status = target_assembly = 'Not found'
+            list_ssid_accessionned, list_ssid_remapped, list_ssid_clustered = ([], [], [])
             if taxonomy and taxonomy != 9606:
-                list_ssid = self.check_accessioning_was_done(analysis, filenames)
-                accessioning_status = 'Done' if len(list_ssid) > 0 else 'Pending'
+                list_ssid_accessionned = self.check_accessioning_was_done(analysis, filenames)
+                accessioning_status = 'Done' if len(list_ssid_accessionned) > 0 else 'Pending'
                 target_assembly = self.find_current_target_assembly_for(taxonomy)
                 remapping_status = 'Required' if source_assembly != target_assembly else 'Not_required'
                 if source_assembly != target_assembly:
-                    if self.check_remapping_was_done(source_assembly, target_assembly, list_ssid):
+                    list_ssid_remapped = self.check_remapping_was_done(target_assembly, list_ssid_accessionned)
+                    if list_ssid_remapped:
                         remapping_status = 'Done'
                     assembly = target_assembly
                 else:
                     assembly = source_assembly
-
-                clustering_status = 'Done' if self.check_clustering_was_done(assembly, list_ssid) else 'Pending'
+                list_ssid_clustered = self.check_clustering_was_done(assembly, list_ssid_accessionned)
+                clustering_status = 'Done' if list_ssid_clustered else 'Pending'
             else:
                 if not taxonomy:
                     logger.error( f'Project {self.project}:{analysis} has no taxonomy associated and the metadata '
                               f'should be checked.')
-            print('\t'.join([self.project, str(analysis), str(taxonomy), str(source_assembly), str(target_assembly),
-                             accessioning_status, remapping_status, clustering_status]))
+            print('\t'.join((str(e) for e in [self.project, analysis, taxonomy, source_assembly, target_assembly,
+                             accessioning_status, len(list_ssid_accessionned), remapping_status,
+                                              len(list_ssid_remapped), clustering_status, len(list_ssid_clustered)])))
 
     def project_information(self):
         """Retrieve project information from the metadata. Information retrieve include
@@ -160,24 +166,15 @@ class ProjectStatusDetector:
 
         return accessioning_reports
 
-    def check_remapping_was_done(self, source_assembly, target_assembly, list_ssid):
-        # query the tracker to filter out things that were never remapped
-        query = (f'select release_version, remapping_status, remapping_end ' 
-                 f'from eva_progress_tracker.remapping_tracker '
-                 f"where origin_assembly_accession='{source_assembly}' and assembly_accession='{target_assembly}'")
-        remapped_candidate = None
-        for release_version, remapping_status, remapping_end in get_all_results_for_query(self.metadata_conn, query):
-            remapped_candidate = True
-        if remapped_candidate:
-            ss_variants = self.find_submitted_variant_in_assembly(target_assembly, list_ssid)
-            logger.info(f'Found {len(ss_variants)} variants out of {len(list_ssid)} in {target_assembly}')
-            return len(ss_variants) > 0
-        return False
+    def check_remapping_was_done(self, target_assembly, list_ssid):
+        ss_variants = self.find_submitted_variant_in_assembly(target_assembly, list_ssid)
+        logger.info(f'Found {len(ss_variants)} variants out of {len(list_ssid)} in {target_assembly}')
+        return [ss_variant['accession'] for ss_variant in ss_variants]
 
     def check_clustering_was_done(self, assembly, list_ssid):
         ss_variants = self.find_submitted_variant_in_assembly(assembly, list_ssid)
         logger.info(f'Found {len(ss_variants)} variants out of {len(list_ssid)} in {assembly}')
-        return len([ss_variant for ss_variant in ss_variants if 'rs' in ss_variant]) > 0
+        return [ss_variant['accession'] for ss_variant in ss_variants if 'rs' in ss_variant]
 
     def find_submitted_variant_in_assembly(self, assembly, list_ssid):
         filters = {'seq': assembly, 'accession': {'$in': list_ssid}}
