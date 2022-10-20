@@ -49,11 +49,9 @@ class ProjectStatusDetector:
     def detect_project_status(self):
         for analysis, source_assembly, taxonomy, filenames in self.project_information():
             accessioning_status = remapping_status = clustering_status = target_assembly = 'Not found'
-            if taxonomy:
-                if taxonomy == 9606:
-                    continue
-                nb_ss_id, list_ssid = self.check_accessioning_was_done(analysis, filenames)
-                accessioning_status = 'Done' if nb_ss_id > 0 else 'Pending'
+            if taxonomy and taxonomy != 9606:
+                list_ssid = self.check_accessioning_was_done(analysis, filenames)
+                accessioning_status = 'Done' if len(list_ssid) > 0 else 'Pending'
                 target_assembly = self.find_current_target_assembly_for(taxonomy)
                 remapping_status = 'Required' if source_assembly != target_assembly else 'Not_required'
                 if source_assembly != target_assembly:
@@ -65,9 +63,10 @@ class ProjectStatusDetector:
 
                 clustering_status = 'Done' if self.check_clustering_was_done(assembly, list_ssid) else 'Pending'
             else:
-                logger.error( f'Project {self.project}:{analysis} has no taxonomy associated and the metadata '
+                if not taxonomy:
+                    logger.error( f'Project {self.project}:{analysis} has no taxonomy associated and the metadata '
                               f'should be checked.')
-            print('\t'.join([self.project, analysis, str(taxonomy), str(source_assembly), str(target_assembly),
+            print('\t'.join([self.project, str(analysis), str(taxonomy), str(source_assembly), str(target_assembly),
                              accessioning_status, remapping_status, clustering_status]))
 
     def project_information(self):
