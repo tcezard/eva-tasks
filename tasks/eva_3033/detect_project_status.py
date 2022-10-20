@@ -24,6 +24,9 @@ def detect_all_public_project(maven_config, maven_profile):
 
 
 def process_projects(projects, maven_config, maven_profile, noah_project_dir, codon_project_dir):
+    print('\t'.join(["Project", "Analysis", "Taxonomy", "Submitted assembly", "Remapped assembly",
+                     "Accessioning status", "Accessioning ssid found", "Remapping status", "Remapping ssid found",
+                     "Clustering status", "Clustering ssid found"]))
     for project in projects:
         detector = ProjectStatusDetector(project, maven_config, maven_profile, noah_project_dir, codon_project_dir)
         detector.detect_project_status()
@@ -47,12 +50,13 @@ class ProjectStatusDetector:
         return get_mongo_connection_handle(self.maven_profile, self.maven_config)
 
     def detect_project_status(self):
-        print('\t'.join(["Project", "Analysis", "Taxonomy", "Submitted assembly", "Remapped assembly",
-                         "Accessioning status","Accessioning ssid found", "Remapping status", "Remapping ssid found",
-                         "Clustering status", "Clustering ssid found"]))
         for analysis, source_assembly, taxonomy, filenames in self.project_information():
+            # initialise results with default values
             accessioning_status = remapping_status = clustering_status = target_assembly = 'Not found'
             list_ssid_accessionned, list_ssid_remapped, list_ssid_clustered = ([], [], [])
+            if not taxonomy:
+                logger.error(f'No Assembly set present in the metadata for project: {self.project}:{analysis}')
+                taxonomy = self.get_taxonomy_for_project()
             if taxonomy and taxonomy != 9606:
                 list_ssid_accessionned = self.check_accessioning_was_done(analysis, filenames)
                 accessioning_status = 'Done' if len(list_ssid_accessionned) > 0 else 'Pending'
@@ -82,8 +86,8 @@ class ProjectStatusDetector:
             "select pa.project_accession, pa.analysis_accession, a.vcf_reference_accession, at.taxonomy_id, f.filename "
             "from project_analysis pa "
             "join analysis a on pa.analysis_accession=a.analysis_accession "
-            "join assembly_set at on at.assembly_set_id=a.assembly_set_id "
-            "join analysis_file af on af.analysis_accession=a.analysis_accession "
+            "left join assembly_set at on at.assembly_set_id=a.assembly_set_id "
+            "left join analysis_file af on af.analysis_accession=a.analysis_accession "
             "join file f on f.file_id=af.file_id "
             f"where f.file_type='VCF' and pa.project_accession='{self.project}'"
             "order by pa.project_accession, pa.analysis_accession")
@@ -99,6 +103,16 @@ class ProjectStatusDetector:
                 filenames = []
             filenames.append(filename)
         yield current_analysis, current_assembly, current_tax_id, filenames
+
+    def get_taxonomy_for_project(self):
+        taxonomies = []
+        query = f"select distinct taxonomy_id from evapro.project_taxonomy where project_accession='{self.project}'"
+        for tax_id, in get_all_results_for_query(self.metadata_conn, query):
+            taxonomies.append(tax_id)
+        if len(taxonomies) == 1:
+            return taxonomies[0]
+        else:
+            logger.error(f'Cannot retrieve a single taxonomy for project {self.project}. Found {len(taxonomies)}.')
 
     def check_accessioning_was_done(self, analysis, filenames):
         """
@@ -210,4 +224,5 @@ if __name__ == "__main__":
         projects = args.projects
     else:
         projects = detect_all_public_project(args.private_config_xml_file, args.profile)
+
     process_projects(projects, args.private_config_xml_file, args.profile, args.noah_prj_dir, args.codon_prj_dir)
