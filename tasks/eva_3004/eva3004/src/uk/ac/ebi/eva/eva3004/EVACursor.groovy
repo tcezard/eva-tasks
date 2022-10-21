@@ -26,7 +26,7 @@ class EVACursor<T> implements Iterable<T> {
         this.pageSize = pageSize
         this.collectionName = Objects.isNull(collectionName)? this.mongoTemplate.getCollectionName(this.collectionClass): collectionName
 
-        this.resultIterator = this.mongoTemplate.getCollection(collectionName).find(
+        this.resultIterator = this.mongoTemplate.getCollection(this.collectionName).find(
                 this.filterCriteria.criteriaObject).noCursorTimeout(true).batchSize(pageSize).iterator()
     }
 

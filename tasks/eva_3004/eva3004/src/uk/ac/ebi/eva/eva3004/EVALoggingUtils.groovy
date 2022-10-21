@@ -26,7 +26,6 @@ class EVALoggingUtils {
             fileAppender.setContext(lc)
             fileAppender.start()
             scriptLogger.addAppender(fileAppender)
-            scriptLogger.addAppender(new ConsoleAppender<ILoggingEvent>())
             scriptLogger.setAdditive(false)
         }
         // For interactive use on Emacs terminal, being able to output only to files is desirable

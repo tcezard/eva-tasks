@@ -53,29 +53,31 @@ allRSToCheck.each{assembly, allRSIDs -> allRSIDs.collate(1000).each{rsIDs ->
         prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsIDs)), it)}.flatten().findAll{
         it.isAllelesMatch() && Objects.isNull(it.mapWeight)}
     def rsGroupedByHashAndAccessionFromSVE =
-            sves.collectEntries{sve ->
+            sves.groupBy{sve ->
                 def cve = EVADatabaseEnvironment.toClusteredVariantEntity(sve)
-                return ["${cve.hashedMessage}_${cve.accession}", sve]
+                return ""+ "${cve.hashedMessage}_${cve.accession}"
             }
     def rsHashesToLookUp = rsGroupedByHashAndAccessionFromSVE.keySet().collect{it.split("_")[0]}
     scriptLogger.info("Looking up ${rsHashesToLookUp.size()} RS hashes for ${assembly} in batch ${batchIndex}...")
     def rsHashesInCveGroupedByHashAndAccession =
-            [cveClass, dbsnpCveClass].collect { prodEnv.mongoTemplate.find(query(where("_id").in(rsHashesToLookUp)), it) }
-                    .flatten().collectEntries { ["${it.hashedMessage}_${it.accession}", it.hashedMessage] }
+            [cveClass, dbsnpCveClass].collect { prodEnv.mongoTemplate.find(query(where("_id").in(rsHashesToLookUp)), it) }.flatten().collectEntries {
+                ["${it.hashedMessage}_${it.accession}", it.hashedMessage] }
     def allImpactedSS = new ArrayList<>()
     (rsGroupedByHashAndAccessionFromSVE.keySet() - rsHashesInCveGroupedByHashAndAccession.keySet()).each{rsWithMismatchedLocus ->
         def (rsHash, rsAccession) = rsWithMismatchedLocus.split("_")
-        def impactedSS = rsGroupedByHashAndAccessionFromSVE.get(rsWithMismatchedLocus)
-        allImpactedSS.add(impactedSS)
-        scriptLogger.error("SS/RS locus mismatch for SS ${impactedSS.accession} with SS hash ${impactedSS.hashedMessage} " +
-                "and RS ${rsAccession} and RS hash ${rsHash}...")
-        scriptLogger.info("Shelving SS ${impactedSS.accession} with SS hash ${impactedSS.hashedMessage} with  a mismatched locus...")
+        def impactedSSEntries = rsGroupedByHashAndAccessionFromSVE.get(rsWithMismatchedLocus)
+        allImpactedSS.addAll(impactedSSEntries)
+        impactedSSEntries.each {impactedSS ->
+            scriptLogger.error("SS/RS locus mismatch for SS ${impactedSS.accession} with SS hash ${impactedSS.hashedMessage} " +
+                    "and RS ${rsAccession} and RS hash ${rsHash}...")
+            scriptLogger.info("Shelving SS ${impactedSS.accession} with SS hash ${impactedSS.hashedMessage} with  a mismatched locus...")
+        }
     }
     prodEnv.bulkInsertIgnoreDuplicates(allImpactedSS.findAll{it.accession < 5e9}, dbsnpSveClass, shelvedCollectionDbsnpSve)
     prodEnv.bulkInsertIgnoreDuplicates(allImpactedSS.findAll{it.accession >= 5e9}, sveClass, shelvedCollectionSve)
     batchIndex += 1
 }}
-//65
+//83
 println(prodEnv.mongoTemplate.count(new Query(), sveClass, shelvedCollectionSve))
-//184,496
+//185,978
 println(prodEnv.mongoTemplate.count(new Query(), dbsnpSveClass, shelvedCollectionDbsnpSve))
