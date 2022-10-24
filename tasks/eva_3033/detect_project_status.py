@@ -122,7 +122,7 @@ class ProjectStatusDetector:
         accessioning_reports = self.get_accession_reports_for_study()
         accessioned_filenames = [self.get_accession_file(f) for f in filenames]
         if not accessioning_reports:
-            return 0, []
+            return []
         if len(accessioning_reports) == 1:
             accessioning_report = accessioning_reports[0]
         elif len([r for r in accessioning_reports if r in accessioned_filenames]) == 1:
@@ -136,7 +136,7 @@ class ProjectStatusDetector:
             logger.error(f'Cannot assign accessioning report to project {self.project} analysis {analysis} for files {accessioning_reports}')
             accessioning_report = None
         if not accessioning_report:
-            return 0, []
+            return []
         return self.get_accessioning_info_from_file(accessioning_report)
 
     def get_accession_file(self, filename):
