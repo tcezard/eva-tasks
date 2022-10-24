@@ -15,7 +15,7 @@ logger = logging_config.get_logger(__name__)
 logging_config.add_stderr_handler()
 
 
-def detect_all_public_project(maven_config, maven_profile):
+def detect_all_public_projects(maven_config, maven_profile):
     with get_metadata_connection_handle(maven_profile, maven_config) as pg_conn:
         query = f"select project_accession from evapro.project where ena_status=4"
         public_projects = [project for project, in get_all_results_for_query(pg_conn, query)]
@@ -53,37 +53,37 @@ class ProjectStatusDetector:
         for analysis, source_assembly, taxonomy, filenames in self.project_information():
             # initialise results with default values
             accessioning_status = remapping_status = clustering_status = target_assembly = 'Not found'
-            list_ssid_accessionned, list_ssid_remapped, list_ssid_clustered = ([], [], [])
+            list_ssid_accessioned, list_ssid_remapped, list_ssid_clustered = ([], [], [])
             if not taxonomy:
                 logger.error(f'No Assembly set present in the metadata for project: {self.project}:{analysis}')
                 taxonomy = self.get_taxonomy_for_project()
             if taxonomy and taxonomy != 9606:
-                list_ssid_accessionned = self.check_accessioning_was_done(analysis, filenames)
-                accessioning_status = 'Done' if len(list_ssid_accessionned) > 0 else 'Pending'
+                list_ssid_accessioned = self.check_accessioning_was_done(analysis, filenames)
+                accessioning_status = 'Done' if len(list_ssid_accessioned) > 0 else 'Pending'
                 target_assembly = self.find_current_target_assembly_for(taxonomy)
                 remapping_status = 'Required' if source_assembly != target_assembly else 'Not_required'
                 if source_assembly != target_assembly:
-                    list_ssid_remapped = self.check_remapping_was_done(target_assembly, list_ssid_accessionned)
+                    list_ssid_remapped = self.check_remapping_was_done(target_assembly, list_ssid_accessioned)
                     if list_ssid_remapped:
                         remapping_status = 'Done'
                     assembly = target_assembly
                 else:
                     assembly = source_assembly
-                list_ssid_clustered = self.check_clustering_was_done(assembly, list_ssid_accessionned)
+                list_ssid_clustered = self.check_clustering_was_done(assembly, list_ssid_accessioned)
                 clustering_status = 'Done' if list_ssid_clustered else 'Pending'
             else:
                 if not taxonomy:
                     logger.error( f'Project {self.project}:{analysis} has no taxonomy associated and the metadata '
                               f'should be checked.')
             print('\t'.join((str(e) for e in [self.project, analysis, taxonomy, source_assembly, target_assembly,
-                             accessioning_status, len(list_ssid_accessionned), remapping_status,
+                             accessioning_status, len(list_ssid_accessioned), remapping_status,
                                               len(list_ssid_remapped), clustering_status, len(list_ssid_clustered)])))
 
     def project_information(self):
         """Retrieve project information from the metadata. Information retrieve include
         the analysis and associated taxonomy, genome and file names that are included in this project."""
         query = (
-            "select pa.project_accession, pa.analysis_accession, a.vcf_reference_accession, at.taxonomy_id, f.filename "
+            "select distinct pa.project_accession, pa.analysis_accession, a.vcf_reference_accession, at.taxonomy_id, f.filename "
             "from project_analysis pa "
             "join analysis a on pa.analysis_accession=a.analysis_accession "
             "left join assembly_set at on at.assembly_set_id=a.assembly_set_id "
@@ -130,7 +130,7 @@ class ProjectStatusDetector:
         elif len([r for r in accessioning_reports if analysis in r]) == 1:
             accessioning_report = [r for r in accessioning_reports if analysis in r][0]
         elif accessioning_reports:
-            logger.warning(f'Assume all accessioning report are from project {self.project}:{analysis} and only use the first one.')
+            logger.warning(f'Assume all accessioning reports are from project {self.project}:{analysis} and only use the first one.')
             accessioning_report = accessioning_reports[0]
         else:
             logger.error(f'Cannot assign accessioning report to project {self.project} analysis {analysis} for files {accessioning_reports}')
@@ -167,9 +167,8 @@ class ProjectStatusDetector:
 
     def get_accession_reports_for_study(self):
         """
-        Given a study, find the accessioning report path for that study on both noah and codon
-        look for a file ending with accessioned.vcf.gz (assuming only one file with the given pattern will be present)
-        if more than one files are present, take the first one
+        Given a study, find the accessioning report path for that study on both noah and codon.
+        Look for files ending with accessioned.vcf.gz.
         """
 
         noah_files = glob.glob(os.path.join(self.noah_project_dir, self.project, '60_eva_public', '*accessioned.vcf.gz'))
@@ -182,13 +181,14 @@ class ProjectStatusDetector:
 
     def check_remapping_was_done(self, target_assembly, list_ssid):
         ss_variants = self.find_submitted_variant_in_assembly(target_assembly, list_ssid)
-        logger.info(f'Found {len(ss_variants)} variants out of {len(list_ssid)} in {target_assembly}')
+        logger.info(f'Found {len(ss_variants)} remapped variants out of {len(list_ssid)} in {target_assembly}')
         return [ss_variant['accession'] for ss_variant in ss_variants]
 
     def check_clustering_was_done(self, assembly, list_ssid):
         ss_variants = self.find_submitted_variant_in_assembly(assembly, list_ssid)
-        logger.info(f'Found {len(ss_variants)} variants out of {len(list_ssid)} in {assembly}')
-        return [ss_variant['accession'] for ss_variant in ss_variants if 'rs' in ss_variant]
+        ss_variants = [ss_variant['accession'] for ss_variant in ss_variants if 'rs' in ss_variant]
+        logger.info(f'Found {len(ss_variants)} clustered variants out of {len(list_ssid)} in {assembly}')
+        return ss_variants
 
     def find_submitted_variant_in_assembly(self, assembly, list_ssid):
         filters = {'seq': assembly, 'accession': {'$in': list_ssid}}
@@ -211,7 +211,7 @@ class ProjectStatusDetector:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Provide the processing status of the EVA projects')
     parser.add_argument("--projects",  nargs='*', default=None,
-                        help="project you was the status of. If not specified then all projects are checked",)
+                        help="project you want the status of. If not specified then all projects are checked",)
     parser.add_argument("--private-config-xml-file", help="ex: /path/to/eva-maven-settings.xml", required=True)
 
     parser.add_argument("--noah-prj-dir", help="path to the project directory in noah", required=True)
@@ -223,6 +223,6 @@ if __name__ == "__main__":
     if args.projects:
         projects = args.projects
     else:
-        projects = detect_all_public_project(args.private_config_xml_file, args.profile)
+        projects = detect_all_public_projects(args.private_config_xml_file, args.profile)
 
     process_projects(projects, args.private_config_xml_file, args.profile, args.noah_prj_dir, args.codon_prj_dir)
