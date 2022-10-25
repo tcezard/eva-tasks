@@ -217,8 +217,8 @@ public class EVADatabaseEnvironment {
             try {
                 bulkWriteResult = ops.execute()
             }
-            catch(DuplicateKeyException ignored) {
-                MongoBulkWriteException writeException = ((MongoBulkWriteException) exception.getCause())
+            catch(DuplicateKeyException duplicateKeyException) {
+                MongoBulkWriteException writeException = ((MongoBulkWriteException) duplicateKeyException.getCause())
                 bulkWriteResult = writeException.getWriteResult()
             }
             return Objects.isNull(bulkWriteResult)? 0: bulkWriteResult.insertedCount
