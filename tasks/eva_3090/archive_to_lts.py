@@ -5,6 +5,7 @@ import os.path
 from argparse import ArgumentParser
 
 from ebi_eva_common_pyutils.logger import logging_config
+from retry import retry
 
 logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
@@ -32,6 +33,11 @@ def compress(src_file_path, dest_file_path):
 
 def matches(name, patterns):
     return any((pattern for pattern in patterns if pattern in name))
+
+
+@retry(tries=5, delay=3, backoff=2, logger=logger)
+def retriable_remove(path):
+    shutil.rmtree(path)
 
 
 def archive_directory(root_dir, scratch_dir, destination_dir, filter_patterns=None):
@@ -75,7 +81,7 @@ def archive_directory(root_dir, scratch_dir, destination_dir, filter_patterns=No
     final_tar_file = os.path.join(destination_dir, root_dir_name + '.tar')
     logger.info(f'Create Final Tar file {final_tar_file}')
     make_tarfile(final_tar_file, os.path.join(scratch_dir, root_dir_name))
-    shutil.rmtree(scratch_dir)
+    retriable_remove(scratch_dir)
 
 
 def main():
@@ -85,7 +91,7 @@ def main():
     parser.add_argument('--scratch_dir', required=True, type=str)
     parser.add_argument('--filter_patterns', type=str, nargs='*', default=[] )
     args = parser.parse_args()
-    archive_directory(args.root_dir,args.scratch_dir,  args.destination_dir, args.filter_patterns)
+    archive_directory(args.root_dir, args.scratch_dir,  args.destination_dir, args.filter_patterns)
 
 
 if __name__ == '__main__':
