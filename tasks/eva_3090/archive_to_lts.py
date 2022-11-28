@@ -11,7 +11,7 @@ logging_config.add_stdout_handler()
 logger = logging_config.get_logger(__name__)
 
 
-def make_tarfile(output_filename, source_dir):
+def make_tarfile(source_dir, output_filename):
     logger.info(f'Create Final Tar file {output_filename}.')
     with tarfile.open(output_filename, "w") as tar:
         tar.add(source_dir, arcname=os.path.basename(source_dir))
@@ -83,7 +83,7 @@ def archive_directory(root_dir, scratch_dir, destination_dir, filter_patterns=No
                 retriable_compress(src_file_path, dest_file_path + '.gz')
     final_tar_file = os.path.join(destination_dir, root_dir_name + '.tar')
     scratch_dir_archived = os.path.join(scratch_dir, root_dir_name)
-    make_tarfile(final_tar_file, scratch_dir_archived)
+    make_tarfile(scratch_dir_archived, final_tar_file)
     logger.info(f'Delete scratch folder {scratch_dir_archived}.')
     retriable_remove(scratch_dir_archived)
     logger.info(f'Scratch folder {scratch_dir_archived} deleted.')
