@@ -1,4 +1,4 @@
-package uk.ac.ebi.eva.eva3100
+package eva3100
 
 import groovy.cli.picocli.CliBuilder
 import org.springframework.boot.SpringApplication
