@@ -54,7 +54,7 @@ impactedIDs.collate(1000).each {dbsnpSvoeIdsToLookFor ->
         def dbsnpSvoeIDsToUpdate = impactedSvoes.findAll { hashesWithNoAllelesMatch.contains(it.inactiveObjects[0].hashedMessage) }.collect { it.getId() }
         dbsnpSvoeIDsToUpdate.each{scriptLogger.warn("DbsnpSVOE with ID ${it} will be updated!!")}
         prodEnv.mongoTemplate.updateMulti(query(where("_id").in(dbsnpSvoeIDsToUpdate)),
-                Update.update("inactiveObjects[0].allelesMatch", false), dbsnpSvoeClass)
+                Update.update("inactiveObjects.0.allelesMatch", false), dbsnpSvoeClass)
     }
     scriptLogger.info("${numIDsScanned} dbsnpSVE hashes scanned so far...")
 }
