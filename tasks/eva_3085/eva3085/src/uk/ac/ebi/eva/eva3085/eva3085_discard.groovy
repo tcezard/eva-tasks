@@ -2,6 +2,7 @@
 package uk.ac.ebi.eva.eva3085
 
 import groovy.cli.picocli.CliBuilder
+import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantInactiveEntity
