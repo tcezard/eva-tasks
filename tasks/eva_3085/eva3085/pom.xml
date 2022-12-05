@@ -9,6 +9,12 @@
 
     <dependencies>
         <dependency>
+            <groupId>uk.ac.ebi.ampt2d</groupId>
+            <artifactId>accession-commons-mongodb</artifactId>
+            <version>0.7.9-SNAPSHOT</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
             <groupId>uk.ac.ebi.eva</groupId>
             <artifactId>eva-accession-deprecate</artifactId>
             <version>0.6.10-SNAPSHOT</version>
