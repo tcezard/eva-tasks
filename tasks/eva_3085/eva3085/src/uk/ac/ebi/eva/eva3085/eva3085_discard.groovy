@@ -2,6 +2,8 @@
 package uk.ac.ebi.eva.eva3085
 
 import groovy.cli.picocli.CliBuilder
+import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantEntity
+import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantInactiveEntity
 import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
@@ -12,6 +14,8 @@ import uk.ac.ebi.eva.eva3085.EVADatabaseEnvironment
 import uk.ac.ebi.eva.eva3085.EVALoggingUtils
 
 import static uk.ac.ebi.eva.eva3085.EVADatabaseEnvironment.*
+import static org.springframework.data.mongodb.core.query.Query.query
+import static org.springframework.data.mongodb.core.query.Criteria.where
 
 def cli = new CliBuilder()
 cli.prodPropertiesFile(args:1, "Production properties file for accessioning", required: true)
