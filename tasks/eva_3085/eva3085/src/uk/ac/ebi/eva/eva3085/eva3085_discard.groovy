@@ -28,8 +28,8 @@ if (!options) {
 def prodEnv = createFromSpringContext(options.prodPropertiesFile, Application.class)
 def scriptLogger = EVALoggingUtils.getLogger(this.class)
 
-def assembly = "GCA_000247795.2"
-def contig = "CM008173.2"
+assembly = "GCA_000247795.2"
+contig = "CM008173.2"
 
 SubmittedVariantOperationEntity getDiscardSvoe(SubmittedVariantEntity sve) {
     String svoeId = "DISCARD_SS_${sve.getAccession()}_FROM_${assembly}"
