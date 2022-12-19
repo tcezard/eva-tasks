@@ -74,17 +74,18 @@ def detect_species_with_cross_species_target(maven_config, maven_profile):
             taxonomy_to_assemblies[taxonomy].append(assembly)
             if current:
                 taxonomy_to_current_assembly[taxonomy] = assembly
-        clustered_assemblies_to_dates = defaultdict(list)
+        assemblies_to_full_clustering_dates = defaultdict(list)
+        assemblies_to_species_clustering_dates = defaultdict(list)
 
         # Get the assemblies where clustering for whole species was performed
-        query = 'select assembly_accession, clustering_start from eva_progress_tracker.clustering_release_tracker where should_be_clustered=true;'
-        for assembly, clustering_start in get_all_results_for_query(pg_conn, query):
-            clustered_assemblies_to_dates[assembly].append(clustering_start)
+        query = 'select taxonomy, assembly_accession, clustering_start from eva_progress_tracker.clustering_release_tracker where should_be_clustered=true;'
+        for taxonomy, assembly, clustering_start in get_all_results_for_query(pg_conn, query):
+            assemblies_to_full_clustering_dates[assembly].append(clustering_start)
 
         # Get the assemblies where clustering for new studies was performed
-        query = 'select assembly_accession, remapping_start from eva_progress_tracker.remapping_tracker where study_accessions is not null;'
-        for assembly, remapping_start in get_all_results_for_query(pg_conn, query):
-            clustered_assemblies_to_dates[assembly].append(remapping_start)
+        query = 'select taxonomy, assembly_accession, remapping_start, study_accessions from eva_progress_tracker.remapping_tracker where study_accessions is not null;'
+        for taxonomy, assembly, remapping_start, study_accessions in get_all_results_for_query(pg_conn, query):
+            assemblies_to_species_clustering_dates[(taxonomy, assembly)].append(remapping_start)
 
     for taxonomy in taxonomy_to_current_assembly:
         for assembly in taxonomy_to_assemblies[taxonomy]:
@@ -103,18 +104,28 @@ def detect_species_with_cross_species_target(maven_config, maven_profile):
                 continue
 
             # Check that if a clustering was ever performed on this assembly
-            if assembly not in clustered_assemblies_to_dates:
+            if assembly not in assemblies_to_full_clustering_dates and \
+                    (taxonomy, assembly) not in assemblies_to_species_clustering_dates:
                 continue
+            dates_for_orig_assembly = ','.join([d.date().isoformat() if d else 'Unknown' for d in assemblies_to_full_clustering_dates.get(assembly, [])])
+            dates_for_orig_assembly += ','.join([d.date().isoformat() if d else 'Unknown' for d in assemblies_to_species_clustering_dates.get((taxonomy, assembly), [])])
+
+            # Check that if a clustering was ever performed on the other assembly
+            if taxonomy_to_current_assembly.get(taxonomy_from_assembly) not in assemblies_to_full_clustering_dates and \
+                (taxonomy_from_assembly, taxonomy_to_current_assembly.get(taxonomy_from_assembly)) not in assemblies_to_species_clustering_dates:
+                continue
+            dates_for_other_assembly = ','.join([d.date().isoformat() if d else 'Unknown' for d in assemblies_to_full_clustering_dates.get(taxonomy_to_current_assembly.get(taxonomy_from_assembly), [])])
+            dates_for_other_assembly += ','.join([d.date().isoformat() if d else 'Unknown' for d in assemblies_to_species_clustering_dates.get((taxonomy_from_assembly, taxonomy_to_current_assembly.get(taxonomy_from_assembly)), [])])
 
             species_name = cached_get_scientific_name(taxonomy)
             species_name_from_assembly = cached_get_scientific_name(taxonomy_from_assembly)
-            all_dates = ','.join([d.date().isoformat() if d else 'Unknown' for d in clustered_assemblies_to_dates[assembly]])
             logger.warning(f'For {taxonomy} ({species_name}) and target {assembly} '
                            f'({cached_get_assembly_name_from(assembly)}), the assembly comes from '
                            f'{taxonomy_from_assembly} ({species_name_from_assembly}) and its current is target '
                            f'{taxonomy_to_current_assembly.get(taxonomy_from_assembly)} '
                            f'({cached_get_assembly_name_from(taxonomy_to_current_assembly.get(taxonomy_from_assembly))}). '
-                           f'Clustering happened on {all_dates}')
+                           f'Clustering on original assembly happened  {dates_for_orig_assembly}. '
+                           f'Clustering on other assembly happened  {dates_for_other_assembly}')
 
 
 if __name__ == '__main__':
