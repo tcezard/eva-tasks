@@ -39,10 +39,11 @@ def logger = LoggerFactory.getLogger(GenericApplication.class)
 def undoMergeIntoMultiMapRS = {svoeOps ->
     def (bulkSVEUpdateOps, bulkdbSnpSVEUpdateOps) =
     [sveClass, dbsnpSveClass].collect { dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, it) }
-    def (svoeInserts, dbSnpSvoeInserts) = [new ArrayList<>(), new ArrayList<>()]
+    def (svoeInserts, dbSnpSvoeInserts, dbsnpCvoeInserts) = [new ArrayList<>(), new ArrayList<>(),
+                                                             new ArrayList<>()]
     def (numSVEUpdates, numDbsnpSveUpdates, numDbsnpCvoeUpdates) = [0, 0, 0]
 
-    svoeOps.each {SubmittedVariantOperationEntity svoeOp ->
+    svoeOps.each {svoeOp ->
         def ssHash = svoeOp.inactiveObjects[0].hashedMessage
         Query queryToFindSSToUpdate = query(where("_id").is(ssHash).and("rs").exists(true))
         def ssRecordsToUpdate = [sveClass, dbsnpSveClass].collect{
@@ -85,8 +86,8 @@ def undoMergeIntoMultiMapRS = {svoeOps ->
     dbEnv.bulkInsertIgnoreDuplicates(dbsnpCvoeInserts, dbsnpCvoeClass)
 }
 
-def getCVEsToResurrect = {mapWtCVEs ->
-
+def getCVEsToResurrect
+getCVEsToResurrect = {mapWtCVEs ->
     def mapWtRSIDs = mapWtCVEs.collect{it.accession}
     // See https://docs.google.com/spreadsheets/d/1kRKHR4zrq-nxH_Sg82TwXZbxdgjB3K-q4YMyJva8yMg/edit#rangeid=2145326284
     def allCVEsMergedIntoMapWtCVEs = [cvoeClass, dbsnpCvoeClass].collect{dbEnv.mongoTemplate.find(query(
