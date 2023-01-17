@@ -8,8 +8,8 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 import groovy.cli.picocli.CliBuilder
 
 def cli = new CliBuilder()
-cli.propertiesFile(args:1, "Properties file to use for remediation", required: true)
-cli.assembly(args:1, "Assembly to remediate", required: true)
+cli.prodPropertiesFile(args:1, "Production environment properties file", required: true)
+cli.devPropertiesFile(args:1, "Development environment properties file", required: true)
 def options = cli.parse(args)
 if (!options) {
     cli.usage()
