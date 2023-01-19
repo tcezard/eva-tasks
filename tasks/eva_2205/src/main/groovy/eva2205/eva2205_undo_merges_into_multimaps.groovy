@@ -1,6 +1,7 @@
 package eva2205
 
 import eva2205.DeprecateMapWtSS
+import static eva2205.eva2205_common_functions.*
 import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
@@ -13,6 +14,7 @@ import uk.ac.ebi.eva.accession.core.model.eva.ClusteredVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.deprecate.Application
+import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
 import uk.ac.ebi.eva.groovy.commons.EVAObjectModelUtils
 import uk.ac.ebi.eva.groovy.commons.RetryableBatchingCursor
 
@@ -93,24 +95,29 @@ getCVEsToResurrect = {mapWtCVEs ->
     def allCVEsMergedIntoMapWtCVEs = [cvoeClass, dbsnpCvoeClass].collect{dbEnv.mongoTemplate.find(query(
             where("inactiveObjects.asm").is(options.assembly).and("eventType").is(EventType.MERGED).and(
                     "mergeInto").in(mapWtRSIDs)), it)}.flatten()
-    def nonMapWtCVEsMergedIntoMapWtCVEs = allCVEsMergedIntoMapWtCVEs.findAll{ Objects.isNull(it.inactiveObjects[0].mapWeight)}
-    def nonMapWtRSIDs = nonMapWtCVEsMergedIntoMapWtCVEs.collect{it.accession}
+    def allSourceRSIDs = allCVEsMergedIntoMapWtCVEs.collect{it.accession}
     def reasonRegEx = mapWtRSIDs.collect{".* merged into rs${it}."}.join("|")
-    def nonMapWtSSAssignedMapWtRS = [svoeClass, dbsnpSvoeClass].collect{dbEnv.mongoTemplate.find(query(where("inactiveObjects.seq").is(
-            options.assembly).and("inactiveObjects.rs").in(nonMapWtRSIDs).and("eventType").is(EventType.UPDATED).and(
-            "reason").regex(reasonRegEx).and("inactiveObjects.mapWeight").exists(false)), it)}.flatten()
-    // Restore CVEs which were incorrectly merged into map weighted CVEs
-    def cvesToResurrect = nonMapWtCVEsMergedIntoMapWtCVEs.collect{it.inactiveObjects[0].toClusteredVariantEntity()}
-    undoMergeIntoMultiMapRS(nonMapWtSSAssignedMapWtRS)
+    def ssOpsInvolvedInMergeIntoMultimaps = [svoeClass, dbsnpSvoeClass].collect{dbEnv.mongoTemplate.find(query(
+            where("inactiveObjects.seq").is(options.assembly).and("eventType").is(EventType.UPDATED).and(
+                    "reason").regex(reasonRegEx).and("inactiveObjects.rs").in(allSourceRSIDs)), it)}.flatten()
+    def ssMergeChainForImpactedSS = getSSHistoryInvolvedInRSMerges(dbEnv, options.assembly,
+            ssOpsInvolvedInMergeIntoMultimaps).groupBy{it.accession + "_" + it.inactiveObjects[0].hashedMessage}
+    def oneSSWithMoreThanOneMerges = ssMergeChainForImpactedSS.findAll{k,v ->
+        return v.collect{it.reason}.unique().size() > 1}.values().flatten()
+    if (oneSSWithMoreThanOneMerges.size() > 0) println(oneSSWithMoreThanOneMerges[0])
 
-    // If there were other multimap RS merged into multimap RS in the current batch
-    // recursively follow these ancestral merges to find any non-multimap RS in the past that should be resurrected
-    def mapWtCVEsMergedIntoMapWtRS = allCVEsMergedIntoMapWtCVEs.findAll{ Objects.nonNull(
-            it.inactiveObjects[0].mapWeight)}.collect{it.inactiveObjects[0].toClusteredVariantEntity()}
-    if (mapWtCVEsMergedIntoMapWtRS.size() > 0) {
-        cvesToResurrect.addAll(getCVEsToResurrect(mapWtCVEsMergedIntoMapWtRS))
-    }
-    return cvesToResurrect
+    // Restore CVEs which were incorrectly merged into map weighted CVEs
+//    def cvesToResurrect = nonMapWtCVEsMergedIntoMapWtCVEs.collect{it.inactiveObjects[0].toClusteredVariantEntity()}
+//    undoMergeIntoMultiMapRS(nonMapWtSSAssignedMapWtRS)
+//
+//    // If there were other multimap RS merged into multimap RS in the current batch
+//    // recursively follow these ancestral merges to find any non-multimap RS in the past that should be resurrected
+//    def mapWtCVEsMergedIntoMapWtRS = allCVEsMergedIntoMapWtCVEs.findAll{ Objects.nonNull(
+//            it.inactiveObjects[0].mapWeight)}.collect{it.inactiveObjects[0].toClusteredVariantEntity()}
+//    if (mapWtCVEsMergedIntoMapWtRS.size() > 0) {
+//        cvesToResurrect.addAll(getCVEsToResurrect(mapWtCVEsMergedIntoMapWtRS))
+//    }
+//    return cvesToResurrect
 }
 
 def mapWtRSCursor = new RetryableBatchingCursor(where("asm").is(options.assembly).and("mapWeight").exists(true),
@@ -120,12 +127,12 @@ mapWtRSCursor.each {mapWtCVEs ->
     def cvesToResurrect = getCVEsToResurrect(mapWtCVEs)
     // Store these separately because these cannot be obtained again with a subsequent run in case of failures.
     // This is because the deprecation below will take out the CVEs with mapWeight entries and that will impact mapWtRSCursor above.
-    dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect, cveClass, collectionWithCvesToResurrect)
+    //dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect, cveClass, collectionWithCvesToResurrect)
     // All the legitimate non map-weight RS assignments to SS have been carried out by getCVEsToResurrect above
     // Therefore, we can proceed to make room for resurrected RS by deprecating SS associated with the current set of map-weighted RS
-    def svesWithMapWtRS = [sveClass, dbsnpSveClass].collect{dbEnv.mongoTemplate.find(query(where("seq").is(options.assembly).and("mapWeight").exists(true).and(
-            "rs").in(mapWtCVEs.collect{it.accession})), it)}.flatten()
-    DeprecateMapWtSS.deprecateSS(dbEnv, svesWithMapWtRS)
+    //def svesWithMapWtRS = [sveClass, dbsnpSveClass].collect{dbEnv.mongoTemplate.find(query(where("seq").is(options.assembly).and("mapWeight").exists(true).and(
+            //"rs").in(mapWtCVEs.collect{it.accession})), it)}.flatten()
+    //DeprecateMapWtSS.deprecateSS(dbEnv, svesWithMapWtRS)
 }
 
 // Resurrect CVEs that were collected above
