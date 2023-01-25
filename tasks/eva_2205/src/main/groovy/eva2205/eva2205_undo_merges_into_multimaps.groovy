@@ -145,7 +145,8 @@ class UndoMergesIntoMultiMaps {
 
     def deprecateOrphanedCvesWithSameHash(cvesToResurrect) {
         def cvesWithSameHash = [cveClass, dbsnpCveClass].collect{coll ->
-            dbEnv.mongoTemplate.find(query(where("_id").in(cvesToResurrect.collect{it.hashedMessage})), coll)
+            dbEnv.mongoTemplate.find(query(where("_id").in(cvesToResurrect.collect{it.hashedMessage}).and(
+                    "mapWeight").exists(true)), coll)
         }.flatten()
         def cvDeprecationWriter = new ClusteredVariantDeprecationWriter(assembly,
                 dbEnv.mongoTemplate,
