@@ -31,14 +31,14 @@ class DeprecateMapWtSS {
     static void deprecateSS(EVADatabaseEnvironment dbEnv, List<? extends SubmittedVariantEntity> svesToDeprecate) {
         if (svesToDeprecate.size() == 0) return
         def inputParameters = dbEnv.springApplicationContext.getBean(InputParameters.class)
-        def dbEnvDeprecationWriter = new SubmittedVariantDeprecationWriter(inputParameters.assemblyAccession,
+        def svDeprecationWriter = new SubmittedVariantDeprecationWriter(inputParameters.assemblyAccession,
                 dbEnv.mongoTemplate,
                 dbEnv.submittedVariantAccessioningService, dbEnv.clusteredVariantAccessioningService,
                 dbEnv.springApplicationContext.getBean("accessioningMonotonicInitSs", Long.class),
                 dbEnv.springApplicationContext.getBean("accessioningMonotonicInitRs", Long.class),
                 "EVA2205", "Variant deprecated due to mapWeight > 1")
         def dbEnvProgressListener =
-                new DeprecationStepProgressListener(dbEnvDeprecationWriter, dbEnv.springApplicationContext.getBean(MetricCompute.class))
+                new DeprecationStepProgressListener(svDeprecationWriter, dbEnv.springApplicationContext.getBean(MetricCompute.class))
 
         def dbEnvJobRepository = dbEnv.springApplicationContext.getBean(JobRepository.class)
         def dbEnvTxnMgr = dbEnv.springApplicationContext.getBean(PlatformTransactionManager.class)
@@ -47,7 +47,7 @@ class DeprecateMapWtSS {
         def dbEnvStepBuilderFactory = new StepBuilderFactory(dbEnvJobRepository, dbEnvTxnMgr)
 
         def mapWtSSIterator = svesToDeprecate.iterator()
-        def dbEnvJobSteps = dbEnvStepBuilderFactory.get("stepsForSSDeprecation").chunk(new SimpleCompletionPolicy(inputParameters.chunkSize)).reader(
+        def svDeprecateJobSteps = dbEnvStepBuilderFactory.get("stepsForSSDeprecation").chunk(new SimpleCompletionPolicy(inputParameters.chunkSize)).reader(
                 new ItemStreamReader<SubmittedVariantEntity>() {
                     @Override
                     SubmittedVariantEntity read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
@@ -68,12 +68,12 @@ class DeprecateMapWtSS {
                     void close() throws ItemStreamException {
 
                     }
-                }).writer(dbEnvDeprecationWriter).listener((StepExecutionListener) dbEnvProgressListener).build()
+                }).writer(svDeprecationWriter).listener((StepExecutionListener) dbEnvProgressListener).build()
 
-        def dbEnvDeprecationJob = dbEnvJobBuilderFactory.get("deprecationJob").start(dbEnvJobSteps).incrementer(
+        def svDeprecationJob = dbEnvJobBuilderFactory.get("deprecationJob").start(svDeprecateJobSteps).incrementer(
                 new RunIdIncrementer()).build()
         def dbEnvJobLauncher = dbEnv.springApplicationContext.getBean(JobLauncher.class)
-        dbEnvJobLauncher.run(dbEnvDeprecationJob, new JobParameters(["executionDate": new JobParameter(
+        dbEnvJobLauncher.run(svDeprecationJob, new JobParameters(["executionDate": new JobParameter(
                 LocalDateTime.now().toDate())]))
     }
 }
