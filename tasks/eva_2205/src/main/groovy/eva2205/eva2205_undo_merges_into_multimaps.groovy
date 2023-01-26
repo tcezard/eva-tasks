@@ -136,7 +136,7 @@ class UndoMergesIntoMultiMaps {
         return recentSSRecordsWithoutMapWt.values().flatten()
     }
 
-    def deprecateSSBatch(ssToDeprecate) {
+    def deprecateAndClearSSBatch(ssToDeprecate) {
         DeprecateMapWtSS.deprecateSS(dbEnv, ssToDeprecate.unique()) // Use unique to weed out duplicates within a batch
         ssToDeprecate.clear()
     }
@@ -191,10 +191,10 @@ class UndoMergesIntoMultiMaps {
             // Since the deprecation job below involves the overhead of running an entire Spring batch job
             // run it at a different frequency (at the expense of holding 100k records of svesStillWithMapWtRS in memory)
             if (batchIndex % 10 == 0) {
-                deprecateSSBatch(svesStillWithMapWtRS)
+                deprecateAndClearSSBatch(svesStillWithMapWtRS)
             }
         }}
-        deprecateSSBatch(svesStillWithMapWtRS)
+        deprecateAndClearSSBatch(svesStillWithMapWtRS)
 
         // Resurrect CVEs that were collected above
         def cvesToResurrectCursor = new RetryableBatchingCursor(where("asm").is(assembly), dbEnv.mongoTemplate,
