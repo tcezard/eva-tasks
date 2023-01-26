@@ -146,7 +146,7 @@ class UndoMergesFromMultimapsTest {
         assertTrue(Objects.isNull(recordForSS2.mapWeight))
         assertEquals(1L, recordForSS2.clusteredVariantAccession)
 
-        // Ensure the action of SS2 being assigned rs2 above is recorded
+        // Ensure no action of SS2 being assigned rs2 above is recorded
         def opRecordForSS2MapWt = dbEnv.mongoTemplate.find(query(where("inactiveObjects.hashedMessage")
                 .is(recordForSS2.hashedMessage).and("_id").regex("RESTORE_MAPWT_.*")), dbsnpSvoeClass)
         assertEquals(0, opRecordForSS2MapWt.size())
