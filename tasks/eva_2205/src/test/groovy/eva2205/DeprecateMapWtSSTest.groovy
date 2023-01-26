@@ -39,16 +39,12 @@ public class DeprecateMapWtSSTest {
 
     private static EVADatabaseEnvironment dbEnv
 
-    private static List<SubmittedVariantOperationEntity> svoeMerges
+    def rsLocus1, rsLocus2, ss1, ss2
+    def rs1WithLocus1, rs1WithLocus2
 
-    def rsLocus1, rsLocus2, ss1, ss2, ss2WithRS4, ss2WithRS2, ss2WithRS3
-    def rs1WithLocus1, rs1WithLocus2, rs4WithLocus2, rs2WithLocus2, rs3WithLocus2
-    def svoeOp1, svoeOp2, svoeOp3
-    def cvoeOp1, cvoeOp2, cvoeOp3
 
     private static void cleanup() {
         dbEnv.mongoClient.dropDatabase(dbEnv.mongoTemplate.db.name)
-        svoeMerges = new ArrayList<SubmittedVariantOperationEntity>()
     }
 
     @Before
