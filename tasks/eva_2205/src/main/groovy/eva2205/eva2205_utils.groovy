@@ -16,7 +16,7 @@ static List getSSHistoryInvolvedInRSMerges(EVADatabaseEnvironment dbEnvToUse, St
     return ssMergeHistory
 }
 
-// Get a chronological merge chain given a set of RS merge operations that SS went through.
+// Get a chronological merge chain (oldest to most recent) given a set of RS merge operations that SS went through.
 static List getChronologicalMergeChain(List svoeOpsForAGivenSS) {
     def opWithOriginalSS = null
     def getMatchedComponent = {op, component ->
