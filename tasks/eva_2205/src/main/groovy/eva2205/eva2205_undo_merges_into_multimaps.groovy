@@ -172,7 +172,7 @@ class UndoMergesIntoMultiMaps {
             def involvedHashes = mapWtSVEs.collect{it.hashedMessage}
             // Also pull in other SS with the same RS so that both SS and RS deprecation can take place within a batch
             mapWtSVEs += [sveClass, dbsnpSveClass].collect{collectionClass ->
-                dbEnv.mongoTemplate.find(query(where("_id").ne(involvedHashes).and("seq").is(assembly)
+                dbEnv.mongoTemplate.find(query(where("_id").nin(involvedHashes).and("seq").is(assembly)
                         .and("mapWeight").exists(true).and("rs").in(involvedRS)), collectionClass)}.flatten()
             def svesWithUndoneMultimaps = undoSVEsAssignedMultimaps(mapWtSVEs)
             def sveHashesWithUndoneMultimaps = svesWithUndoneMultimaps.collect{
