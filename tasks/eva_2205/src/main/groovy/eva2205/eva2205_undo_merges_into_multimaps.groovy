@@ -137,7 +137,7 @@ class UndoMergesIntoMultiMaps {
     }
 
     def deprecateAndClearSSBatch(ssToDeprecate) {
-        DeprecateMapWtSS.deprecateSS(dbEnv, ssToDeprecate.unique()) // Use unique to weed out duplicates within a batch
+        DeprecateMapWtSS.deprecateSS(dbEnv, ssToDeprecate.toSet()) // Use unique to weed out duplicates within a batch
         ssToDeprecate.clear()
     }
 
@@ -189,11 +189,13 @@ class UndoMergesIntoMultiMaps {
             svesStillWithMapWtRS += mapWtSVEs.findAll{!sveHashesWithUndoneMultimaps.contains(it.hashedMessage)}
             batchIndex += 1
             // Since the deprecation job below involves the overhead of running an entire Spring batch job
-            // run it at a different frequency (at the expense of holding 100k records of svesStillWithMapWtRS in memory)
+            // run it at a different frequency (at the expense of holding ~10k records of svesStillWithMapWtRS in memory)
             if (batchIndex % 10 == 0) {
+                logger.info("Deprecating ${svesStillWithMapWtRS.size()} SS...")
                 deprecateAndClearSSBatch(svesStillWithMapWtRS)
             }
         }}
+        logger.info("Deprecating ${svesStillWithMapWtRS.size()} SS...")
         deprecateAndClearSSBatch(svesStillWithMapWtRS)
 
         // Resurrect CVEs that were collected above

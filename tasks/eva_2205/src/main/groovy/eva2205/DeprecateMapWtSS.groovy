@@ -28,7 +28,7 @@ import java.time.LocalDateTime
 
 class DeprecateMapWtSS {
 
-    static void deprecateSS(EVADatabaseEnvironment dbEnv, List<? extends SubmittedVariantEntity> svesToDeprecate) {
+    static void deprecateSS(EVADatabaseEnvironment dbEnv, Collection<? extends SubmittedVariantEntity> svesToDeprecate) {
         if (svesToDeprecate.size() == 0) return
         def inputParameters = dbEnv.springApplicationContext.getBean(InputParameters.class)
         def svDeprecationWriter = new SubmittedVariantDeprecationWriter(inputParameters.assemblyAccession,
