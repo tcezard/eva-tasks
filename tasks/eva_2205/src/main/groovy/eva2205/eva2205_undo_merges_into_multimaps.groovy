@@ -1,9 +1,7 @@
 package eva2205
 
-
 import groovy.cli.picocli.CliBuilder
 import org.springframework.data.mongodb.core.BulkOperations
-import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.query.Update
@@ -199,8 +197,8 @@ class UndoMergesIntoMultiMaps {
         deprecateSSBatch(svesStillWithMapWtRS)
 
         // Resurrect CVEs that were collected above
-        def cvesToResurrectCursor = new RetryableBatchingCursor(new Criteria(), dbEnv.mongoTemplate, dbsnpCveClass,
-                1000, collectionWithCvesToResurrect)
+        def cvesToResurrectCursor = new RetryableBatchingCursor(where("asm").is(assembly), dbEnv.mongoTemplate,
+                dbsnpCveClass, 1000, collectionWithCvesToResurrect)
         cvesToResurrectCursor.each {cvesToResurrect ->
             // It is possible that all constituent SS of a map-weighted RS were assigned non map-wt RS above in undoSVEsAssignedMultimaps
             // In that case, the SS deprecation above won't take place (because only remaining map-weighted SS are chosen for deprecation)
