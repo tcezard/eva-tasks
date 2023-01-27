@@ -186,17 +186,11 @@ class UndoMergesIntoMultiMaps {
             dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect, cveClass, collectionWithCvesToResurrect)
             // All the legitimate non map-weight RS assignments to SS have been carried out by getCVEsToResurrect above
             // Therefore, we can proceed to make room for resurrected RS by deprecating SS associated with the current set of map-weighted RS
-            svesStillWithMapWtRS += mapWtSVEs.findAll{!sveHashesWithUndoneMultimaps.contains(it.hashedMessage)}
+            svesStillWithMapWtRS = mapWtSVEs.findAll{!sveHashesWithUndoneMultimaps.contains(it.hashedMessage)}
+            logger.info("Deprecating ${svesStillWithMapWtRS.size()} SS in batch ${batchIndex}...")
+            deprecateAndClearSSBatch(svesStillWithMapWtRS)
             batchIndex += 1
-            // Since the deprecation job below involves the overhead of running an entire Spring batch job
-            // run it at a different frequency (at the expense of holding ~10k records of svesStillWithMapWtRS in memory)
-            if (batchIndex % 10 == 0) {
-                logger.info("Deprecating ${svesStillWithMapWtRS.size()} SS...")
-                deprecateAndClearSSBatch(svesStillWithMapWtRS)
-            }
         }}
-        logger.info("Deprecating ${svesStillWithMapWtRS.size()} SS...")
-        deprecateAndClearSSBatch(svesStillWithMapWtRS)
 
         // Resurrect CVEs that were collected above
         def cvesToResurrectCursor = new RetryableBatchingCursor(where("asm").is(assembly), dbEnv.mongoTemplate,
