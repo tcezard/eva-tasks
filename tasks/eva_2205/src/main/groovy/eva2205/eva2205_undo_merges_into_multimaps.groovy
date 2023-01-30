@@ -201,9 +201,15 @@ class UndoMergesIntoMultiMaps {
             // and hence the older map-weighted RS assigned to these SS will be orphaned and won't be deprecated either.
             // Explicitly deprecate such RS.
             deprecateOrphanedCvesWithSameHash(cvesToResurrect)
-            dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect.findAll { it.accession < dbsnpRSIDUpperBound }, dbsnpCveClass)
-            dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect.findAll { it.accession >= dbsnpRSIDUpperBound }, cveClass)
+            def numCvesResurrected = dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect.findAll {
+                it.accession < dbsnpRSIDUpperBound }, dbsnpCveClass)
+            numCvesResurrected += dbEnv.bulkInsertIgnoreDuplicates(cvesToResurrect.findAll
+                    { it.accession >= dbsnpRSIDUpperBound }, cveClass)
+            this.metricCompute.addCount(ClusteringMetric.CLUSTERED_VARIANTS_CREATED, numCvesResurrected)
         }
+        logger.info("Resurrected ${this.metricCompute.getCount(ClusteringMetric.CLUSTERED_VARIANTS_CREATED)} CVEs" +
+                "for assembly ${this.assembly}...")
+        this.metricCompute.saveMetricsCountsInDB()
     }
 }
 
