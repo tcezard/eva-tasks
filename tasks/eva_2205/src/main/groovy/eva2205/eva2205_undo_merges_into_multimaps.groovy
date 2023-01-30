@@ -97,7 +97,7 @@ class UndoMergesIntoMultiMaps {
 
             def cvoeOpToRecordUnmerge = new ClusteredVariantOperationEntity()
             def oldCVE = EVAObjectModelUtils.toClusteredVariantEntity(ssRecordToUpdate)
-            cvoeOpToRecordUnmerge.fill(EventType.UNDO_MERGE, oldRS, newRS, "Undo merge into map-weighted RS ${oldRS}.",
+            cvoeOpToRecordUnmerge.fill(EventType.UNDO_MERGE, oldRS, newRS, "Undo merge of ${newRS} into map-weighted RS ${oldRS}.",
                     Arrays.asList(new ClusteredVariantInactiveEntity(oldCVE)))
             cvoeOpToRecordUnmerge.setId("UNDO_MERGE_INTO_MULTIMAP_${oldCVE.hashedMessage}")
             dbsnpCvoeInserts.add(cvoeOpToRecordUnmerge)
