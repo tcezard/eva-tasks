@@ -208,7 +208,7 @@ class UndoMergesIntoMultiMaps {
             this.metricCompute.addCount(ClusteringMetric.CLUSTERED_VARIANTS_CREATED, numCvesResurrected)
         }
         logger.info("Resurrected ${this.metricCompute.getCount(ClusteringMetric.CLUSTERED_VARIANTS_CREATED)} CVEs" +
-                "for assembly ${this.assembly}...")
+                " for assembly ${this.assembly}...")
         this.metricCompute.saveMetricsCountsInDB()
     }
 }
