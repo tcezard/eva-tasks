@@ -17,13 +17,34 @@
             <type>pom</type>
         </dependency>
         <dependency>
+            <groupId>uk.ac.ebi.ampt2d</groupId>
+            <artifactId>accession-commons-core</artifactId>
+            <version>0.7.10-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>uk.ac.ebi.eva</groupId>
             <artifactId>eva-common-groovyutils</artifactId>
             <version>0.1-SNAPSHOT</version>
+            <exclusions>
+                <!-- Exclude accession commons old version since we are going to use
+                EventType with UNDO merge from the new version updated with this PR -->
+                <exclusion>
+                    <groupId>uk.ac.ebi.ampt2d</groupId>
+                    <artifactId>accession-commons-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>uk.ac.ebi.eva</groupId>
             <artifactId>eva-accession-deprecate</artifactId>
+            <exclusions>
+                <!-- Exclude accession commons old version since we are going to use
+                EventType with UNDO merge from the new version updated with this PR -->
+                <exclusion>
+                    <groupId>uk.ac.ebi.ampt2d</groupId>
+                    <artifactId>accession-commons-core</artifactId>
+                </exclusion>
+            </exclusions>
             <version>0.6.16-SNAPSHOT</version>
         </dependency>
         <dependency>

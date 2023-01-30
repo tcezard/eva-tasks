@@ -174,6 +174,7 @@ class UndoMergesIntoMultimapsTest {
         def cvoeOpRecordForSS2Update = dbEnv.mongoTemplate.find(query(where("_id").regex(
                 "UNDO_MERGE_INTO_MULTIMAP_.*")), dbsnpCvoeClass)[0]
         assertEquals("UNDO_MERGE_INTO_MULTIMAP_" + rs1WithLocus2.hashedMessage, cvoeOpRecordForSS2Update.id)
+        assertEquals(EventType.UNDO_MERGE, cvoeOpRecordForSS2Update.eventType)
         assertEquals(1L, cvoeOpRecordForSS2Update.inactiveObjects[0].accession)
         assertTrue(Objects.nonNull(cvoeOpRecordForSS2Update.inactiveObjects[0].mapWeight))
 
