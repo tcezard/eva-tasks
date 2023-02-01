@@ -1,0 +1,329 @@
+{
+  "version": "1.0.0",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "id": "EVA_metadata_schema",
+  "author": "EVA",
+  "type": "object",
+  "title": "EVA metadata schema",
+  "definitions": {
+    "EVABioSample": {
+
+    }
+  },
+  "description": "",
+  "required": [
+    "submitterDetails",
+    "project",
+    "sample",
+    "analysis",
+    "files"
+  ],
+  "properties": {
+    "submitterDetails": {
+      "type": "array",
+      "description": "Credentials of the submitter",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lastName",
+          "firstName",
+          "email",
+          "laboratory",
+          "centre"
+        ],
+        "properties": {
+          "lastName": {
+            "type": "string",
+            "description": "Last name of the contact"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "First name of the contact"
+          },
+          "telephone": {
+            "type": "string",
+            "description": "Contact's phone number"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Contact's Email",
+            "examples": [
+              "user@domain.com"
+            ]
+          },
+          "laboratory": {
+            "description": "Name of the laboratory or department of the contact",
+            "type": "string"
+          },
+          "centre": {
+            "description": "Name of the Centre, company or institute the contact belong to",
+            "type": "string"
+          },
+          "address": {
+            "description": "Address of the Centre, company or institute the contact belong to",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "description": "General information about the Project",
+      "required": [
+        "title",
+        "description",
+        "taxId",
+        "centre"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Title of the project"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the project"
+        },
+        "centre": {
+          "type": "string",
+          "description": "Centre, institute or company submitting the project"
+        },
+        "taxId": {
+          "type": "number",
+          "description": "Taxonomy ID of the species associated with the project (found here: http://www.ncbi.nlm.nih.gov/taxonomy)"
+        },
+        "publications":{
+          "type": "array",
+          "items": true
+        },
+        "parentProject":{
+          "type": "string"
+        },
+        "childProjects":{
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "peerProjects":{
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "links":{
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "holdDate":{
+          "type": "string",
+          "format": "date",
+          "examples": ["2018-11-13"]
+        }
+      }
+    },
+    "analysis": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "analysisTitle",
+          "analysisAlias",
+          "description",
+          "experimentType",
+          "referenceGenome"
+        ],
+        "properties": {
+          "analysisTitle": {
+            "type": "string",
+            "description": "Title of the analysis"
+          },
+          "analysisAlias": {
+            "type": "string",
+            "description": "Shortened identifier for the analysis"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the analysis"
+          },
+          "experimentType": {
+            "type": "string",
+            "description": "Type of experiment",
+            "enum": [
+              "Whole genome sequencing",
+              "Whole transcriptome sequencing",
+              "Exome sequencing",
+              "Genotyping by array",
+              "Curation",
+              "Genotyping by sequencing",
+              "Target sequencing"
+            ]
+          },
+          "referenceGenome": {
+            "type": "string",
+            "description": "Reference the analysis was performed against. ENA or NCBI accession (starting with GCA) accepted."
+          },
+          "platform": {
+            "description": "Platform used to generate the raw data.",
+            "type": "string",
+            "examples": [
+              "454 GS","454 GS 20", "454 GS FLX", "454 GS FLX Titanium", "454 GS FLX+", "454 GS Junior",
+              "AB 3130 Genetic Analyzer", "AB 3300 Genetic Analyzer", "AB 3730xl", "AB 5500 Genetic Analyzer",
+              "AB 5500xl Genetic Analyzer", "AB SOLiD 3 Plus System", "AB SOLiD 4 System", "AB SOLiD 4hq System",
+              "AB SOLiD PI System", "AB SOLiD System", "AB SOLiD System 2.0", "AB SOLiD System 3.0",
+              "ABI 3500 Genetic Analyzer", "ABI PRISM 310 Genetic Analyzer", "Affymetrix", "BGISEQ-500",
+              "Bio-Rad CFX96", "Complete Genomics", "Illumina", "Illumina CanineHD", "Illumina Genome Analyzer",
+              "Illumina Genome Analyzer II", "Illumina Genome Analyzer IIx", "Illumina HiScanSQ",
+              "Illumina HiSeq 1000", "Illumina HiSeq 2000", "Illumina HiSeq 2500", "Illumina HiSeq 3500",
+              "Illumina HiSeq 4000", "Illumina HiSeq X Ten", "Illumina Hiseq Xten", "Illumina iScan",
+              "Illumina MiniSeq", "Illumina MiSeq", "Illumina NextSeq 500", "Illumina NovaSeq 6000",
+              "Ion Personal Genome Machine (PGM) System v2", "Ion S5XL", "Ion Torrent PGM", "Ion Torrent Proton",
+              "MGISEQ-2000", "Nimblegen 4.2M Probe Custom DNA Microarray", "Oxford Nanopore PromethION", "unspecified"
+            ]
+          },
+          "software": {
+            "description": "Software used to generate the analysis.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pipelineDescriptions": {"type": "string"},
+          "imputation": {
+            "description": "Specify if imputation was used to generate the variants",
+            "type": "boolean"
+          },
+          "phasing": {
+            "description": "Specify if the variants have been phased",
+            "type": "boolean"
+          },
+          "centre": {
+            "description": "Centre, institute or company where the analysis was performed if different from the project's centre.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date the analysis was performed",
+            "type": "string"
+          },
+          "links": {
+            "description": "Link(s) to external resources related to this analysis in the form DB:ID:LABEL.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "run Accessions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of run accession linking to the raw data used in this analysis if applicable (e.g. SRR576651, SRR576652)"
+          }
+        }
+      }
+    },
+    "sample": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "oneOf": [
+          {
+            "required": [
+              "analysisAlias",
+              "sampleInVCF",
+              "BioSampleAccession"
+            ]
+          },
+          {
+            "required": [
+              "analysisAlias",
+              "sampleInVCF",
+              "BioSampleObject"
+            ]
+          }
+        ],
+        "properties": {
+          "analysisAlias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of Aliases of the analyses performed on this sample."
+          },
+          "sampleInVCF": {
+            "type": "string",
+            "description": "Sample Name used in the VCF file"
+          },
+          "sampleAccession": {
+            "type": "string",
+            "description": "Accession of the sample (BioSamples, ENA or EGA)"
+          },
+          "BioSampleObject": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "https://www.ebi.ac.uk/biosamples/schemas/certification/biosamples-minimal.json"
+              },
+              {
+                "$ref": "https://www.ebi.ac.uk/biosamples/schemas/certification/plant-miappe.json"
+              },
+              {
+                "$ref": "eva-biosamples.json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "analysisAlias",
+          "fileName",
+          "fileType",
+          "md5"
+        ],
+        "properties": {
+          "analysisAlias": {
+            "type": "string",
+            "description": "Alias of the analysis that produced the file"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "File name"
+          },
+          "fileType": {
+            "type": "string",
+            "description": "Type of file",
+            "enum": [
+              "vcf",
+              "vcf_aggregate",
+              "readme_file",
+              "phenotype_file",
+              "cram",
+              "tabix",
+              "wig",
+              "bed",
+              "gff",
+              "fasta",
+              "other"
+            ]
+          },
+          "md5": {
+            "type": "string",
+            "description": "MD5 value of the file"
+          }
+        }
+      }
+    }
+  }
+}
