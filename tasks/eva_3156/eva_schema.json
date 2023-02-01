@@ -306,16 +306,8 @@
             "description": "Type of file",
             "enum": [
               "vcf",
-              "vcf_aggregate",
-              "readme_file",
-              "phenotype_file",
-              "cram",
               "tabix",
-              "wig",
-              "bed",
-              "gff",
-              "fasta",
-              "other"
+              "csi"
             ]
           },
           "md5": {
