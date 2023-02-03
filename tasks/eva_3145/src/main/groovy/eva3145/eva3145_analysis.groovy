@@ -27,8 +27,6 @@ if (!options) {
     System.exit(1)
 }
 
-new EVA3145Analysis(options).runAsmMatchAnalysis()
-
 class EVA3145Analysis {
     EVADatabaseEnvironment prodEnv
     EVADatabaseEnvironment devEnv
@@ -54,7 +52,7 @@ class EVA3145Analysis {
          "svesWithAsmMatch", "svesSharingIDInOtherAsm", "svesSharingIDWithoutAsmMatch", "svesSplitFromAsmMatchSS",
          "svesMergedIntoAsmMatchSSOps"]
         def metrics = ["rs_of_asmmatch_ss", "rs_of_asmmatch_ss_in_other_asm",
-                       "rs_merged_into_asmmatch_ss", "rs_merged_from_asmmatch_ss", "rs_split_from_asmmatch_ss",
+                       "rs_merged_into_asmmatch_rs", "rs_merged_from_asmmatch_rs", "rs_split_from_asmmatch_rs",
                        "ss_with_asmmatch", "ss_sharing_id_in_other_asm", "ss_sharing_id_without_asmmatch",
                        "ss_split_from_asmmatch", "ss_merged_into_asmmatch"]
         metrics.each{metricsMap.put(it, 0)}
@@ -62,8 +60,7 @@ class EVA3145Analysis {
 
     def runAsmMatchAnalysis() {
         def dbsnpSveAsmMatchCursor = new RetryableBatchingCursor(where("seq").is(assembly)
-                .and("asmMatch").is(false).and("mapWeight").exists(false),
-                prodEnv.mongoTemplate, dbsnpSveClass)
+                .and("asmMatch").is(false), prodEnv.mongoTemplate, dbsnpSveClass)
         def numSVEsScanned = 0
 
         dbsnpSveAsmMatchCursor.each { List<DbsnpSubmittedVariantEntity> svesWithAsmMatch ->
@@ -82,11 +79,11 @@ class EVA3145Analysis {
         }
         metricsMap["rs_of_asmmatch_ss"] += devEnv.mongoTemplate.count(query(where("asm").is(assembly)),
                 cvesOfAsmMatchSSColl)
-        metricsMap["rs_merged_into_asmmatch_ss"] += devEnv.mongoTemplate.count(query(
+        metricsMap["rs_merged_into_asmmatch_rs"] += devEnv.mongoTemplate.count(query(
                 where("inactiveObjects.asm").is(assembly)), cvesMergedIntoAsmMatchColl)
-        metricsMap["rs_merged_from_asmmatch_ss"] += devEnv.mongoTemplate.count(query(
+        metricsMap["rs_merged_from_asmmatch_rs"] += devEnv.mongoTemplate.count(query(
                 where("inactiveObjects.asm").is(assembly)), cvesMergedFromAsmMatchColl)
-        metricsMap["rs_split_from_asmmatch_ss"] += devEnv.mongoTemplate.count(query(where("asm").is(assembly)),
+        metricsMap["rs_split_from_asmmatch_rs"] += devEnv.mongoTemplate.count(query(where("asm").is(assembly)),
                 cvesSplitFromAsmMatchColl)
         metricsMap["ss_sharing_id_without_asmmatch"] += devEnv.mongoTemplate.count(query(where("seq").is(assembly)),
                 svesSharingIDWithoutAsmMatchColl)
@@ -103,7 +100,6 @@ class EVA3145Analysis {
                 prodEnv.mongoTemplate.find(query(where("eventType").is("MERGED")
                         .orOperator(where("inactiveObjects.asmMatch").exists(false),
                                 where("inactiveObjects.asmMatch").is(true))
-                        .and("inactiveObjects.mapWeight").exists(false)
                         .and("inactiveObjects.seq").is(assembly)
                         .and("mergeInto").in(svesWithAsmMatch.collect{it.accession})),
                         dbsnpSvoeClass)
@@ -114,9 +110,9 @@ class EVA3145Analysis {
     def collectSVEsSplitFromAsmMatchSS = { List<DbsnpSubmittedVariantEntity> svesWithAsmMatch ->
         def sveHashesSplitFromAsmMatchSS =
                 prodEnv.mongoTemplate.find(query(where("_id").regex("SS_SPLIT_FROM_.*")
-                        .and("inactiveObjects.seq").is(assembly).and("accession")
-                        .in(svesWithAsmMatch.collect{it.accession})), dbsnpSvoeClass)
-                        .collect{it.inactiveObjects[0].hashedMessage}
+                        .and("inactiveObjects.seq").is(assembly)
+                        .and("accession").in(svesWithAsmMatch.collect{it.accession})),
+                        dbsnpSvoeClass).collect{it.inactiveObjects[0].hashedMessage}
         def svesSplitFromAsmMatchSS = prodEnv.mongoTemplate.find(query(where("_id")
                 .in(sveHashesSplitFromAsmMatchSS)), sveClass)
         devEnv.bulkInsertIgnoreDuplicates(svesSplitFromAsmMatchSS, sveClass, svesSplitFromAsmMatchSSColl)
@@ -126,28 +122,34 @@ class EVA3145Analysis {
         def ssIDsToLookFor = svesWithAsmMatch.collect{it.accession}
         def ssHashesToAvoid = svesWithAsmMatch.collect{it.hashedMessage}
         def svesSharingAccession = prodEnv.mongoTemplate.find(query(where("accession").in(ssIDsToLookFor)
-                .and("_id").nin(ssHashesToAvoid).and("mapWeight").exists(false)), dbsnpSveClass)
+                .and("_id").nin(ssHashesToAvoid)), dbsnpSveClass)
         devEnv.bulkInsertIgnoreDuplicates(svesSharingAccession.findAll{it.isAssemblyMatch() &&
                 it.referenceSequenceAccession.equals(assembly)} , dbsnpSveClass, svesSharingIDWithoutAsmMatchColl)
-        metricsMap["ss_sharing_id_in_other_asm"] += devEnv.bulkInsertIgnoreDuplicates(svesSharingAccession.findAll{
-            !(it.referenceSequenceAccession.equals(assembly))} , dbsnpSveClass, svesSharingIDInOtherAsmColl).toLong()
+        def svesSharingIDInOtherAsm = svesSharingAccession.findAll{
+            !(it.referenceSequenceAccession.equals(assembly))}
+        metricsMap["ss_sharing_id_in_other_asm"] += svesSharingIDInOtherAsm.size().toLong()
+        devEnv.bulkInsertIgnoreDuplicates(svesSharingIDInOtherAsm , dbsnpSveClass, svesSharingIDInOtherAsmColl)
     }
 
-    def collectCvesMergedIntoAsmMatchCVEs = { asmMatchRSIDs ->
+    def collectCvesMergedIntoAsmMatchCVEs = { targetCves ->
+        def targetCveAccessions = targetCves.collect{it.accession}.toSet()
+        def targetCvesAccessionHashCombo = targetCves.collect{it.accession + "_" + it.hashedMessage}.toSet()
         def cvesMergedIntoAsmMatchCVEs = [cvoeClass, dbsnpCvoeClass].collect { collectionClass ->
             prodEnv.mongoTemplate.find(query(where("inactiveObjects.asm").is(this.assembly)
                     .and("eventType").is(EventType.MERGED)
-                    .and("mergeInto").in(asmMatchRSIDs)), collectionClass)
-        }.flatten()
+                    .and("mergeInto").in(targetCveAccessions)), collectionClass)
+        }.flatten().findAll{targetCvesAccessionHashCombo.contains(it.mergedInto + "_" + it.inactiveObjects[0].hashedMessage)}
         devEnv.bulkInsertIgnoreDuplicates(cvesMergedIntoAsmMatchCVEs, dbsnpCvoeClass, cvesMergedIntoAsmMatchColl)
     }
 
-    def collectCvesMergedFromAsmMatchCVEs = { asmMatchRSIDs ->
+    def collectCvesMergedFromAsmMatchCVEs = { sourceCves ->
+        def sourceCveAccessions = sourceCves.collect{it.accession}.toSet()
+        def sourceCvesAccessionHashCombo = sourceCves.collect{it.accession + "_" + it.hashedMessage}.toSet()
         def cvesMergedFromAsmMatchCVEs = [cvoeClass, dbsnpCvoeClass].collect { collectionClass ->
             prodEnv.mongoTemplate.find(query(where("inactiveObjects.asm").is(this.assembly)
                     .and("eventType").is(EventType.MERGED)
-                    .and("accession").in(asmMatchRSIDs)), collectionClass)
-        }.flatten()
+                    .and("accession").in(sourceCveAccessions)), collectionClass)
+        }.flatten().findAll{sourceCvesAccessionHashCombo.contains(it.accession + "_" + it.inactiveObjects[0].hashedMessage)}
         devEnv.bulkInsertIgnoreDuplicates(cvesMergedFromAsmMatchCVEs, dbsnpCvoeClass, cvesMergedFromAsmMatchColl)
     }
 
@@ -164,25 +166,28 @@ class EVA3145Analysis {
 
     def collectAsmMatchCVEMetrics = { List<DbsnpSubmittedVariantEntity> svesWithAsmMatch ->
         def svesWithRS = svesWithAsmMatch.findAll{Objects.nonNull(it.clusteredVariantAccession)}
-        def rsHashesToLookFor = svesWithRS.collect{EVAObjectModelUtils.getClusteredVariantHash(it)}.toSet()
+        def svesWithRSGroupedByRSHash = svesWithRS.groupBy{EVAObjectModelUtils.getClusteredVariantHash(it)}
+        def rsHashesToLookFor = svesWithRSGroupedByRSHash.keySet()
         def correspondingCVEs = [cveClass, dbsnpCveClass].collect{collectionClass ->
-            prodEnv.mongoTemplate.find(query(where("_id").in(rsHashesToLookFor).and("mapWeight").exists(false)),
+            prodEnv.mongoTemplate.find(query(where("_id").in(rsHashesToLookFor)),
                     collectionClass)}.flatten()
         def rsHashesFound = correspondingCVEs.collect{it.hashedMessage}.toSet()
-        (rsHashesToLookFor - rsHashesFound).each{scriptLogger.error("RS hash ${it} could not be found for assembly ${assembly}!!")}
+        (rsHashesToLookFor - rsHashesFound).each{scriptLogger.error("RS hash ${it} corresponding to " +
+                "SS hash ${svesWithRSGroupedByRSHash[it][0].hashedMessage} could not be found for assembly ${assembly}!!")}
         def rsIDsFound = correspondingCVEs.collect{it.accession}
 
         def cvesInOtherAsmByID = [cveClass, dbsnpCveClass].collect{collectionClass ->
-            prodEnv.mongoTemplate.find(query(where("accession").in(rsIDsFound).and("asm").ne(assembly)
-                    .and("mapWeight").exists(false)), collectionClass)}.flatten()
+            prodEnv.mongoTemplate.find(query(where("accession").in(rsIDsFound).and("asm").ne(assembly)),
+                    collectionClass)}.flatten()
 
         devEnv.bulkInsertIgnoreDuplicates(correspondingCVEs, dbsnpCveClass, cvesOfAsmMatchSSColl)
-        metricsMap["rs_of_asmmatch_ss_in_other_asm"] +=
-                devEnv.bulkInsertIgnoreDuplicates(cvesInOtherAsmByID, dbsnpCveClass,
-                        cvesOfAsmMatchSSInOtherAsmColl).toLong()
+        metricsMap["rs_of_asmmatch_ss_in_other_asm"] += cvesInOtherAsmByID.size().toLong()
+        devEnv.bulkInsertIgnoreDuplicates(cvesInOtherAsmByID, dbsnpCveClass, cvesOfAsmMatchSSInOtherAsmColl)
 
-        collectCvesMergedIntoAsmMatchCVEs(rsIDsFound)
-        collectCvesMergedFromAsmMatchCVEs(rsIDsFound)
+        collectCvesMergedIntoAsmMatchCVEs(correspondingCVEs)
+        collectCvesMergedFromAsmMatchCVEs(correspondingCVEs)
         collectCvesSplitFromAsmMatchCVEs(rsIDsFound)
     }
 }
+
+new EVA3145Analysis(options).runAsmMatchAnalysis()
