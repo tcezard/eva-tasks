@@ -1,15 +1,10 @@
 {
   "version": "1.0.0",
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "id": "EVA_metadata_schema",
   "author": "EVA",
   "type": "object",
   "title": "EVA metadata schema",
-  "definitions": {
-    "EVABioSample": {
-
-    }
-  },
   "description": "",
   "required": [
     "submitterDetails",
@@ -21,7 +16,7 @@
   "properties": {
     "submitterDetails": {
       "type": "array",
-      "description": "Credentials of the submitter",
+      "description": "Contact details of the submitter",
       "items": {
         "type": "object",
         "additionalProperties": false,
