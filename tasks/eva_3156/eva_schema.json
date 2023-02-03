@@ -58,11 +58,11 @@
             "type": "string"
           },
           "centre": {
-            "description": "Name of the Centre, company or institute the contact belong to",
+            "description": "Name of the Centre, company or institute the contact belongs to",
             "type": "string"
           },
           "address": {
-            "description": "Address of the Centre, company or institute the contact belong to",
+            "description": "Address of the Centre, company or institute the contact belongs to",
             "type": "string"
           }
         }
@@ -166,7 +166,7 @@
           },
           "referenceGenome": {
             "type": "string",
-            "description": "Reference the analysis was performed against. ENA or NCBI accession (starting with GCA) accepted."
+            "description": "Reference against which the analysis was performed. ENA or NCBI accession (starting with GCA) accepted."
           },
           "platform": {
             "description": "Platform used to generate the raw data.",
@@ -203,11 +203,11 @@
             "type": "boolean"
           },
           "centre": {
-            "description": "Centre, institute or company where the analysis was performed if different from the project's centre.",
+            "description": "Centre, institute or company where the analysis was performed (if different from the project's centre).",
             "type": "string"
           },
           "date": {
-            "description": "Date the analysis was performed",
+            "description": "Date in which the analysis was performed",
             "type": "string"
           },
           "links": {
@@ -222,7 +222,7 @@
             "items": {
               "type": "string"
             },
-            "description": "List of run accession linking to the raw data used in this analysis if applicable (e.g. SRR576651, SRR576652)"
+            "description": "List of run accessions linking to the raw data used in this analysis if applicable (e.g. SRR576651, SRR576652)"
           }
         }
       }
@@ -312,7 +312,7 @@
           },
           "md5": {
             "type": "string",
-            "description": "MD5 value of the file"
+            "description": "MD5 hash of the file"
           }
         }
       }
