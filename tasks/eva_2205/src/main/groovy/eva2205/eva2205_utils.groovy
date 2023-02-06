@@ -21,6 +21,8 @@ static List getChronologicalMergeChain(List svoeOpsForAGivenSS) {
     def opWithOriginalSS = null
     def getMatchedComponent = {op, component ->
         def matcher = op.reason =~ /Original rs(?<source>\d+) was merged into rs(?<destination>\d+)./
+        // This is also a possible text: see  https://github.com/EBIvariation/eva-accession/blob/237a2d0b3313caaddaeee87df2d5a6c574c4100a/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/batch/io/RSMergeWriter.java#L466
+        if(!matcher.matches())  matcher = op.reason =~ /Original rs(?<source>\d+) associated with SS was merged into rs(?<destination>\d+)./
         if(matcher.matches()) {
             return matcher.group(component)
         }
