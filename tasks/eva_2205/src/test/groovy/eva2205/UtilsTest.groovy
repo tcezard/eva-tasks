@@ -17,6 +17,8 @@ import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.groovy.commons.CommonTestUtils
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
 
+import java.time.LocalDateTime
+
 import static eva2205.eva2205_utils.*
 import static org.junit.Assert.assertEquals
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
@@ -77,6 +79,22 @@ class UtilsTest {
         (0..3).each{svoeMerges[it].setId("" + it)}
     }
 
+    void setupCircularSvoeOps() {
+        svoeMerges = (0..1).collect{new SubmittedVariantOperationEntity()}
+        LocalDateTime nowTime = LocalDateTime.now()
+        def sve1 = new SubmittedVariantEntity(1L, "hash1", ASSEMBLY, TAXONOMY,
+                "project1", "chr1", 100L, "A", "C", 1L, true, true, true, true, 1)
+        def sve2 = new SubmittedVariantEntity(3L, "hash1", ASSEMBLY, TAXONOMY,
+                "project1", "chr1", 100L, "A", "C", 2L, true, true, true, true, 1)
+        sve1.setCreatedDate(nowTime)
+        sve2.setCreatedDate(nowTime.minusSeconds(1L))
+        svoeMerges[0].fill(EventType.UPDATED, 1, "Original rs1 was merged into rs2.",
+                Arrays.asList(new SubmittedVariantInactiveEntity(sve1)))
+        svoeMerges[1].fill(EventType.UPDATED, 1, "Original rs2 was merged into rs1.",
+                Arrays.asList(new SubmittedVariantInactiveEntity(sve2)))
+        (0..1).each{svoeMerges[it].setId("" + it)}
+    }
+
     @Test
     void testGetSSHistoryInvolvedInRSMerges() {
         setupSvoeOps()
@@ -94,6 +112,18 @@ class UtilsTest {
         def mergeChain = getChronologicalMergeChain(ssHistory)
         assertEquals(4, mergeChain.size())
         assertEquals(["0", "2", "1", "3"], mergeChain.collect{it.id})
+    }
+
+    @Test
+    void testGetChronologicalMergeChainWhenCircularMergesPresent() {
+        setupCircularSvoeOps()
+        dbEnv.bulkInsertIgnoreDuplicates(svoeMerges, dbsnpSvoeClass)
+        def ssHistory = getSSHistoryInvolvedInRSMerges(dbEnv, ASSEMBLY, Arrays.asList(svoeMerges[1]))
+        def mergeChain = getChronologicalMergeChain(ssHistory)
+        assertEquals(2, mergeChain.size())
+        // The second record with SS accession 3 created in setupCircularSvoeOps() is deemed the original SS record
+        // due to the earlier created date of that SS record
+        assertEquals(["1", "0"], mergeChain.collect{it.id})
     }
 
     @Test
