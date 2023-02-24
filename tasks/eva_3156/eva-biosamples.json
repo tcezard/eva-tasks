@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "eva-biosamples.json",
+  "additionalProperties": true,
+  "definitions": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name",
+    "characteristics"
+  ],
+  "title": "sample",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "accession": {
+      "type": "string"
+    },
+    "characteristics": {
+      "type": "object",
+      "anyOf": [
+        {
+          "required": [
+            "organism"
+          ]
+        },
+        {
+          "required": [
+            "Organism"
+          ]
+        },
+        {
+          "required": [
+            "species"
+          ]
+        },
+        {
+          "required": [
+            "Species"
+          ]
+        }
+      ],
+      "properties": {
+        "organism": {
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "Organism": {
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "Species": {
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "species": {
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "title": {
+          "description": "The sample title is a short, preferably a single sentence, description of the sample",
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "description": {
+          "description": "Free-text description of the sample",
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "taxId": {
+          "description": "The Tax Id indicates the NCBI taxonomic classification (http://www.ncbi.nlm.nih.gov/taxonomy)",
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "scientificName": {
+          "description": "The scientific name of the sequenced organism",
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "commonName": {
+          "description": "The common name of the sequenced organism",
+          "type": "array",
+          "items": {
+            "properties": {
+              "text": {
+                "$ref": "#/definitions/nonEmptyString"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
