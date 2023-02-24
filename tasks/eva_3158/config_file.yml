@@ -1,0 +1,13 @@
+eloads_dir: /opt/submissions/
+
+genome_downloader:
+  output_directory: /opt/reference_sequences
+
+executable:
+  nextflow: /usr/local/bin/nextflow
+  vcf_assembly_checker: /usr/local/bin/vcf-assembly-checker
+  vcf_validator: /usr/local/bin/vcf-validator
+  bgzip: /usr/local/bin/bgzip
+  bcftools: /usr/local/bin/bcftools
+  tabix: /usr/local/bin/tabix
+  samtools: /usr/local/bin/samtools
