@@ -82,7 +82,7 @@ def processBatch = {variantsInBatch, svesInRemappedAssembly, svesInSourceAssembl
         def correspondingRemappingAttributes =
                 Collections.singletonList(new RemappingOutputParams(options.remappedAssembly, ssID,
                         getRSID(remappingAttributes.getOrDefault("RS", null)),
-                        remappingAttributes["st"], remappingAttributes.getOrDefault("rac", null), true))
+                        remappingAttributes["st"], remappingAttributes["rac"], true))
         // Sometimes, the SS ID in remapped assembly may not line up with that in the source assembly
         // due to splits in source assembly not propagated to the remapped assembly
         // So to look for source SS IDs, use SS IDs from the remapped assembly along with the ssID in the VCF
