@@ -8,8 +8,7 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
-// This script deprecates orphaned RS by type
-// i.e., RS with a given RS locus not associated to any SS with that RS locus
+// This script checks and reports duplicate SS and RS
 def cli = new CliBuilder()
 cli.propertiesFile(args: 1, "Production properties file to use for analysis", required: true)
 cli.assemblyToAnalyze(args: 1, "Assembly to analyze", required: true)
@@ -23,6 +22,7 @@ if (!options) {
 // limit the number of connections per invocation to just 1 to avoid contention for the Spring job repository
 def dbEnv = createFromSpringContext(options.propertiesFile, Application.class,
         ["spring.datasource.hikari.maximumPoolSize": 1, "parameters.assemblyAccession": options.assemblyToAnalyze])
+
 def numSSEntriesScanned = 0
 // Check SS duplicates in accession
 [dbsnpSveClass, sveClass].each{collectionClass ->
@@ -35,6 +35,7 @@ def numSSEntriesScanned = 0
         numSSEntriesScanned += sves.size()
         println("${numSSEntriesScanned} SS entries scanned so far in ${options.assemblyToAnalyze}...")
 }}
+
 // Check RS duplicates in accession
 def numRSEntriesScanned = 0
 [dbsnpCveClass, cveClass].each{collectionClass ->
@@ -50,28 +51,30 @@ def numRSEntriesScanned = 0
 
 // Check SS duplicates in hash
 numSSEntriesScanned = 0
-[dbsnpSveClass, sveClass].each{collectionClass ->
+[dbsnpSveClass].each{collectionClass ->
     new RetryableBatchingCursor<>(where("seq").is(options.assemblyToAnalyze), dbEnv.mongoTemplate, collectionClass).each {sves ->
-        def otherCollection = (collectionClass == dbsnpSveClass)? sveClass: dbsnpSveClass
         def hashes = sves.collect{it.hashedMessage}.toSet()
         dbEnv.mongoTemplate.find(query(where("seq").is(options.assemblyToAnalyze).and("_id").in(hashes)),
-                otherCollection).each {sve ->
-            println("ERROR: Encountered SS hash ${sve.hashedMessage} from ${collectionClass.simpleName} in ${otherCollection.simpleName} in ${options.assemblyToAnalyze}!!")
+                sveClass).each {sve ->
+            println("ERROR: Encountered SS hash ${sve.hashedMessage} from ${collectionClass.simpleName} in ${sveClass.simpleName} in ${options.assemblyToAnalyze}!!")
         }
         numSSEntriesScanned += sves.size()
         println("${numSSEntriesScanned} SS entries scanned so far in ${options.assemblyToAnalyze}...")
 }}
 
-// Check SS duplicates in hash
+// Check RS duplicates in hash
 numRSEntriesScanned = 0
-[dbsnpCveClass, cveClass].each{collectionClass ->
+[dbsnpCveClass].each{collectionClass ->
     new RetryableBatchingCursor<>(where("asm").is(options.assemblyToAnalyze), dbEnv.mongoTemplate, collectionClass).each {cves ->
-        def otherCollection = (collectionClass == dbsnpCveClass)? cveClass: dbsnpCveClass
         def hashes = cves.collect{it.hashedMessage}.toSet()
         dbEnv.mongoTemplate.find(query(where("asm").is(options.assemblyToAnalyze).and("_id").in(hashes)),
-                otherCollection).each {sve ->
-            println("ERROR: Encountered RS hash ${cve.hashedMessage} from ${collectionClass.simpleName} in ${otherCollection.simpleName} in ${options.assemblyToAnalyze}!!")
+                cveClass).each {sve ->
+            println("ERROR: Encountered RS hash ${cve.hashedMessage} from ${collectionClass.simpleName} in ${cveClass.simpleName} in ${options.assemblyToAnalyze}!!")
         }
         numRSEntriesScanned += cves.size()
         println("${numRSEntriesScanned} RS entries scanned so far in ${options.assemblyToAnalyze}...")
 }}
+
+
+println(".............................  process done for ${options.assemblyToAnalyze}  .............................  ")
+System.exit(0)
