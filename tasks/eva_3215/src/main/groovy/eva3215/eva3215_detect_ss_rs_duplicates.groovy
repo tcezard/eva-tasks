@@ -68,7 +68,7 @@ numRSEntriesScanned = 0
     new RetryableBatchingCursor<>(where("asm").is(options.assemblyToAnalyze), dbEnv.mongoTemplate, collectionClass).each {cves ->
         def hashes = cves.collect{it.hashedMessage}.toSet()
         dbEnv.mongoTemplate.find(query(where("asm").is(options.assemblyToAnalyze).and("_id").in(hashes)),
-                cveClass).each {sve ->
+                cveClass).each {cve ->
             println("ERROR: Encountered RS hash ${cve.hashedMessage} from ${collectionClass.simpleName} in ${cveClass.simpleName} in ${options.assemblyToAnalyze}!!")
         }
         numRSEntriesScanned += cves.size()
