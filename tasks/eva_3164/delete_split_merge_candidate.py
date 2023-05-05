@@ -50,14 +50,15 @@ def find_documents_in_batch(mongo_source, collection_name, filter_criteria, batc
 def delete_split_and_merge_candidates(mongo_source, assembly_accession):
     sveo_collection = mongo_source.mongo_handle[mongo_source.db_name]["submittedVariantOperationEntity"]
     filter_criteria = {"eventType": {"$in": ["RS_MERGE_CANDIDATES", "RS_SPLIT_CANDIDATES"]}, "inactiveObjects.seq": assembly_accession}
-    drop_statements = []
-    total_dropped = 0
+    nb_documents, total_dropped = 0, 0
     for variant_batch in find_documents_in_batch(mongo_source, "submittedVariantOperationEntity", filter_criteria):
         drop_statements = [pymongo.DeleteOne({'_id': operation['_id']}) for operation in variant_batch]
-    result_drop = sveo_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
-        .bulk_write(requests=drop_statements, ordered=False)
-    total_dropped += result_drop.deleted_count
-    logger.info(f'{total_dropped} documents dropped')
+        result_drop = sveo_collection.with_options(write_concern=WriteConcern(w="majority", wtimeout=1200000)) \
+            .bulk_write(requests=drop_statements, ordered=False)
+        total_dropped += result_drop.deleted_count
+        nb_documents += len(variant_batch)
+        logger.info(f'Deleted {result_drop.deleted_count}')
+    logger.info(f'{total_dropped} documents dropped out of {nb_documents}')
 
 
 def main():
