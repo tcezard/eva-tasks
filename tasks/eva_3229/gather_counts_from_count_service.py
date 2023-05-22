@@ -88,7 +88,7 @@ class CountStats(AppLogger):
             step_name_case += f" WHEN timestamp >= '{start_time}' AND timestamp <= '{end_time}' THEN '{step_name}'"
         query = (
             f"SELECT identifier->>'assembly' as assembly, metric, count, "
-            f"CASE {step_name_case} END step_name, "
+            f"CASE {step_name_case} END step_name "
             f"FROM evapro.count_stats WHERE process = 'clustering' "
             f"AND timestamp >= '{start_date}' AND timestamp < '{end_date}' "
         )
