@@ -75,29 +75,26 @@ class CountStats(AppLogger):
                                     + split_steps + merge_steps)
         with self.get_job_tracker_connection_handle() as jt_conn:
             jt_query = (
-                "SELECT step_name, start_time, end_time, status FROM batch_step_execution "
+                "SELECT step_name, start_time, end_time FROM batch_step_execution "
                 f"WHERE start_time >= '{start_date}' AND end_time < '{end_date}' "
                 f"AND step_name IN ({all_steps_joined}) "
             )
             jt_results = get_all_results_for_query(jt_conn, jt_query)
 
         results_by_assembly = defaultdict(Counter)
-        # Construct query that keeps track of step name and status for each time range
+        # Construct query that keeps track of step name for each time range
         step_name_case = ""
-        status_case = ""
-        for step_name, start_time, end_time, status in jt_results:
+        for step_name, start_time, end_time in jt_results:
             step_name_case += f" WHEN timestamp >= '{start_time}' AND timestamp <= '{end_time}' THEN '{step_name}'"
-            status_case += f" WHEN timestamp >= '{start_time}' AND timestamp <= '{end_time}' THEN '{status}'"
         query = (
             f"SELECT identifier->>'assembly' as assembly, metric, count, "
             f"CASE {step_name_case} END step_name, "
-            f"CASE {status_case} END status "
             f"FROM evapro.count_stats WHERE process = 'clustering' "
             f"AND timestamp >= '{start_date}' AND timestamp < '{end_date}' "
         )
         with get_metadata_connection_handle(self.profile, self.settings_file) as pg_conn:
             results = get_all_results_for_query(pg_conn, query)
-            for asm, metric, count, step_name, status in results:
+            for asm, metric, count, step_name in results:
                 # Follows same logic as get_clustering_counts_between_dates to disambiguate metrics, just this time
                 # using the known step names
                 if metric == 'clustered_variants_created' and count > 0:
