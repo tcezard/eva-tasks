@@ -86,7 +86,7 @@ class DeprecatePRJEB55361IncorrectContig {
     }
 }
 
-// This script deprecates variants incorrectly remapped in the Ovis orientalis species (tax 469796)
+// This script deprecates variants incorrectly remapped to GCA_000247795.2 to a non-existent contig CM008173.2
 def cli = new CliBuilder()
 cli.prodPropertiesFile(args: 1, "Production properties file to use for deprecation", required: true)
 def options = cli.parse(args)
