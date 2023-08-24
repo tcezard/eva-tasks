@@ -117,7 +117,7 @@ impactedVariants.each{it.each{sves ->
                 .and("accession").in(impactedAccessions)
     ), collectionClass)}.flatten()
     def ssHashesThatNeedUpdates = backPropOps.collect{it.inactiveObjects[0].hashedMessage}.toSet()
-    [sveClass, dbsnpSveClass].each{prodEnv.mongoTemplate.updateMulti(collectionClass ->
-            query(where("_id").in(ssHashesThatNeedUpdates)), Update.unset("backPropRS"), collectionClass)}
+    [sveClass, dbsnpSveClass].each{collectionClass -> prodEnv.mongoTemplate.updateMulti(
+            query(where("_id").in(ssHashesThatNeedUpdates)), new Update().unset("backPropRS"), collectionClass)}
     ssHashesThatNeedUpdates.each{println("Removed backPropRS for SS hash $it...")}
 }}
