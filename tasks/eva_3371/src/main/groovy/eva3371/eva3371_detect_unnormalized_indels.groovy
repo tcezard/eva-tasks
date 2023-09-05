@@ -28,7 +28,8 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
-// This script detects unnormalized indels in a given assembly
+// This script detects unnormalized indels in a given assembly, normalizes them and subsequently
+// stores them in the DEV environment in the database eva3371_accession_sharded
 def cli = new CliBuilder()
 cli.prodPropertiesFile(args: 1, "Production properties file to use for database connection", required: true)
 cli.devPropertiesFile(args: 1, "Development properties file to use for database connection", required: true)
