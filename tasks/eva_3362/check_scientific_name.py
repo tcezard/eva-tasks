@@ -80,8 +80,7 @@ def main():
                            required=True)
     args = argparser.parse_args()
 
-    #taxonomy_list = get_list_of_taxonomy_from_evapro(args.private_config_xml_file)
-    taxonomy_list = [559292]
+    taxonomy_list = get_list_of_taxonomy_from_evapro(args.private_config_xml_file)
 
     evapro_names = {}
     ensembl_names = {}
