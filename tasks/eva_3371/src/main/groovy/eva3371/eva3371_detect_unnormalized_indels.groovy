@@ -126,7 +126,7 @@ String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, conf
 
 String getNormalizedVcf (String preNormalizedVCF, String customFastaFilePath, config) {
     def postNormalizedVCF = preNormalizedVCF.replace("before_norm", "after_norm")
-    runProcess("${config.executable.bcftools} norm -f ${customFastaFilePath} ${preNormalizedVCF} " +
+    runProcess("${config.executable.bcftools} norm -c w -f ${customFastaFilePath} ${preNormalizedVCF} " +
             "-o ${postNormalizedVCF} -Oz")
     runProcess("${config.executable.tabix} -f ${postNormalizedVCF}")
     return postNormalizedVCF
