@@ -93,9 +93,8 @@ String sortAndIndexVcf (String vcfFile, config) {
 String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, config, String outputDir) {
     def impactedVariantTypes = [VariantType.INS.toString(), VariantType.DEL.toString(),
                                 VariantType.INDEL.toString()]
-    def impactedCveCursors = [cveClass, dbsnpCveClass].collect {
-        new RetryableBatchingCursor(where("asm").is(assembly).and("type").in(impactedVariantTypes),
-                env.mongoTemplate, it)}
+    def allSveCursors = [sveClass, dbsnpSveClass].collect {
+        new RetryableBatchingCursor(where("seq").is(assembly), env.mongoTemplate, it)}
     // We are going to mimic EVA extractor logic (just the processor and the writer parts) here: https://github.com/EBIvariation/eva-accession/blob/33af9bab89219c5071ea77c3c8cd3a1c031a78f3/eva-remapping-get-source/src/main/java/uk/ac/ebi/eva/remapping/source/configuration/batch/steps/ExportSubmittedVariantsStepConfiguration.java#L79-L79
     // to minimize the pain of writing the SVEs above to VCF
     def sveToVariantContextProcessor =
@@ -106,17 +105,17 @@ String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, conf
     def variantContextWriter = new VariantContextWriter(Paths.get(outputVCFFileName), assembly)
     variantContextWriter.open(new ExecutionContext())
 
-    impactedCveCursors.each{it.each {impactedCves ->
-        def rsIDsInBatch = impactedCves.collect { it.accession }.toSet()
-        def rsIDAndHashesInBatch = impactedCves.collect { "" + "${it.accession}_${it.hashedMessage}" }.toSet()
-        def correspondingSves = [sveClass, dbsnpSveClass].collect { collectionClass ->
-            env.mongoTemplate.find(query(where("seq").is(assembly)
-                    .and("rs").in(rsIDsInBatch)), collectionClass).findAll {
-                rsIDAndHashesInBatch.contains(it.clusteredVariantAccession + "_" +
-                        EVAObjectModelUtils.getClusteredVariantHash(it))
+    allSveCursors.each{it.each {allSves ->
+        def impactedSves = allSves.findAll {sve ->
+            def type = VariantType.SNV.toString()
+            try {
+                type = EVAObjectModelUtils.toClusteredVariant(sve).getType().toString()
             }
-        }.flatten()
-        variantContextWriter.write(correspondingSves.collect{sveToVariantContextProcessor.process(it)}
+            catch (IllegalArgumentException exception) {
+            }
+            return impactedVariantTypes.contains(type)
+        }
+        variantContextWriter.write(impactedSves.collect{sveToVariantContextProcessor.process(it)}
                 .findAll{Objects.nonNull(it)})
     }}
     variantContextWriter.close()
@@ -139,8 +138,7 @@ String getVcfWithChangedVariants(String preNormalizedVCF, String postNormalizedV
     return changedVCF
 }
 
-void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, String changedVariantsVCF,
-                               EVADatabaseEnvironment devEnv) {
+void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv) {
     // Use components from here: https://github.com/EBIvariation/eva-accession/blob/cfaa462332049730dcf4371f5b374f3af568ba42/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/configuration/batch/steps/ClusteringFromVcfStepConfiguration.java#L46-L46
     def changedVariantsVCFReader = new UnwindingItemStreamReader<>(devEnv.springApplicationContext.getBean(VcfReader.class))
     changedVariantsVCFReader.open(new ExecutionContext())
@@ -210,4 +208,4 @@ def devEnv =
              // No need to worry about these since we are not using any. They are only there to satisfy bean creation
              "parameters.remappedFrom": "", "parameters.loadTo": "EVA",
              "parameters.remappingVersion": "", "build.version": "someVersion"])
-writeChangedVariantsToDev(prodEnv, changedVariantsVCF, devEnv)
+writeChangedVariantsToDev(prodEnv, devEnv)
