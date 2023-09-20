@@ -8,6 +8,7 @@
 
     <logger name="org.springframework" level="info"/>
     <logger name="uk.ac.ebi.eva" level="info"/>
+    <logger name="eva3380" level="info"/>
 
     <root level="error">
         <appender-ref ref="console"/>
