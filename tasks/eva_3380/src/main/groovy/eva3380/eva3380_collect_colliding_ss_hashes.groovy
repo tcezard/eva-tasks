@@ -25,7 +25,7 @@ def cli = new CliBuilder()
 cli.prodPropertiesFile(args: 1, "Production properties file to use for database connection", required: true)
 cli.devPropertiesFile(args: 1, "Development properties file to use for database connection", required: true)
 cli.assemblyAccession(args: 1, "Assembly to analyze", required: true)
-cli.outputDir(args: 1, "Full path to the directory to store output VCF files", required: true)
+cli.normalizedVcfDir(args: 1, "Full path to the directory where normalized VCF files are stored", required: true)
 cli.fastaDir(args: 1, "Top-level directories containing FASTAs for all assemblies", required: true)
 def options = cli.parse(args)
 if (!options) {
@@ -151,7 +151,7 @@ def collectCollidingSSHashes = {EVADatabaseEnvironment prodEnv, EVADatabaseEnvir
 // this is equivalent to if __name__ == '__main__' in Python
 if (this.getClass().getName().contains('Script')) {
     String impactedAssembly = options.assemblyAccession
-    def changedVariantsVCF = "${options.outputDir}/analysis/${impactedAssembly}/" +
+    def changedVariantsVCF = "${options.normalizedVcfDir}/analysis/${impactedAssembly}/" +
             "${impactedAssembly}_changed_after_norm_sorted.vcf.gz"
     def assemblyReportUrl = "file:" + getCustomAssemblyReportPath(impactedAssembly, options.fastaDir)
     def prodEnv = createFromSpringContext(options.prodPropertiesFile, GenericApplication.class)
