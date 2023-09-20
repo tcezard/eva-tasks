@@ -108,13 +108,13 @@ def getClashingSSRecordsFromDb = {List<SubmittedVariantEntity> svesFromVCF,
     clashingSvesInDevAndProd[1].removeIf{prodSSAccessionsInNormalizedPopulation.contains(it.accession)}
     def clashingSvesGroupedByHash =
             clashingSvesInDevAndProd.flatten().toUnique{"" + "${it.hashedMessage}_${it.accession}"}.groupBy{it.hashedMessage}
-    def hashesFromClashingSSCollection =
+    Map<String, ClashingSSHashes> hashesFromClashingSSCollection =
             devEnv.mongoTemplate.find(query(where("_id").in(svesFromVcfGroupedByHash.keySet())),
-                    ClashingSSHashes.class).groupBy{it.ssHash}
+                    ClashingSSHashes.class).collectEntries{clashingHashRecord ->
+                [clashingHashRecord.ssHash, clashingHashRecord]}
     return clashingSvesGroupedByHash.collect{ssHash, svesWithHashFromDB ->
         def clashingHashesRecord =
-                hashesFromClashingSSCollection.getOrDefault(ssHash,
-                        Arrays.asList(new ClashingSSHashes(svesWithHashFromDB))).get(0)
+                hashesFromClashingSSCollection.getOrDefault(ssHash, new ClashingSSHashes(svesWithHashFromDB))
         def existingSSIDsForHash = clashingHashesRecord.clashingSS.collect{it.accession}.toSet()
         def clashingSvesFromVCF =
                 svesFromVcfGroupedByHash.get(ssHash).findAll{!existingSSIDsForHash.contains(it.accession)}
