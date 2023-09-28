@@ -1,4 +1,4 @@
-package eva3371
+package eva3399
 
 import groovy.cli.picocli.CliBuilder
 import groovy.yaml.YamlSlurper
@@ -8,6 +8,7 @@ import org.springframework.batch.item.ExecutionContext
 import org.springframework.batch.item.ItemProcessor
 import uk.ac.ebi.ampt2d.commons.accession.hashing.SHA1HashingFunction
 import uk.ac.ebi.eva.accession.core.EVAObjectModelUtils
+import uk.ac.ebi.eva.accession.core.model.ISubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.summary.SubmittedVariantSummaryFunction
@@ -15,6 +16,7 @@ import uk.ac.ebi.eva.commons.batch.io.UnwindingItemStreamReader
 import uk.ac.ebi.eva.commons.batch.io.VcfReader
 import uk.ac.ebi.eva.commons.core.models.pipeline.Variant
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
+import uk.ac.ebi.eva.remapping.ingest.parameters.InputParameters
 import uk.ac.ebi.eva.remapping.source.Application
 import uk.ac.ebi.eva.commons.core.models.VariantType
 import uk.ac.ebi.eva.groovy.commons.RetryableBatchingCursor
@@ -23,7 +25,9 @@ import uk.ac.ebi.eva.remapping.source.batch.io.VariantContextWriter
 import uk.ac.ebi.eva.remapping.source.configuration.BeanNames as RemappingExtractBeanNames
 
 import java.nio.file.Paths
+import java.util.function.Function
 
+import static eva3399.Utils.*
 import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
@@ -45,23 +49,7 @@ if (!options) {
 }
 def logger = LoggerFactory.getLogger(this.class)
 
-Object runProcess(String command) {
-    logger.info("Running command: ${command}...")
-    def process= ["bash", "-c", command].execute()
-    def (out, err) = [new StringBuffer(), new StringBuffer()]
-    process.waitForProcessOutput(out, err)
-    if(!out.toString().trim().equals("")) logger.info(out.toString())
-    if (process.exitValue() != 0) {
-        logger.error("Command: $command exited with exit code ${process.exitValue()}!!")
-        logger.error("See error messages below: \n" + err.toString())
-        throw new Exception(err.toString())
-    }
-    logger.warn(err.toString())
-    logger.info("Command: $command completed successfully!")
-    return ["out": out.toString(), "err": err.toString()]
-}
-
-String[] getCustomFastaAndAssembly(String assembly, String fastaDir, String customAssemblyScript) {
+static String[] getCustomFastaAndAssembly(String assembly, String fastaDir, String customAssemblyScript) {
     // Avoid maxDepth to avoid scanning through a labyrinthe of sub-dirs
     def fastaFilePath = runProcess("find ${fastaDir} -maxdepth 3 -iname " +
             "'${assembly}.fa'| head -1").out.trim()
@@ -81,7 +69,7 @@ String[] getCustomFastaAndAssembly(String assembly, String fastaDir, String cust
     return [customFastaFilePath, customAssemblyReportPath]
 }
 
-String sortAndIndexVcf (String vcfFile, config) {
+static String sortAndIndexVcf(String vcfFile, config) {
     def sortedAndIndexedVcf = vcfFile.replace(".vcf", "_sorted.vcf")
     runProcess("${config.vcfSortScript} -f ${vcfFile} ${sortedAndIndexedVcf}")
     runProcess("${config.executable.bgzip} -f ${sortedAndIndexedVcf}")
@@ -90,11 +78,12 @@ String sortAndIndexVcf (String vcfFile, config) {
     return sortedAndIndexedVcf
 }
 
-String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, config, String outputDir) {
+static String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, config, String outputDir) {
     def impactedVariantTypes = [VariantType.INS.toString(), VariantType.DEL.toString(),
                                 VariantType.INDEL.toString()]
     def allSveCursors = [sveClass, dbsnpSveClass].collect {
-        new RetryableBatchingCursor(where("seq").is(assembly), env.mongoTemplate, it)}
+        new RetryableBatchingCursor(where("seq").is(assembly), env.mongoTemplate, it)
+    }
     // We are going to mimic EVA extractor logic (just the processor and the writer parts) here: https://github.com/EBIvariation/eva-accession/blob/33af9bab89219c5071ea77c3c8cd3a1c031a78f3/eva-remapping-get-source/src/main/java/uk/ac/ebi/eva/remapping/source/configuration/batch/steps/ExportSubmittedVariantsStepConfiguration.java#L79-L79
     // to minimize the pain of writing the SVEs above to VCF
     def sveToVariantContextProcessor =
@@ -105,8 +94,8 @@ String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, conf
     def variantContextWriter = new VariantContextWriter(Paths.get(outputVCFFileName), assembly)
     variantContextWriter.open(new ExecutionContext())
 
-    allSveCursors.each{it.each {allSves ->
-        def impactedSves = allSves.findAll {sve ->
+    allSveCursors.each {it.each { allSves ->
+        def impactedSves = allSves.findAll { sve ->
             def type = VariantType.SNV.toString()
             try {
                 type = EVAObjectModelUtils.toClusteredVariant(sve).getType().toString()
@@ -115,15 +104,15 @@ String writeAllImpactedSSToVcf(String assembly, EVADatabaseEnvironment env, conf
             }
             return impactedVariantTypes.contains(type)
         }
-        variantContextWriter.write(impactedSves.collect{sveToVariantContextProcessor.process(it)}
-                .findAll{Objects.nonNull(it)})
+        variantContextWriter.write(impactedSves.collect { sveToVariantContextProcessor.process(it) }
+                .findAll { Objects.nonNull(it) })
     }}
     variantContextWriter.close()
     outputVCFFileName = sortAndIndexVcf(outputVCFFileName, config)
     return Paths.get(outputVCFFileName).toAbsolutePath().toString()
 }
 
-String getNormalizedVcf (String preNormalizedVCF, String customFastaFilePath, config) {
+static String getNormalizedVcf(String preNormalizedVCF, String customFastaFilePath, config) {
     def postNormalizedVCF = preNormalizedVCF.replace("before_norm", "after_norm")
     runProcess("${config.executable.bcftools} norm -c w -f ${customFastaFilePath} ${preNormalizedVCF} " +
             "-o ${postNormalizedVCF} -Oz")
@@ -131,14 +120,49 @@ String getNormalizedVcf (String preNormalizedVCF, String customFastaFilePath, co
     return postNormalizedVCF
 }
 
-String getVcfWithChangedVariants(String preNormalizedVCF, String postNormalizedVCF, config) {
+static String getVcfWithChangedVariants(String preNormalizedVCF, String postNormalizedVCF, config) {
     def changedVCF = postNormalizedVCF.replace("after_norm", "changed_after_norm")
     runProcess("${config.executable.bcftools} isec -w1 -C ${postNormalizedVCF} ${preNormalizedVCF} " +
             "-o ${changedVCF} -Oz")
     return changedVCF
 }
 
-void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv) {
+static List<List<SubmittedVariantEntity>> getNormalizedDbsnpAndEvaSves(ArrayList<Variant> variantsPostNorm,
+                                                                       EVADatabaseEnvironment prodEnv,
+                                                                       EVADatabaseEnvironment devEnv) {
+    def targetAssembly = devEnv.springApplicationContext.getBean(InputParameters.class).assemblyAccession
+    def variantsPostNormByAccession = variantsPostNorm.groupBy { it.mainId.replace("ss", "").toLong() }
+    def ssIdsToLookInProd = variantsPostNormByAccession.keySet()
+    def updatedDbsnpAndEvaSves =
+            [dbsnpSveClass, sveClass].collect { collectionClass ->
+                prodEnv.mongoTemplate.find(query(where("accession").in(ssIdsToLookInProd)
+                        .and("seq").is(targetAssembly)), collectionClass).collect { oldSVE ->
+                    def variantPostNorm = variantsPostNormByAccession.get(oldSVE.accession)[0]
+                    def updatedSV = new SubmittedVariant(oldSVE.referenceSequenceAccession,
+                            oldSVE.taxonomyAccession, oldSVE.projectAccession, oldSVE.contig,
+                            variantPostNorm.start, variantPostNorm.reference, variantPostNorm.alternate,
+                            oldSVE.clusteredVariantAccession, oldSVE.isSupportedByEvidence(),
+                            oldSVE.isAssemblyMatch(), oldSVE.isAllelesMatch(), oldSVE.isValidated(),
+                            oldSVE.createdDate)
+                    def devAndProdLocusSame = ((variantPostNorm.start == oldSVE.start) &&
+                            variantPostNorm.reference.equalsIgnoreCase(oldSVE.referenceAllele) &&
+                            variantPostNorm.alternate.equalsIgnoreCase(oldSVE.alternateAllele))
+                    if (devAndProdLocusSame) return null
+                    def updatedHash = new SubmittedVariantSummaryFunction().andThen(new SHA1HashingFunction()).apply(updatedSV)
+                    // Crudely tack on the old SS hash to the start of the remappingId since that is the
+                    // least harmless String attribute that allows us to encode extra information
+                    // without messing up the object model's integrity
+                    // We must be careful with this however when using this info in EVA-3380 to update Indels
+                    return new SubmittedVariantEntity(oldSVE.accession, updatedHash, updatedSV, oldSVE.version,
+                            oldSVE.remappedFrom, oldSVE.remappedDate,
+                            oldSVE.hashedMessage + "_" + oldSVE.remappingId)
+                }.findAll { Objects.nonNull(it) }
+            }
+    return updatedDbsnpAndEvaSves
+}
+
+static void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv) {
+
     // Use components from here: https://github.com/EBIvariation/eva-accession/blob/cfaa462332049730dcf4371f5b374f3af568ba42/eva-accession-clustering/src/main/java/uk/ac/ebi/eva/accession/clustering/configuration/batch/steps/ClusteringFromVcfStepConfiguration.java#L46-L46
     def changedVariantsVCFReader = new UnwindingItemStreamReader<>(devEnv.springApplicationContext.getBean(VcfReader.class))
     changedVariantsVCFReader.open(new ExecutionContext())
@@ -146,34 +170,12 @@ void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, EVADatabaseEnviro
     def batchSize = 1000
     def variantsPostNorm = new ArrayList<Variant>()
     def numProcessedSoFar = 0
-    while(Objects.nonNull(nextVariant)) {
+    while (Objects.nonNull(nextVariant)) {
         variantsPostNorm.add(nextVariant)
         nextVariant = changedVariantsVCFReader.read()
-        if(variantsPostNorm.size() == batchSize || Objects.isNull(nextVariant)) {
+        if (variantsPostNorm.size() == batchSize || Objects.isNull(nextVariant)) {
             numProcessedSoFar += variantsPostNorm.size()
-            def variantsPostNormByHash = variantsPostNorm.groupBy {
-                it.sourceEntries[0].getAttribute("SS_HASH")}
-            def hashesToLookInProd = variantsPostNormByHash.keySet()
-            def updatedDbsnpAndEvaSves =
-                    [dbsnpSveClass, sveClass].collect { collectionClass ->
-                    prodEnv.mongoTemplate.find(query(where("_id").in(hashesToLookInProd)),
-                            collectionClass).collect {oldSVE ->
-                        def variantPostNorm = variantsPostNormByHash.get(oldSVE.hashedMessage)[0]
-                        def updatedSV = new SubmittedVariant(oldSVE.referenceSequenceAccession,
-                                oldSVE.taxonomyAccession, oldSVE.projectAccession, oldSVE.contig,
-                                variantPostNorm.start, variantPostNorm.reference, variantPostNorm.alternate,
-                                oldSVE.clusteredVariantAccession, oldSVE.isSupportedByEvidence(),
-                                oldSVE.isAssemblyMatch(), oldSVE.isAllelesMatch(), oldSVE.isValidated(),
-                                oldSVE.createdDate)
-                        def updatedHash = new SubmittedVariantSummaryFunction().andThen(new SHA1HashingFunction()).apply(updatedSV)
-                        // Crudely tack on the old SS hash to the start of the remappingId since that is the
-                        // least harmless String attribute that allows us to encode extra information
-                        // without messing up the object model's integrity
-                        // We must be careful with this however when using this info in EVA-3380 to update Indels
-                        return new SubmittedVariantEntity(oldSVE.accession, updatedHash, updatedSV, oldSVE.version,
-                                oldSVE.remappedFrom, oldSVE.remappedDate,
-                                oldSVE.hashedMessage + "_" + oldSVE.remappingId)
-                    }}
+            def updatedDbsnpAndEvaSves = getNormalizedDbsnpAndEvaSves(variantsPostNorm, prodEnv, devEnv)
             devEnv.bulkInsertIgnoreDuplicates(updatedDbsnpAndEvaSves[0], dbsnpSveClass)
             devEnv.bulkInsertIgnoreDuplicates(updatedDbsnpAndEvaSves[1], sveClass)
             variantsPostNorm.clear()
@@ -182,6 +184,8 @@ void writeChangedVariantsToDev(EVADatabaseEnvironment prodEnv, EVADatabaseEnviro
     }
     changedVariantsVCFReader.close()
 }
+
+
 
 String impactedAssembly = options.assemblyAccession
 String outputDirForAssembly = options.outputDir + "/" + impactedAssembly
@@ -202,10 +206,10 @@ def preNormalizedVCF = writeAllImpactedSSToVcf(impactedAssembly, prodEnv, config
 def postNormalizedVCF = getNormalizedVcf(preNormalizedVCF, customFastaFilePath, config)
 def changedVariantsVCF = getVcfWithChangedVariants(preNormalizedVCF, postNormalizedVCF, config)
 def devEnv =
-    createFromSpringContext(options.devPropertiesFile, RemappingIngestApplication.class,
-            ["parameters.assemblyAccession": impactedAssembly, "parameters.vcf": changedVariantsVCF,
-             "parameters.assemblyReportUrl": customAssemblyReportPath,
-             // No need to worry about these since we are not using any. They are only there to satisfy bean creation
-             "parameters.remappedFrom": "", "parameters.loadTo": "EVA",
-             "parameters.remappingVersion": "", "build.version": "someVersion"])
+        createFromSpringContext(options.devPropertiesFile, RemappingIngestApplication.class,
+                ["parameters.assemblyAccession": impactedAssembly, "parameters.vcf": changedVariantsVCF,
+                 "parameters.assemblyReportUrl": customAssemblyReportPath,
+                 // No need to worry about these since we are not using any. They are only there to satisfy bean creation
+                 "parameters.remappedFrom": "", "parameters.loadTo": "EVA",
+                 "parameters.remappingVersion": "", "build.version": "someVersion"])
 writeChangedVariantsToDev(prodEnv, devEnv)

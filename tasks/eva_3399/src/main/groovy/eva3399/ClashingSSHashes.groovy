@@ -1,4 +1,4 @@
-package eva3380
+package eva3399
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document

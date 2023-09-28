@@ -1,9 +1,11 @@
 package eva3399
 
+import eva3399.ClashingSSHashes
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.query.Update
 import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.eva.accession.core.EVAObjectModelUtils
+import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
@@ -67,7 +69,7 @@ class RemediateIndels {
     def _prioritise = {SubmittedVariantEntity sve1, SubmittedVariantEntity sve2 ->
         def sve1DD = new SubmittedVariantDiscardDeterminants(sve1, sve1.accession, sve1.remappedFrom, sve1.createdDate)
         def sve2DD = new SubmittedVariantDiscardDeterminants(sve2, sve2.accession, sve2.remappedFrom, sve2.createdDate)
-        return SubmittedVariantDiscardPolicy.prioritise(sve1DD, sve2DD).sveToKeep
+        return SubmittedVariantDiscardPolicy.prioritise(sve1DD, sve2DD).sveToKeep.sve
     }
 
     // Given a set of merge candidates in a ClashingSSHashes object, determine the target SS
@@ -85,7 +87,7 @@ class RemediateIndels {
 
     def _getSSRecordsBeforeNorm = {List<SubmittedVariantEntity> svesToNormalize ->
         return [sveClass, dbsnpSveClass].collect {collectionClass ->
-            this.prodEnv.mongoTemplate(query(where("accession").in(svesToNormalize.collect{it.accession})
+            this.prodEnv.mongoTemplate.find(query(where("accession").in(svesToNormalize.collect{it.accession})
                     .and("seq").is(this.assembly)), collectionClass)
         }.flatten()
     }
@@ -122,19 +124,32 @@ class RemediateIndels {
         if (!hashExistsInProd) _writeSSLocusUpdateOps(singletonListWithMergeTarget, mergeTargetRecordsBeforeNorm)
     }
 
-    def _removeSves = {List<SubmittedVariantEntity> sves ->
+    def _removeSves = {List<SubmittedVariantEntity> sves, boolean deleteRemapped=false ->
         def oldSSIDs = sves.collect{it.accession}
         [sveClass, dbsnpSveClass].each{collectionClass ->
             // Remove all occurrences of this SS including in remapped assemblies
             this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").in(oldSSIDs)
                     .and("seq").is(this.assembly)), collectionClass)
-            this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").in(oldSSIDs)
-                    .and("remappedFrom").is(this.assembly)), collectionClass)
+            if (deleteRemapped) {
+                this.prodEnv.mongoTemplate.find(query(where("accession").in(oldSSIDs)
+                        .and("remappedFrom").is(this.assembly)), collectionClass).each {sve ->
+                    def opClass = collectionClass.equals(sveClass)?
+                            new SubmittedVariantOperationEntity(): new DbsnpSubmittedVariantOperationEntity()
+                    opClass.fill(EventType.DISCARDED, "EVA3399 - SS was merged in the source assembly",
+                            Arrays.asList(new SubmittedVariantInactiveEntity(sve)))
+                    opClass.setId("EVA3399_DISCARDED_" +
+                            "${sve.referenceSequenceAccession}_${sve.accession}_${sve.hashedMessage}".toString())
+                    this.prodEnv.mongoTemplate.save(opClass)
+                }
+                this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").in(oldSSIDs)
+                        .and("remappedFrom").is(this.assembly)), collectionClass)
+            }
         }
     }
 
     def _writeMergeOps = {List<SubmittedVariantEntity> mergees, SubmittedVariantEntity mergeTarget ->
         mergees.each { mergee ->
+            logger.info("Merging ${mergee.accession} to ${mergeTarget.accession}...")
             def mergeOpId = "EVA3399_MERGED_${this.assembly}_${mergee.accession}_${mergeTarget.accession}".toString()
             def mergeOpClass = (mergee.accession >= 5e9) ? svoeClass : dbsnpSvoeClass
             def mergeOp = new SubmittedVariantOperationEntity()
@@ -183,7 +198,8 @@ class RemediateIndels {
 
     def _merge = {SubmittedVariantEntity mergeTarget, List<SubmittedVariantEntity> mergees ->
         _writeMergeTarget(mergeTarget)
-        _removeSves(mergees)
+        // Remove mergees in this and remapped assemblies as well
+        _removeSves(mergees, true)
         _assignRs(Collections.singletonList(mergeTarget))
         _writeMergeOps(mergees, mergeTarget)
     }
@@ -199,15 +215,17 @@ class RemediateIndels {
     def insertIntoProdEnv = {List<SubmittedVariantEntity> svesToInsert ->
         def correspondingOldSveRecords = _getSSRecordsBeforeNorm(svesToInsert)
         _removeSves(svesToInsert)
-        this.prodEnv.mongoTemplate.insert(svesToInsert)
+        this.prodEnv.mongoTemplate.insert(svesToInsert.findAll{it.accession >= 5e9}, sveClass)
+        this.prodEnv.mongoTemplate.insert(svesToInsert.findAll{it.accession < 5e9}, dbsnpSveClass)
         _writeSSLocusUpdateOps(svesToInsert, correspondingOldSveRecords)
         _assignRs(svesToInsert)
     }
 
     def runRemediation = {
         def evaAndDbsnpSveCursorsDev = [sveClass, dbsnpSveClass].collect { collectionClass ->
-            new RetryableBatchingCursor<>(query(where("seq").is(assembly)), devEnv.mongoTemplate, collectionClass)
+            new RetryableBatchingCursor<>(where("seq").is(assembly), devEnv.mongoTemplate, collectionClass)
         }
+        def numRecordsProcessed = 0
         evaAndDbsnpSveCursorsDev.each {
             it.each {List<SubmittedVariantEntity> sves ->
                 sves = sves.collect{_undoEVA3371Hack(it)}
@@ -216,6 +234,8 @@ class RemediateIndels {
                 def unmergeableSS = sves.findAll{!(mergeableSSHashes.contains(it.hashedMessage))}
                 mergeInProdEnv(mergeableSS)
                 insertIntoProdEnv(unmergeableSS)
+                numRecordsProcessed += sves.size()
+                logger.info("${numRecordsProcessed} SS processed so far...")
             }
         }
     }
