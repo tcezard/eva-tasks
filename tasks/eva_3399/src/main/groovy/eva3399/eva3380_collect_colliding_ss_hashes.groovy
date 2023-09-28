@@ -103,7 +103,7 @@ static void collectCollidingSSHashes (EVADatabaseEnvironment prodEnv, EVADatabas
 }
 
 // this is equivalent to if __name__ == '__main__' in Python
-if (this.getClass().getName().equals('eva3380.eva3380_collect_colliding_ss_hashes_backup')) {
+if (this.getClass().getName().equals('eva3380.eva3380_collect_colliding_ss_hashes')) {
     String impactedAssembly = options.assemblyAccession
     def changedVariantsVCF = "${options.normalizedVcfDir}/${impactedAssembly}/" +
             "${impactedAssembly}_changed_after_norm_sorted.vcf.gz"
