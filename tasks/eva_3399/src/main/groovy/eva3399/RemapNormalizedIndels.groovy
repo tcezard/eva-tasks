@@ -82,7 +82,7 @@ class RemapNormalizedIndels {
 
     def remap = {
         def sourceVCFFileName = _extractVcfFromMongo()
-        def remappedVCFFileName = sourceVCFFileName.replace(".vcf", "_remapped.vcf")
+        def remappedVCFFileName = sourceVCFFileName.replace(".vcf", "_remapped_to_${this.targetAssembly}.vcf")
         def binaryPath = _setupRemappingBinaries()
         def (srcFasta, srcAsmRpt) = getCustomFastaAndAssemblyReportPaths(this.sourceAssembly, this.fastaDir)
         def (targetFasta, targetAsmRpt) = getCustomFastaAndAssemblyReportPaths(this.targetAssembly, this.fastaDir)

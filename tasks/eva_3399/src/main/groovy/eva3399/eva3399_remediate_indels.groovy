@@ -82,7 +82,7 @@ remappedAssemblies.each {remappedAssembly ->
     def remappedVariantsVcf = remapNormalizedIndels.remap()
 
     def devIngestEnv =
-            createFromSpringContext(devPropertiesFile, RemappingIngestApplication.class,
+            createFromSpringContext(options.devPropertiesFile, RemappingIngestApplication.class,
                     ["parameters.assemblyAccession": remappedAssembly, "parameters.vcf": remappedVariantsVcf,
                      "parameters.assemblyReportUrl": "file:" + getCustomFastaAndAssemblyReportPaths(remappedAssembly, fastaDir)[1],
                      // No need to worry about these since we are not using any. They are only there to satisfy bean creation
