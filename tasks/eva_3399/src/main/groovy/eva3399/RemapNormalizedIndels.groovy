@@ -41,7 +41,7 @@ class RemapNormalizedIndels {
     def _extractVcfUsingOpClass = { VariantContextWriter variantContextWriter, ssOpClass ->
         def ssClass = ssOpClass.equals(svoeClass) ? sveClass: dbsnpSveClass
         def opsForNormalizedSS =
-            new RetryableBatchingCursor(where("_id").regex("EVA3399_UPD_LOCUS_.*"),
+            new RetryableBatchingCursor(where("_id").regex("EVA3399_UPD_LOCUS_${this.sourceAssembly}_.*"),
                     this.remappingEnv.mongoTemplate, ssOpClass)
         // We are going to mimic EVA extractor logic (just the processor and the writer parts) here: https://github.com/EBIvariation/eva-accession/blob/33af9bab89219c5071ea77c3c8cd3a1c031a78f3/eva-remapping-get-source/src/main/java/uk/ac/ebi/eva/remapping/source/configuration/batch/steps/ExportSubmittedVariantsStepConfiguration.java#L79-L79
         // to minimize the pain of writing the SVEs above to VCF

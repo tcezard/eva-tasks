@@ -99,7 +99,7 @@ class RemediateIndels {
         svesWithUpdatedLocus.each {sve ->
             if (oldSSRecordsGroupedBySSID.containsKey(sve.accession)) {
                 def ssUpdatedOp = new SubmittedVariantOperationEntity()
-                ssUpdatedOp.fill(EventType.UPDATED, "EVA3399 - SS received new locus after normalization",
+                ssUpdatedOp.fill(EventType.UPDATED, sve.accession, "EVA3399 - SS received new locus after normalization",
                         oldSSRecordsGroupedBySSID.get(sve.accession).collect { new SubmittedVariantInactiveEntity(it) })
                 ssUpdatedOp.setId("EVA3399_UPD_LOCUS_${this.assembly}_${sve.accession}_${sve.hashedMessage}".toString())
                 (sve.accession >= 5e9) ? evaSVOEOps.add(ssUpdatedOp) : dbsnpSVOEOps.add(ssUpdatedOp)
