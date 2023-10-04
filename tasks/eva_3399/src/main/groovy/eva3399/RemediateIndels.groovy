@@ -166,16 +166,23 @@ class RemediateIndels {
             def sves = svesGroupedByRsHash.get(rsHash)
             def svesHash = sves.collect{it.hashedMessage}
             sves.each {it.setClusteredVariantAccession(rsID)}
+            sves.each{logger.info("Updating SS ${it.accession} with RS ${rsID}...")}
             [sveClass, dbsnpSveClass].each {collectionClass ->
                 this.prodEnv.mongoTemplate.updateMulti(query(where("_id").in(svesHash)),
                         Update.update("rs", rsID), collectionClass)
             }
+        }
+    }
 
+    def _clearExistingRs = {List<SubmittedVariantEntity> sves ->
+        def svesHash = sves.collect{it.hashedMessage}
+        sves.each{it.setClusteredVariantAccession(null)}
+        [sveClass, dbsnpSveClass].each {ssClass ->
+            this.prodEnv.mongoTemplate.updateMulti(query(where("_id").in(svesHash)), new Update().unset("rs"), ssClass)
         }
     }
 
     def _assignNewRs = {List<SubmittedVariantEntity> svesToInsert ->
-        svesToInsert.each{it.setClusteredVariantAccession(null)}
         def svesGroupedByRsHash = svesToInsert.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
         def rsRecordsToCreate = svesToInsert.collect { EVAObjectModelUtils.toClusteredVariant(it)}
         def rsIDsByHash = this.prodEnv.clusteredVariantAccessioningService.getOrCreate(rsRecordsToCreate).collectEntries { [it.hash, it.accession] }
@@ -183,7 +190,7 @@ class RemediateIndels {
     }
 
     def _assignRs = {List<SubmittedVariantEntity> svesToInsert ->
-        svesToInsert.each{it.setClusteredVariantAccession(null)}
+        _clearExistingRs(svesToInsert)
         def svesGroupedByRsHash = svesToInsert.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
         def existingRsIDsByHash = [cveClass, dbsnpCveClass].collect{collectionClass ->
             this.prodEnv.mongoTemplate.find(query(where("_id")
