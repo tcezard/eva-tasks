@@ -21,7 +21,7 @@ import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 // 2) deletes merged SS
 // 3) remaps the persisted normalized indels to the relevant target assemblies
 // 4) back-propagates RS to source assemblies
-// 5) deprecates orphaned assemblies
+// 5) deprecates orphaned RS
 def cli = new CliBuilder()
 cli.prodPropertiesFile(args: 1, "Production properties file to use for database connection", required: true)
 cli.devPropertiesFile(args: 1, "Development properties file to use for database connection", required: true)

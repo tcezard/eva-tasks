@@ -23,16 +23,16 @@ class RemediateIndels {
     String assembly
     EVADatabaseEnvironment prodEnv
     EVADatabaseEnvironment devEnv
-    boolean targetAssembly
+    boolean isTargetAssembly
 
     RemediateIndels() {}
 
     RemediateIndels(String assembly, EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv,
-                    boolean targetAssembly=false) {
+                    boolean isTargetAssembly=false) {
         this.assembly = assembly
         this.prodEnv = prodEnv
         this.devEnv = devEnv
-        this.targetAssembly = targetAssembly
+        this.isTargetAssembly = isTargetAssembly
     }
 
     // Remove old SS hash tacked on the start of remapping ID. While this will be useful later on, for now we don't need it!
@@ -161,9 +161,11 @@ class RemediateIndels {
         }
     }
 
-    def _updateSSWithRS = {Map<Long, SubmittedVariantEntity> svesGroupedByRsHash, Map<String, Long> rsIDsByHash ->
+    def _updateSSWithRS = {List<SubmittedVariantEntity> svesToUpdate, Map<String, Long> rsIDsByHash ->
+        _clearExistingRs(svesToUpdate)
+        def svesGroupedByRsHash = svesToUpdate.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
         rsIDsByHash.each {rsHash, rsID ->
-            def sves = svesGroupedByRsHash.get(rsHash)
+            def sves = svesGroupedByRsHash.getOrDefault(rsHash, [])
             def svesHash = sves.collect{it.hashedMessage}
             sves.each {it.setClusteredVariantAccession(rsID)}
             sves.each{logger.info("Updating SS ${it.accession} with RS ${rsID}...")}
@@ -182,24 +184,23 @@ class RemediateIndels {
         }
     }
 
-    def _assignNewRs = {List<SubmittedVariantEntity> svesToInsert ->
-        def svesGroupedByRsHash = svesToInsert.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
-        def rsRecordsToCreate = svesToInsert.collect { EVAObjectModelUtils.toClusteredVariant(it)}
+    def _assignNewRs = {List<SubmittedVariantEntity> svesToUpdate ->
+        def rsRecordsToCreate = svesToUpdate.collect { EVAObjectModelUtils.toClusteredVariant(it)}
         def rsIDsByHash = this.prodEnv.clusteredVariantAccessioningService.getOrCreate(rsRecordsToCreate).collectEntries { [it.hash, it.accession] }
-        _updateSSWithRS(svesGroupedByRsHash, rsIDsByHash)
+        _updateSSWithRS(svesToUpdate, rsIDsByHash)
     }
 
-    def _assignRs = {List<SubmittedVariantEntity> svesToInsert ->
-        _clearExistingRs(svesToInsert)
-        def svesGroupedByRsHash = svesToInsert.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
+    def _assignRs = {List<SubmittedVariantEntity> svesToUpdate ->
+        def svesToBeAssignedExistingRS = svesToUpdate.findAll{Objects.nonNull(it.clusteredVariantAccession)}
+        def existingRsHashesToFind = svesToUpdate.collect{EVAObjectModelUtils.getClusteredVariantHash(it)}.toSet()
         def existingRsIDsByHash = [cveClass, dbsnpCveClass].collect{collectionClass ->
             this.prodEnv.mongoTemplate.find(query(where("_id")
-                    .in(svesGroupedByRsHash.keySet())), collectionClass)
+                    .in(existingRsHashesToFind)), collectionClass)
         }.flatten().collectEntries{[it.hashedMessage, it.accession]}
-        _updateSSWithRS(svesGroupedByRsHash, existingRsIDsByHash)
-        if (this.targetAssembly) {
-            _assignNewRs(svesGroupedByRsHash.findAll { rsHash, _ ->
-                return !(existingRsIDsByHash.containsKey(rsHash))}.values().flatten())
+        _updateSSWithRS(svesToBeAssignedExistingRS, existingRsIDsByHash)
+        if (this.isTargetAssembly) {
+            _assignNewRs(svesToUpdate.findAll {
+                !(existingRsIDsByHash.containsKey(EVAObjectModelUtils.getClusteredVariantHash(it)))})
         }
     }
 
