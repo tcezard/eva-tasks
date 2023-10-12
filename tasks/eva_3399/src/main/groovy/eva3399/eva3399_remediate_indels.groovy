@@ -39,6 +39,7 @@ if (!options) {
 }
 
 String assemblyToRemediate = options.assemblyAccession
+int taxonomyToRemediate = options.taxonomy.toInteger()
 String fastaDir = options.fastaDir
 def (customFastaFilePath, customAssemblyReportPath) = getCustomFastaAndAssemblyReportPaths(assemblyToRemediate, fastaDir)
 String outputDirForAssembly = "${options.remappingOutputDir}/${assemblyToRemediate}"
@@ -46,7 +47,7 @@ String rsReportPath = "${outputDirForAssembly}/rsReportFile"
 runProcess("mkdir -p ${outputDirForAssembly}")
 List<String> remappedAssemblies = allRemappedAssemblies.getOrDefault(assemblyToRemediate, [])
 // Is this assembly the current target assembly for the taxonomy?
-boolean isTargetAssembly = taxonomyTargetAssemblyMap[options.taxonomy].equals(assemblyToRemediate)
+boolean isTargetAssembly = taxonomyTargetAssemblyMap[taxonomyToRemediate].equals(assemblyToRemediate)
 Set<String> sourceAssemblies = allRemappedAssemblies.findAll{srcAsm, remappedAsms ->
     remappedAsms.contains(assemblyToRemediate)}.keySet()
 

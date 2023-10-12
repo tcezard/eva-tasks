@@ -240,8 +240,10 @@ class RemediateIndels {
     def insertIntoProdEnv = {List<SubmittedVariantEntity> svesToInsert ->
         def correspondingOldSveRecords = _getSSRecordsBeforeNorm(svesToInsert)
         _removeSves(svesToInsert)
-        this.prodEnv.mongoTemplate.insert(svesToInsert.findAll{it.accession >= 5e9}, sveClass)
-        this.prodEnv.mongoTemplate.insert(svesToInsert.findAll{it.accession < 5e9}, dbsnpSveClass)
+        this.prodEnv.mongoTemplate.save(svesToInsert.findAll{it.accession >= 5e9},
+                this.prodEnv.mongoTemplate.getCollectionName(sveClass))
+        this.prodEnv.mongoTemplate.save(svesToInsert.findAll{it.accession < 5e9},
+                this.prodEnv.mongoTemplate.getCollectionName(dbsnpSveClass))
         _writeSSLocusUpdateOps(svesToInsert, correspondingOldSveRecords)
         _assignRs(svesToInsert)
     }
