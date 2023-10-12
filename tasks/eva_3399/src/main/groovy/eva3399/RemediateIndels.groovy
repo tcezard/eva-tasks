@@ -6,7 +6,6 @@ import org.springframework.data.mongodb.core.query.Update
 import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.eva.accession.core.EVAObjectModelUtils
 import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantOperationEntity
-import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
@@ -37,7 +36,7 @@ class RemediateIndels {
 
     // Remove old SS hash tacked on the start of remapping ID. While this will be useful later on, for now we don't need it!
     // See here: https://github.com/EBIvariation/eva-tasks/blob/27e4a1bda59fb30e8baabd2500119ae9ffacf05d/tasks/eva_3371/src/main/groovy/eva3371/eva3371_detect_unnormalized_indels.groovy#L169
-    def _undoEVA3371Hack = { SubmittedVariantEntity sve ->
+    def _undoEVA3371Hack = {sve ->
         if (Objects.isNull(sve.remappedFrom)) sve.setRemappingId(null)
         if (Objects.nonNull(sve.remappingId)) {
             if (sve.remappingId.contains("_")) {
@@ -48,7 +47,7 @@ class RemediateIndels {
     }
 
     // Get SS which are candidates for merging - collected in EVA-3380
-    def _getMergeableSS = {List<SubmittedVariantEntity> sves ->
+    def _getMergeableSS = {sves ->
         def ssHashesToFind = sves.collect{it.hashedMessage}
         def clashingHashRecords = this.devEnv.mongoTemplate.find(query(where("_id").in(ssHashesToFind)),
                 ClashingSSHashes.class)
@@ -66,7 +65,7 @@ class RemediateIndels {
         return clashingHashRecords
     }
 
-    def _prioritise = {SubmittedVariantEntity sve1, SubmittedVariantEntity sve2 ->
+    def _prioritise = {sve1, sve2 ->
         def sve1DD = new SubmittedVariantDiscardDeterminants(sve1, sve1.accession, sve1.remappedFrom, sve1.createdDate)
         def sve2DD = new SubmittedVariantDiscardDeterminants(sve2, sve2.accession, sve2.remappedFrom, sve2.createdDate)
         return SubmittedVariantDiscardPolicy.prioritise(sve1DD, sve2DD).sveToKeep.sve
@@ -74,10 +73,13 @@ class RemediateIndels {
 
     // Given a set of merge candidates in a ClashingSSHashes object, determine the target SS
     def _getMergeTargetAndMergees = { ClashingSSHashes clashingSSHashRecord ->
+        // This can happen sometimes if all the merge targets/mergees were deleted for some reason (for ex: deprecation in the source assembly)
+        if (clashingSSHashRecord.clashingSS.size() == 0) return [null, []]
         // If additional merge targets were deleted elsewhere in this script for some reason
         // just return the merge target with no mergees
         if (clashingSSHashRecord.clashingSS.size() == 1) return [clashingSSHashRecord.clashingSS[0], []]
         def mergeTarget = clashingSSHashRecord.clashingSS[0]
+        logger.info("Processing clashing SS record with merge target: ${mergeTarget}...")
         (1..(clashingSSHashRecord.clashingSS.size()-1)).each{i ->
             mergeTarget = _prioritise(mergeTarget, clashingSSHashRecord.clashingSS[i])
         }
@@ -85,15 +87,15 @@ class RemediateIndels {
                 clashingSSHashRecord.clashingSS.findAll{it.accession != mergeTarget.accession}]
     }
 
-    def _getSSRecordsBeforeNorm = {List<SubmittedVariantEntity> svesToNormalize ->
+    def _getSSRecordsBeforeNorm = {svesToNormalize ->
         return [sveClass, dbsnpSveClass].collect {collectionClass ->
             this.prodEnv.mongoTemplate.find(query(where("accession").in(svesToNormalize.collect{it.accession})
                     .and("seq").is(this.assembly)), collectionClass)
         }.flatten()
     }
 
-    def _writeSSLocusUpdateOps = {List<SubmittedVariantEntity> svesWithUpdatedLocus,
-                                  List<SubmittedVariantEntity> ssRecordsBeforeNorm ->
+    def _writeSSLocusUpdateOps = {svesWithUpdatedLocus,
+                                  ssRecordsBeforeNorm ->
         def (evaSVOEOps, dbsnpSVOEOps) = [new ArrayList<>(), new ArrayList<>()]
         def oldSSRecordsGroupedBySSID = ssRecordsBeforeNorm.groupBy { it.accession }
         svesWithUpdatedLocus.each {sve ->
@@ -109,24 +111,33 @@ class RemediateIndels {
         this.prodEnv.bulkInsertIgnoreDuplicates(dbsnpSVOEOps, dbsnpSvoeClass)
     }
 
-    def _writeMergeTarget = {SubmittedVariantEntity mergeTarget ->
+    def _writeMergeTarget = {mergeTarget ->
         def singletonListWithMergeTarget = Collections.singletonList(mergeTarget)
         def mergeTargetCollection = (mergeTarget.accession >= 5e9) ? sveClass : dbsnpSveClass
         def hashExistsInProd = ([sveClass, dbsnpSveClass].collect {collectionClass ->
             this.prodEnv.mongoTemplate.find(query(where("_id").is(mergeTarget.hashedMessage)), collectionClass)
         }.flatten().size() > 0)
         def mergeTargetRecordsBeforeNorm = _getSSRecordsBeforeNorm(singletonListWithMergeTarget)
+        mergeTargetRecordsBeforeNorm.each{logger.info("Merge target before normalization ${it}...")}
         // The following replaces the existing SS entry with the hash with the mergeTarget record
         // Or creates a new entry if no current entry exists
         this.prodEnv.mongoTemplate.save(mergeTarget, prodEnv.mongoTemplate.getCollectionName(mergeTargetCollection))
+        this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").is(mergeTarget.accession)
+                .and("seq").is(this.assembly).and("_id").ne(mergeTarget.hashedMessage)), mergeTargetCollection).each{
+            logger.info("Removed document ${it}...")
+        }
+        this.prodEnv.mongoTemplate.find(query(where("_id").is(mergeTarget)),mergeTargetCollection).each{
+            logger.info("Created record ${it} with SS ID ${it.accession} and hash ${it.hashedMessage}....")
+        }
         // If the normalized hash did not previously exist in PROD, it means we have updated the locus of an existing SS
         // Write an operation to indicate that the locus was updated for the SS
         if (!hashExistsInProd) _writeSSLocusUpdateOps(singletonListWithMergeTarget, mergeTargetRecordsBeforeNorm)
     }
 
-    def _removeSves = {List<SubmittedVariantEntity> sves, boolean deleteRemapped=false ->
-        def oldSSIDs = sves.collect{it.accession}
+    def _removeSves = {sves, boolean deleteRemapped=false ->
+        def oldSSIDs = sves.collect{it.accession}.toSet()
         [sveClass, dbsnpSveClass].each{collectionClass ->
+            oldSSIDs.each{logger.info("Removing SS ID entry for ss${it} from ${this.assembly}...")}
             // Remove all occurrences of this SS including in remapped assemblies
             this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").in(oldSSIDs)
                     .and("seq").is(this.assembly)), collectionClass)
@@ -142,17 +153,21 @@ class RemediateIndels {
                     this.prodEnv.mongoTemplate.save(opClass)
                 }
                 this.prodEnv.mongoTemplate.findAllAndRemove(query(where("accession").in(oldSSIDs)
-                        .and("remappedFrom").is(this.assembly)), collectionClass)
+                        .and("remappedFrom").is(this.assembly)), collectionClass).each{
+                    logger.info("Removing SS ID entry for ss${it.accession} from ${it.referenceSequenceAccession} " +
+                            "remapped from ${this.assembly}...")
+                }
             }
         }
     }
 
-    def _writeMergeOps = {List<SubmittedVariantEntity> mergees, SubmittedVariantEntity mergeTarget ->
+    def _writeMergeOps = {mergees, mergeTarget ->
         mergees.each { mergee ->
             logger.info("Merging ${mergee.accession} to ${mergeTarget.accession}...")
             def mergeOpId = "EVA3399_MERGED_${this.assembly}_${mergee.accession}_${mergeTarget.accession}".toString()
             def mergeOpClass = (mergee.accession >= 5e9) ? svoeClass : dbsnpSvoeClass
-            def mergeOp = new SubmittedVariantOperationEntity()
+            def mergeOp =  (mergee.accession >= 5e9) ?
+                    new SubmittedVariantOperationEntity(): new DbsnpSubmittedVariantOperationEntity()
             mergeOp.fill(EventType.MERGED, mergee.accession, mergeTarget.accession,
                     "EVA3399 - Hash collision with another SS after normalization",
                     Arrays.asList(new SubmittedVariantInactiveEntity(mergee)))
@@ -161,7 +176,7 @@ class RemediateIndels {
         }
     }
 
-    def _updateSSWithRS = {List<SubmittedVariantEntity> svesToUpdate, Map<String, Long> rsIDsByHash ->
+    def _updateSSWithRS = {svesToUpdate, Map<String, Long> rsIDsByHash ->
         _clearExistingRs(svesToUpdate)
         def svesGroupedByRsHash = svesToUpdate.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it)}
         rsIDsByHash.each {rsHash, rsID ->
@@ -176,7 +191,7 @@ class RemediateIndels {
         }
     }
 
-    def _clearExistingRs = {List<SubmittedVariantEntity> sves ->
+    def _clearExistingRs = {sves ->
         def svesHash = sves.collect{it.hashedMessage}
         sves.each{it.setClusteredVariantAccession(null)}
         [sveClass, dbsnpSveClass].each {ssClass ->
@@ -184,13 +199,13 @@ class RemediateIndels {
         }
     }
 
-    def _assignNewRs = {List<SubmittedVariantEntity> svesToUpdate ->
+    def _assignNewRs = {svesToUpdate ->
         def rsRecordsToCreate = svesToUpdate.collect { EVAObjectModelUtils.toClusteredVariant(it)}
         def rsIDsByHash = this.prodEnv.clusteredVariantAccessioningService.getOrCreate(rsRecordsToCreate).collectEntries { [it.hash, it.accession] }
         _updateSSWithRS(svesToUpdate, rsIDsByHash)
     }
 
-    def _assignRs = {List<SubmittedVariantEntity> svesToUpdate ->
+    def _assignRs = {svesToUpdate ->
         def svesToBeAssignedExistingRS = svesToUpdate.findAll{Objects.nonNull(it.clusteredVariantAccession)}
         def existingRsHashesToFind = svesToUpdate.collect{EVAObjectModelUtils.getClusteredVariantHash(it)}.toSet()
         def existingRsIDsByHash = [cveClass, dbsnpCveClass].collect{collectionClass ->
@@ -204,7 +219,7 @@ class RemediateIndels {
         }
     }
 
-    def _merge = {SubmittedVariantEntity mergeTarget, List<SubmittedVariantEntity> mergees ->
+    def _merge = {mergeTarget, mergees ->
         _writeMergeTarget(mergeTarget)
         // Remove mergees in this and remapped assemblies as well
         _removeSves(mergees, true)
@@ -213,14 +228,15 @@ class RemediateIndels {
     }
 
     def mergeInProdEnv = { List<ClashingSSHashes> clashingHashes ->
-        def mergeTargetsAndMergeeList = clashingHashes.collect { _getMergeTargetAndMergees(it) }
+        def mergeTargetsAndMergeeList = clashingHashes.collect {
+            _getMergeTargetAndMergees(it) }.findAll {Objects.nonNull(it[0])}
         mergeTargetsAndMergeeList.each {mergeTargetAndMergees ->
             def (mergeTarget, mergees) = mergeTargetAndMergees
             _merge(mergeTarget, mergees)
         }
     }
 
-    def insertIntoProdEnv = {List<SubmittedVariantEntity> svesToInsert ->
+    def insertIntoProdEnv = {svesToInsert ->
         def correspondingOldSveRecords = _getSSRecordsBeforeNorm(svesToInsert)
         _removeSves(svesToInsert)
         this.prodEnv.mongoTemplate.insert(svesToInsert.findAll{it.accession >= 5e9}, sveClass)
@@ -235,7 +251,7 @@ class RemediateIndels {
         }
         def numRecordsProcessed = 0
         evaAndDbsnpSveCursorsDev.each {
-            it.each {List<SubmittedVariantEntity> sves ->
+            it.each {sves ->
                 sves = sves.collect{_undoEVA3371Hack(it)}
                 def mergeableSS = _getMergeableSS(sves)
                 def mergeableSSHashes = mergeableSS.collect{it.ssHash}.toSet()

@@ -1,8 +1,8 @@
 package eva3399
 
+import org.springframework.data.mongodb.core.query.Update
 import uk.ac.ebi.eva.accession.clustering.batch.io.BackPropagatedRSWriter
 import uk.ac.ebi.eva.accession.clustering.configuration.BeanNames
-import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
 import uk.ac.ebi.eva.groovy.commons.RetryableBatchingCursor
 
@@ -31,6 +31,10 @@ class BackPropagateUpdatedRS {
                 this.backPropEnv.mongoTemplate, it)}
         opsOfImpactedSS.each{it.each{opsInBatch ->
             def impactedSSIds = opsInBatch.collect{it.accession}.toSet()
+            [sveClass, dbsnpSveClass].each{ssClass ->
+                this.backPropEnv.mongoTemplate.updateMulti(query(where("seq").is(this.sourceAssembly)
+                        .and("accession").in(impactedSSIds)), new Update().unset("backPropRS"), ssClass)
+            }
             def changedSS = [sveClass, dbsnpSveClass].collect{ssClass ->
                 this.backPropEnv.mongoTemplate.find(query(where("seq").is(this.sourceAssembly)
                         .and("accession").in(impactedSSIds)), ssClass)

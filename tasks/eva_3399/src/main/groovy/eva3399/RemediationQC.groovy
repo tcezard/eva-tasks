@@ -2,6 +2,7 @@ package eva3399
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
@@ -11,15 +12,15 @@ import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
-class QCRemediation {
-    static Logger logger = LoggerFactory.getLogger(QCRemediation.class)
+class RemediationQC {
+    static Logger logger = LoggerFactory.getLogger(RemediationQC.class)
     String assemblyToQC
     EVADatabaseEnvironment prodEnv
     EVADatabaseEnvironment devEnv
     boolean isTargetAssembly
     private RemediateIndels remediateIndelsObj
 
-    QCRemediation(String assemblyToQC, EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv,
+    RemediationQC(String assemblyToQC, EVADatabaseEnvironment prodEnv, EVADatabaseEnvironment devEnv,
                   boolean isTargetAssembly) {
         this.assemblyToQC = assemblyToQC
         this.prodEnv = prodEnv
@@ -68,15 +69,14 @@ class QCRemediation {
             this.prodEnv.mongoTemplate.find(query(where("_id").in(svoesGroupedByHash.keySet())), it)
         }.flatten().collectEntries {[it.hashedMessage, it]}
         (svoesGroupedByHash.keySet() - mergeTargetsInProdGroupedByHash.keySet()).each {
-            logger.error("SS hash ${it} not found in PROD!")
+            logger.error("Submitted variant with hash ${it} not found in PROD!")
         }
         mergeTargetsInProdGroupedByHash.each {ssHash, prodSve ->
             def mergeeSves = svoesGroupedByHash.get(ssHash).collect{it.inactiveObjects}.flatten().collect{it.toSubmittedVariantEntity()}
             mergeeSves.each {mergeeSve ->
-                def expectedID = this.remediateIndelsObj._prioritise(mergeeSve, prodSve).accession
-                if (expectedID != prodSve.accession) {
-                    logger.error("Submitted variant with ${prodSve.accession} in PROD " +
-                            "should not have been the merge target! Expected ${expectedID}!")
+                if (mergeeSve.accession < prodSve.accession) {
+                    logger.error("Submitted variant with ID ${prodSve.accession} in PROD " +
+                            "should not have been the merge target! Expected ${expectedID}! to be the merge target")
                 }
             }
         }
@@ -145,21 +145,32 @@ class QCRemediation {
                 remappedSves.collectEntries {[it.accession, it]}
         def sourceAssemblies = remappedSves.collect{it.remappedFrom}.toSet()
         def remappedSveIDs = prodSves.collect{it.accession}
-        def remappedSveRSIDs = prodSves.collect{it.clusteredVariantAccession}.toSet()
-        List<SubmittedVariantEntity> svesWithBackPropRSInProd = [sveClass, dbsnpSveClass].collect {
+        List<SubmittedVariantEntity> svesInProd = [sveClass, dbsnpSveClass].collect {
             this.prodEnv.mongoTemplate.find(query(where("accession").in(remappedSveIDs)
-                    .and("seq").in(sourceAssemblies).and("backPropRS").in(remappedSveRSIDs)), it)}.flatten()
-        (remappedSveRSIDs - svesWithBackPropRSInProd.collect{it.backPropagatedVariantAccession}.toSet()).each {
-            logger.error("No backpropagated RS entry for RS ${it} in the source assembly " +
-                    "originating from the remapped assembly ${this.assemblyToQC}!")
-        }
-        svesWithBackPropRSInProd.each {sve ->
+                    .and("seq").in(sourceAssemblies)), it)}.flatten()
+        svesInProd.each {sve ->
             def expectedBackPropRS = remappedSvesGroupedByAccession[sve.accession].clusteredVariantAccession
-            if (sve.backPropagatedVariantAccession != expectedBackPropRS) {
-                logger.error("Expected ${expectedBackPropRS} " +
+            if (Objects.isNull(sve.backPropagatedVariantAccession) && sve.clusteredVariantAccession != expectedBackPropRS)
+            {
+                logger.error("No backpropagated RS entry for RS ${expectedBackPropRS} in the source assembly " +
+                        "originating from the remapped assembly ${this.assemblyToQC}!")
+            }
+            else if (Objects.nonNull(sve.backPropagatedVariantAccession) &&
+                    sve.backPropagatedVariantAccession != expectedBackPropRS) {
+                logger.error("Expected back-propagated RS ${expectedBackPropRS} " +
                         "but found ${sve.backPropagatedVariantAccession} for SS ${sve}!")
             }
         }
+    }
+
+    def getSSMergedInSourceAssembly = {List<SubmittedVariantEntity> sves ->
+        def accessionsToFind = sves.findAll{
+            Objects.nonNull(it.remappedFrom)}.collect{it.accession}.toSet()
+        def sourceAssemblies = sves.findAll{
+            Objects.nonNull(it.remappedFrom)}.collect{it.remappedFrom}.toSet()
+        return [svoeClass, dbsnpSvoeClass].collect{prodEnv.mongoTemplate.find(query(where("accession").in(accessionsToFind)
+                .and("inactiveObjects.seq").in(sourceAssemblies).and("eventType").is(EventType.MERGED.toString())), it)
+        }.flatten().collect{it.accession}.toSet()
     }
 
     void runQC() {
@@ -171,7 +182,10 @@ class QCRemediation {
                 List<ClashingSSHashes> mergeableSS = this.devEnv.mongoTemplate.find(query(where("_id")
                         .in(ssHashesToFind)), ClashingSSHashes.class)
                 def mergeableSSHashes = mergeableSS.collect{it.ssHash}.toSet()
-                def unmergeableSS = sves.findAll{!(mergeableSSHashes.contains(it.hashedMessage))}
+                //Remove prodSves that were removed because the SS in the source assembly was merged
+                def ssIDsMergedInSrcAsm = getSSMergedInSourceAssembly(sves)
+                def unmergeableSS = sves.findAll{!(mergeableSSHashes.contains(it.hashedMessage)) &&
+                        !(ssIDsMergedInSrcAsm.contains(it.accession))}
                 prodQCChecks(unmergeableSS)
 
                 def mergeTargetAndMergeeList = mergeableSS.collect {
