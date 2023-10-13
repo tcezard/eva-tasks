@@ -25,12 +25,11 @@ class BackPropagateUpdatedRS {
         def backPropagatedRSWriter =
                 this.backPropEnv.springApplicationContext.getBean(BeanNames.BACK_PROPAGATED_RS_WRITER,
                         BackPropagatedRSWriter.class)
-        def opsOfImpactedSS = [svoeClass, dbsnpSvoeClass].collect{new RetryableBatchingCursor<>(
-                where("_id").regex("EVA3399_UPD_LOCUS_${this.remappedAssembly}_.*").and(
-                        "inactiveObjects.remappedFrom").is(this.sourceAssembly),
-                this.backPropEnv.mongoTemplate, it)}
-        opsOfImpactedSS.each{it.each{opsInBatch ->
-            def impactedSSIds = opsInBatch.collect{it.accession}.toSet()
+        def impactedSS = [sveClass, dbsnpSveClass].collect{new RetryableBatchingCursor<>(
+                where("seq").is(this.remappedAssembly).and("remappedFrom").is(this.sourceAssembly)
+                        .and("rs").exists(true), this.backPropEnv.mongoTemplate, it)}
+        impactedSS.each{it.each{ssInBatch ->
+            def impactedSSIds = ssInBatch.collect{it.accession}.toSet()
             [sveClass, dbsnpSveClass].each{ssClass ->
                 this.backPropEnv.mongoTemplate.updateMulti(query(where("seq").is(this.sourceAssembly)
                         .and("accession").in(impactedSSIds)), new Update().unset("backPropRS"), ssClass)
