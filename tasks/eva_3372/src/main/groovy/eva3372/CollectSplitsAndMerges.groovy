@@ -65,7 +65,7 @@ class CollectSplitsAndMerges {
 
         // For these rsIds, get all SVEs and corresponding hashes
         def svesInDbWithRs = [sveClass, dbsnpSveClass].collectMany { entityClass ->
-            prodEnv.mongoTemplate.find(query(where("rs").in(rsIdsToProcess)), entityClass)
+            prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsIdsToProcess)), entityClass)
         }
         def svesGroupedByRs = svesInDbWithRs.groupBy { it.clusteredVariantAccession }
         def recordsToInsert = []
@@ -75,7 +75,10 @@ class CollectSplitsAndMerges {
                 recordsToInsert.add(new CveHashesWithRsId("${assembly}#${rsId}", assembly, rsId, cveHashes))
             }
         }
-        def insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, CveHashesWithRsId.class)
+        def insertedCount = 0
+        if (!recordsToInsert.isEmpty()) {
+            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, CveHashesWithRsId.class)
+        }
         logger.info("Inserted ${insertedCount} split candidate documents (CveHashesWithRsId)")
     }
 
@@ -89,14 +92,16 @@ class CollectSplitsAndMerges {
         def processedCveHashes = existingRecords.collect { it.cveHash }
 
         // Add to existing records
-        def bulkOps = devEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, RsIdsWithCveHash.class)
-        existingRecords.each { rsIdsWithHash ->
-            def svesToProcess = svesGroupedByCveHash.get(rsIdsWithHash.cveHash)
-            def rsIdsToAdd = svesToProcess.collect { it.clusteredVariantAccession }
-            rsIdsWithHash.rsIds.addAll(rsIdsToAdd)
-            bulkOps.updateOne(query(where("_id").is("${assembly}#${rsIdsWithHash.cveHash}")), Update.update("rsIds", rsIdsWithHash.rsIds))
+        if (!existingRecords.isEmpty()) {
+            def bulkOps = devEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, RsIdsWithCveHash.class)
+            existingRecords.each { rsIdsWithHash ->
+                def svesToProcess = svesGroupedByCveHash.get(rsIdsWithHash.cveHash)
+                def rsIdsToAdd = svesToProcess.collect { it.clusteredVariantAccession }
+                rsIdsWithHash.rsIds.addAll(rsIdsToAdd)
+                bulkOps.updateOne(query(where("_id").is("${assembly}#${rsIdsWithHash.cveHash}")), Update.update("rsIds", rsIdsWithHash.rsIds))
+            }
+            bulkOps.execute()
         }
-        bulkOps.execute()
 
         // Create new records
         def cveHashesToProcess = cveHashes.findAll { !processedCveHashes.contains(it) }
@@ -107,7 +112,10 @@ class CollectSplitsAndMerges {
                 recordsToInsert.add(new RsIdsWithCveHash("${assembly}#${hash}", assembly, hash, rsIds))
             }
         }
-        def insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash)
+        def insertedCount = 0
+        if (!recordsToInsert.isEmpty()) {
+            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash)
+        }
         logger.info("Inserted ${insertedCount} merge candidate documents (RsIdsWithCveHash)")
     }
 
