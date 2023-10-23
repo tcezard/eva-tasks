@@ -43,7 +43,7 @@ import static org.springframework.data.mongodb.core.query.Query.query
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
 def cli = new CliBuilder()
-cli.prodPropertiesFile(args: 1, "Production properties file for connecting to prod db", required: true)
+cli.envPropertiesFile(args: 1, "Production properties file for connecting to prod db", required: true)
 cli.hashcollisionFile(args: 2, "Path to the file to store hash collision ids", required: true)
 
 def options = cli.parse(args)
@@ -53,7 +53,7 @@ if (!options) {
 }
 
 // call to remediate lowercase nucleotide
-new RemediateLowerCaseNucleotide(options.prodPropertiesFile, options.hashcollisionFile).remediate()
+new RemediateLowerCaseNucleotide(options.envPropertiesFile, options.hashcollisionFile).remediate()
 
 class RemediateLowerCaseNucleotide {
     private String hashCollisionFilePath
@@ -62,8 +62,8 @@ class RemediateLowerCaseNucleotide {
 
     static def logger = LoggerFactory.getLogger(Application.class)
 
-    RemediateLowerCaseNucleotide(prodPropertiesFile, hashcollisionFile) {
-        this.dbEnv = createFromSpringContext(prodPropertiesFile, Application.class)
+    RemediateLowerCaseNucleotide(envPropertiesFile, hashcollisionFile) {
+        this.dbEnv = createFromSpringContext(envPropertiesFile, Application.class)
         this.hashCollisionFilePath = hashcollisionFile
         this.hashingFunction = new SubmittedVariantSummaryFunction().andThen(new SHA1HashingFunction())
     }
@@ -89,13 +89,14 @@ class RemediateLowerCaseNucleotide {
         return hashingFunction.apply(temp)
     }
 
-    List<String> getExistingHashList(Collection<String> newHashList) {
-        List<SubmittedVariantEntity> existingHashSVEList = dbEnv.mongoTemplate
-                .find(query(where("_id").in(newHashList)), sveClass)
+    Set<String> getExistingHashList(Collection<String> newHashList) {
+        List<SubmittedVariantEntity> existingHashSVEList = [sveClass, dbsnpSveClass]
+                .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("_id").in(newHashList)), ssClass))
+                .flatten()
 
         return existingHashSVEList.stream()
                 .map(sve -> sve.getHashedMessage())
-                .collect(Collectors.toList())
+                .collect(Collectors.toSet())
     }
 
     void insertSVEWithNewHash(List<SubmittedVariantEntity> sveList, Map<String, String> mapOldHashNewHash) {
@@ -221,50 +222,56 @@ class RemediateLowerCaseNucleotide {
     }
 
     void remediate() {
-        // read all the documents from SubmittedVariantEntity
-        new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, sveClass).each {
-            sveBatchList ->
-                {
-                    // find which sve from the batch are impacted by lower case nucleotide issue
-                    List<SubmittedVariantEntity> impactedSVEList = getImpactedSVEList(sveBatchList)
+        [sveClass, dbsnpSveClass].each {
+            ssClass ->{
+                // read all the documents from SubmittedVariantEntity
+                new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, ssClass).each {
+                    sveBatchList ->
+                        {
+                            // find which sve from the batch are impacted by lower case nucleotide issue
+                            List<SubmittedVariantEntity> impactedSVEList = getImpactedSVEList(sveBatchList)
 
-                    // if there are any sve impacted
-                    if (!impactedSVEList.isEmpty()) {
-                        // make a map of old hash ids of sve and new hash
-                        Map<String, String> mapOldHashNewHash = impactedSVEList.stream()
-                                .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
+                            // if there are any sve impacted
+                            if (!impactedSVEList.isEmpty()) {
+                                // make a map of old hash ids of sve and new hash
+                                Map<String, String> mapOldHashNewHash = impactedSVEList.stream()
+                                        .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
 
-                        // find which of the new hashes already exist in db (will cause hash collision)
-                        List<String> newHashExistList = getExistingHashList(mapOldHashNewHash.values())
+                                // find which of the new hashes already exist in db (will cause hash collision)
+                                Set<String> newHashExistList = getExistingHashList(mapOldHashNewHash.values())
 
-                        // partition the impacted sve list into 2 parts  (hash collision and no hash collision)
-                        Map<Boolean, List<SubmittedVariantEntity>> svePartitionMap = impactedSVEList.stream()
-                                .collect(Collectors.partitioningBy(sve -> newHashExistList.contains(mapOldHashNewHash.get(sve.getHashedMessage()))))
-                        List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
+                                // partition the impacted sve list into 2 parts  (hash collision and no hash collision)
+                                Map<Boolean, List<SubmittedVariantEntity>> svePartitionMap = impactedSVEList.stream()
+                                .collect(Collectors.groupingBy{sve -> newHashExistList.contains(mapOldHashNewHash.get(sve.getHashedMessage()))})
 
-                        // sve with no hash collision - insert sve with new hash and deprecate sve with old hash
-                        // can't update in place as _id is immutable
-                        logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
-                        insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
-                        deprecateSVEWithOldHash(noHashCollisionSVEList)
+                                // sve with no hash collision - insert sve with new hash and deprecate sve with old hash
+                                // can't update in place as _id is immutable
+                                List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
+                                logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
+                                insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
+                                deprecateSVEWithOldHash(noHashCollisionSVEList)
 
-                        List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
-                        if (!hashCollisionSVEList.isEmpty()) {
-                            logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
-                            List<String> collisionList = hashCollisionSVEList.stream()
-                                    .map(sve -> sve.getHashedMessage())
-                                    .collect(Collectors.toList())
+                                // sve with hash collision
+                                List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
+                                if (!hashCollisionSVEList.isEmpty()) {
+                                    logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
+                                    List<String> collisionList = hashCollisionSVEList.stream()
+                                            .map(sve -> sve.getHashedMessage())
+                                            .collect(Collectors.toList())
 
-                            updateFileWithHashCollisionList(collisionList)
-                            deprecateSVEWithOldHash(hashCollisionSVEList)
+                                    updateFileWithHashCollisionList(collisionList)
+                                    deprecateSVEWithOldHash(hashCollisionSVEList)
+                                }
+
+                                //update SVE Operations
+                                updateSVOE(impactedSVEList, mapOldHashNewHash)
+
+                            }
                         }
-
-                        //update SVE Operations
-                        updateSVOE(impactedSVEList, mapOldHashNewHash)
-
-                    }
                 }
+            }
         }
+
     }
 }
 
