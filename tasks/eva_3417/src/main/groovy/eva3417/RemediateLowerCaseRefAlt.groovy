@@ -1,40 +1,24 @@
 package eva3417
 
-
 import groovy.cli.picocli.CliBuilder
 import org.slf4j.LoggerFactory
-import org.springframework.batch.core.JobParameter
-import org.springframework.batch.core.JobParameters
-import org.springframework.batch.core.StepExecutionListener
-import org.springframework.batch.core.configuration.annotation.JobBuilderFactory
-import org.springframework.batch.core.configuration.annotation.StepBuilderFactory
-import org.springframework.batch.core.launch.JobLauncher
-import org.springframework.batch.core.launch.support.RunIdIncrementer
-import org.springframework.batch.core.repository.JobRepository
-import org.springframework.batch.item.*
-import org.springframework.batch.repeat.policy.SimpleCompletionPolicy
 import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
-import org.springframework.transaction.PlatformTransactionManager
+import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.ampt2d.commons.accession.hashing.SHA1HashingFunction
-import uk.ac.ebi.eva.accession.core.batch.io.SubmittedVariantDeprecationWriter
 import uk.ac.ebi.eva.accession.core.model.ISubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
+import uk.ac.ebi.eva.accession.core.model.dbsnp.DbsnpSubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.summary.SubmittedVariantSummaryFunction
 import uk.ac.ebi.eva.accession.deprecate.Application
-import uk.ac.ebi.eva.accession.deprecate.batch.listeners.DeprecationStepProgressListener
-import uk.ac.ebi.eva.accession.deprecate.parameters.InputParameters
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
 import uk.ac.ebi.eva.groovy.commons.RetryableBatchingCursor
-import uk.ac.ebi.eva.metrics.metric.MetricCompute
 
-import java.text.ParseException
-import java.time.LocalDateTime
 import java.util.function.Function
 import java.util.stream.Collectors
 
@@ -116,64 +100,6 @@ class RemediateLowerCaseNucleotide {
         dbEnv.mongoTemplate.insert(sveWithNewHashList, sveClass)
     }
 
-    void deprecateSVEWithOldHash(List<SubmittedVariantEntity> sveList) {
-        // create a map of sve with key being the assembly
-        Map<String, List<SubmittedVariantEntity>> mapAssemblySVE = sveList.stream()
-                .collect(Collectors.groupingBy(sve -> sve.getReferenceSequenceAccession()))
-
-        // call the deprecationWriter for each assembly once
-        for (Map.Entry<String, List<SubmittedVariantEntity>> entry : mapAssemblySVE.entrySet()) {
-            //assembly for deprecation
-            String assemblyAccession = entry.getKey()
-            // SVE in assembly to deprecate
-            List<SubmittedVariantEntity> svesToDeprecate = entry.getValue()
-
-            def inputParameters = dbEnv.springApplicationContext.getBean(InputParameters.class)
-            def svDeprecationWriter = new SubmittedVariantDeprecationWriter(assemblyAccession,
-                    dbEnv.mongoTemplate,
-                    dbEnv.submittedVariantAccessioningService, dbEnv.clusteredVariantAccessioningService,
-                    dbEnv.springApplicationContext.getBean("accessioningMonotonicInitSs", Long.class),
-                    dbEnv.springApplicationContext.getBean("accessioningMonotonicInitRs", Long.class),
-                    "EVA3417", "Deprecated as nucleotide was lower case")
-            def dbEnvProgressListener =
-                    new DeprecationStepProgressListener(svDeprecationWriter, dbEnv.springApplicationContext.getBean(MetricCompute.class))
-
-            def dbEnvJobRepository = dbEnv.springApplicationContext.getBean(JobRepository.class)
-            def dbEnvTxnMgr = dbEnv.springApplicationContext.getBean(PlatformTransactionManager.class)
-
-            def dbEnvJobBuilderFactory = new JobBuilderFactory(dbEnvJobRepository)
-            def dbEnvStepBuilderFactory = new StepBuilderFactory(dbEnvJobRepository, dbEnvTxnMgr)
-
-            def mapWtSSIterator = svesToDeprecate.iterator()
-            def svDeprecateJobSteps = dbEnvStepBuilderFactory.get("stepsForSSDeprecation")
-                    .chunk(new SimpleCompletionPolicy(inputParameters.chunkSize)).reader(
-                    new ItemStreamReader<SubmittedVariantEntity>() {
-                        @Override
-                        SubmittedVariantEntity read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
-                            return mapWtSSIterator.hasNext() ? mapWtSSIterator.next() : null
-                        }
-
-                        @Override
-                        void open(ExecutionContext executionContext) throws ItemStreamException {}
-
-                        @Override
-                        void update(ExecutionContext executionContext) throws ItemStreamException {}
-
-                        @Override
-                        void close() throws ItemStreamException {}
-                    })
-                    .writer(svDeprecationWriter)
-                    .listener((StepExecutionListener) dbEnvProgressListener)
-                    .build()
-
-            def svDeprecationJob = dbEnvJobBuilderFactory.get("deprecationJob")
-                    .start(svDeprecateJobSteps)
-                    .incrementer(new RunIdIncrementer()).build()
-            def dbEnvJobLauncher = dbEnv.springApplicationContext.getBean(JobLauncher.class)
-            dbEnvJobLauncher.run(svDeprecationJob, new JobParameters(["executionDate": new JobParameter(LocalDateTime.now().toDate())]))
-        }
-    }
-
     void updateFileWithHashCollisionList(List<String> sveHashList) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.hashCollisionFilePath, true))) {
             for (String line : sveHashList) {
@@ -186,7 +112,7 @@ class RemediateLowerCaseNucleotide {
     }
 
 
-    void updateSVOE(List<SubmittedVariantEntity> impactedSVEList, Map<String, String> mapOldHashNewHash) {
+    void updateExistingSVOE(List<SubmittedVariantEntity> impactedSVEList, Map<String, String> mapOldHashNewHash) {
         List<String> impactedSVEIds = impactedSVEList.stream()
                 .map { sve -> sve.getHashedMessage() }
                 .collect(Collectors.toList())
@@ -195,31 +121,60 @@ class RemediateLowerCaseNucleotide {
         new RetryableBatchingCursor<SubmittedVariantOperationEntity>(filterCriteria, dbEnv.mongoTemplate, svoeClass).each {
             sveOperationBatchList ->
                 {
-                    def svoeBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, svoeClass)
+                def svoeBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, svoeClass)
 
-                    for (SubmittedVariantOperationEntity svoe : sveOperationBatchList) {
-                        // create update statement
-                        SubmittedVariantInactiveEntity inactiveSVEDocument = svoe.getInactiveObjects()[0]
-                        String oldHash = inactiveSVEDocument.getHashedMessage()
-                        String newRef = inactiveSVEDocument.getReferenceAllele().toUpperCase()
-                        String newAlt = inactiveSVEDocument.getAlternateAllele().toUpperCase()
-                        String newHash = mapOldHashNewHash.get(oldHash)
+                for (SubmittedVariantOperationEntity svoe : sveOperationBatchList) {
+                    // create update statement
+                    SubmittedVariantInactiveEntity inactiveSVEDocument = svoe.getInactiveObjects()[0]
+                    String oldHash = inactiveSVEDocument.getHashedMessage()
+                    String newRef = inactiveSVEDocument.getReferenceAllele().toUpperCase()
+                    String newAlt = inactiveSVEDocument.getAlternateAllele().toUpperCase()
+                    String newHash = mapOldHashNewHash.get(oldHash)
 
-                        Query findQuery = query(where("inactiveObjects.hashedMessage").is(oldHash))
-                        Update updateQuery = new Update()
-                                .set("inactiveObjects.\$.ref", newRef)
-                                .set("inactiveObjects.\$.alt", newAlt)
-                                .set("inactiveObjects.\$.hashedMessage", newHash)
+                    Query findQuery = query(where("inactiveObjects.hashedMessage").is(oldHash))
+                    Update updateQuery = new Update()
+                            .set("inactiveObjects.\$.ref", newRef)
+                            .set("inactiveObjects.\$.alt", newAlt)
+                            .set("inactiveObjects.\$.hashedMessage", newHash)
 
-                        svoeBulkUpdates.updateOne(findQuery, updateQuery)
-                    }
-
-                    //execute all bulk updates
-                    svoeBulkUpdates.execute()
+                    svoeBulkUpdates.updateOne(findQuery, updateQuery)
                 }
+
+                //execute all bulk updates
+                svoeBulkUpdates.execute()
+            }
         }
 
     }
+
+
+    void insertSVOEUpdateOp(List<SubmittedVariantEntity> sveList,  Class ssClass) {
+        def sveUpdateOpList = new ArrayList<>()
+        for (SubmittedVariantEntity sve : sveList) {
+            def updateOpToWrite = ssClass.equals(sveClass)
+                    ? new SubmittedVariantOperationEntity() : new DbsnpSubmittedVariantOperationEntity()
+            updateOpToWrite.fill(EventType.UPDATED, sve.getAccession(), null,
+                    "EVA3417 - SS updated with upper case ref, alt and a new hash",
+                    Arrays<SubmittedVariantInactiveEntity>.asList(new SubmittedVariantInactiveEntity(sve)).asList())
+
+            updateOpToWrite.setId("EVA3417_UPDATED_${sve.getReferenceSequenceAccession()}_${sve.getHashedMessage()}")
+
+            sveUpdateOpList.add(updateOpToWrite)
+        }
+
+        dbEnv.mongoTemplate.insert(sveUpdateOpList, ssClass.equals(sveClass) ? svoeClass : dbsnpSvoeClass)
+    }
+
+
+    void removeImpactedSVE(List<SubmittedVariantEntity> impactedSVEList, Class ssClass) {
+        List<String> impactedSVEIds = impactedSVEList.stream()
+                .map(sve -> sve.getHashedMessage())
+                .collect(Collectors.toList())
+        Query findQuery = query(where("_id").in(impactedSVEIds))
+
+        dbEnv.mongoTemplate.findAllAndRemove(findQuery, ssClass)
+    }
+
 
     void remediate() {
         [sveClass, dbsnpSveClass].each {
@@ -249,7 +204,6 @@ class RemediateLowerCaseNucleotide {
                                 List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
                                 logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
                                 insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
-                                deprecateSVEWithOldHash(noHashCollisionSVEList)
 
                                 // sve with hash collision
                                 List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
@@ -260,14 +214,18 @@ class RemediateLowerCaseNucleotide {
                                             .collect(Collectors.toList())
 
                                     updateFileWithHashCollisionList(collisionList)
-                                    deprecateSVEWithOldHash(hashCollisionSVEList)
                                 }
 
                                 //update SVE Operations
-                                updateSVOE(impactedSVEList, mapOldHashNewHash)
+                                updateExistingSVOE(impactedSVEList, mapOldHashNewHash)
 
-                            }
+                                // insert sve update operation
+                                insertSVOEUpdateOp(impactedSVEList, ssClass)
+
+                                // remove all impacted sve from the table
+                                removeImpactedSVE(impactedSVEList, ssClass)
                         }
+                    }
                 }
             }
         }
