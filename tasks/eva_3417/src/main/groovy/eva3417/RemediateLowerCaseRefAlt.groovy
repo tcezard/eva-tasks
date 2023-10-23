@@ -1,5 +1,6 @@
 package eva3417
 
+
 import groovy.cli.picocli.CliBuilder
 import org.slf4j.LoggerFactory
 import org.springframework.batch.core.JobParameter
@@ -12,13 +13,18 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer
 import org.springframework.batch.core.repository.JobRepository
 import org.springframework.batch.item.*
 import org.springframework.batch.repeat.policy.SimpleCompletionPolicy
+import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
+import org.springframework.data.mongodb.core.query.Update
 import org.springframework.transaction.PlatformTransactionManager
 import uk.ac.ebi.ampt2d.commons.accession.hashing.SHA1HashingFunction
 import uk.ac.ebi.eva.accession.core.batch.io.SubmittedVariantDeprecationWriter
 import uk.ac.ebi.eva.accession.core.model.ISubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
+import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantInactiveEntity
+import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantOperationEntity
 import uk.ac.ebi.eva.accession.core.summary.SubmittedVariantSummaryFunction
 import uk.ac.ebi.eva.accession.deprecate.Application
 import uk.ac.ebi.eva.accession.deprecate.batch.listeners.DeprecationStepProgressListener
@@ -34,8 +40,7 @@ import java.util.stream.Collectors
 
 import static org.springframework.data.mongodb.core.query.Criteria.where
 import static org.springframework.data.mongodb.core.query.Query.query
-import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.createFromSpringContext
-import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.getSveClass
+import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
 def cli = new CliBuilder()
 cli.prodPropertiesFile(args: 1, "Production properties file for connecting to prod db", required: true)
@@ -93,15 +98,15 @@ class RemediateLowerCaseNucleotide {
                 .collect(Collectors.toList())
     }
 
-    void insertSVEWithNewHash(List<SubmittedVariantEntity> sveList, Map<SubmittedVariantEntity, String> mapSVENewHash) {
+    void insertSVEWithNewHash(List<SubmittedVariantEntity> sveList, Map<String, String> mapOldHashNewHash) {
         List<SubmittedVariantEntity> sveWithNewHashList = new ArrayList<>()
         for (SubmittedVariantEntity sve : sveList) {
             // create a new SVE with updated ref, alt and hash
             SubmittedVariant sveModel = sve.getModel()
             sveModel.setReferenceAllele(sve.getReferenceAllele().toUpperCase())
             sveModel.setAlternateAllele(sve.getAlternateAllele().toUpperCase())
-            SubmittedVariantEntity submittedVariantEntity = new SubmittedVariantEntity(sve.getAccession(), mapSVENewHash.get(sve),
-                    sveModel, sve.getVersion())
+            SubmittedVariantEntity submittedVariantEntity = new SubmittedVariantEntity(sve.getAccession(),
+                    mapOldHashNewHash.get(sve.getHashedMessage()), sveModel, sve.getVersion())
 
             sveWithNewHashList.add(submittedVariantEntity)
         }
@@ -179,6 +184,42 @@ class RemediateLowerCaseNucleotide {
         }
     }
 
+
+    void updateSVOE(List<SubmittedVariantEntity> impactedSVEList, Map<String, String> mapOldHashNewHash) {
+        List<String> impactedSVEIds = impactedSVEList.stream()
+                .map { sve -> sve.getHashedMessage() }
+                .collect(Collectors.toList())
+        Criteria filterCriteria = new Criteria("inactiveObjects.hashedMessage").in(impactedSVEIds)
+                .and("eventType").is("UPDATED")
+        new RetryableBatchingCursor<SubmittedVariantOperationEntity>(filterCriteria, dbEnv.mongoTemplate, svoeClass).each {
+            sveOperationBatchList ->
+                {
+                    def svoeBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, svoeClass)
+
+                    for (SubmittedVariantOperationEntity svoe : sveOperationBatchList) {
+                        // create update statement
+                        SubmittedVariantInactiveEntity inactiveSVEDocument = svoe.getInactiveObjects()[0]
+                        String oldHash = inactiveSVEDocument.getHashedMessage()
+                        String newRef = inactiveSVEDocument.getReferenceAllele().toUpperCase()
+                        String newAlt = inactiveSVEDocument.getAlternateAllele().toUpperCase()
+                        String newHash = mapOldHashNewHash.get(oldHash)
+
+                        Query findQuery = query(where("inactiveObjects.hashedMessage").is(oldHash))
+                        Update updateQuery = new Update()
+                                .set("inactiveObjects.\$.ref", newRef)
+                                .set("inactiveObjects.\$.alt", newAlt)
+                                .set("inactiveObjects.\$.hashedMessage", newHash)
+
+                        svoeBulkUpdates.updateOne(findQuery, updateQuery)
+                    }
+
+                    //execute all bulk updates
+                    svoeBulkUpdates.execute()
+                }
+        }
+
+    }
+
     void remediate() {
         // read all the documents from SubmittedVariantEntity
         new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, sveClass).each {
@@ -189,22 +230,22 @@ class RemediateLowerCaseNucleotide {
 
                     // if there are any sve impacted
                     if (!impactedSVEList.isEmpty()) {
-                        // make a map of all impacted sve and its new hash
-                        Map<SubmittedVariantEntity, String> mapSVENewHash = impactedSVEList.stream()
-                                .collect(Collectors.toMap(sve -> sve, sve -> getSVENewHash(sve)))
+                        // make a map of old hash ids of sve and new hash
+                        Map<String, String> mapOldHashNewHash = impactedSVEList.stream()
+                                .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
 
                         // find which of the new hashes already exist in db (will cause hash collision)
-                        List<String> newHashExistList = getExistingHashList(mapSVENewHash.values())
+                        List<String> newHashExistList = getExistingHashList(mapOldHashNewHash.values())
 
                         // partition the impacted sve list into 2 parts  (hash collision and no hash collision)
                         Map<Boolean, List<SubmittedVariantEntity>> svePartitionMap = impactedSVEList.stream()
-                                .collect(Collectors.partitioningBy(sve -> newHashExistList.contains(mapSVENewHash.get(sve))))
+                                .collect(Collectors.partitioningBy(sve -> newHashExistList.contains(mapOldHashNewHash.get(sve.getHashedMessage()))))
                         List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
 
                         // sve with no hash collision - insert sve with new hash and deprecate sve with old hash
                         // can't update in place as _id is immutable
                         logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
-                        insertSVEWithNewHash(noHashCollisionSVEList, mapSVENewHash)
+                        insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
                         deprecateSVEWithOldHash(noHashCollisionSVEList)
 
                         List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
@@ -217,6 +258,9 @@ class RemediateLowerCaseNucleotide {
                             updateFileWithHashCollisionList(collisionList)
                             deprecateSVEWithOldHash(hashCollisionSVEList)
                         }
+
+                        //update SVE Operations
+                        updateSVOE(impactedSVEList, mapOldHashNewHash)
 
                     }
                 }
