@@ -215,6 +215,8 @@ class RemediateLowerCaseNucleotide {
                                     insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
                                     // insert sve update operation
                                     insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
+                                    // remove all impacted sve from the table
+                                    removeImpactedSVE(noHashCollisionSVEList, ssClass)
 
 
                                     // sve with hash collision
@@ -225,11 +227,8 @@ class RemediateLowerCaseNucleotide {
                                         updateFileWithHashCollisionList(hashCollisionSVEList, mapOldHashNewHash, alreadyExistingHashSVEList)
                                     }
 
-                                    //update SVE Operations
+                                    //update existing SVE Operations
                                     updateExistingSVOE(impactedSVEList, mapOldHashNewHash)
-
-                                    // remove all impacted sve from the table
-                                    removeImpactedSVE(impactedSVEList, ssClass)
                                 }
                             }
                     }
