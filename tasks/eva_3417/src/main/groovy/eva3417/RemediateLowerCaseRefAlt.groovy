@@ -43,7 +43,6 @@ class RemediateLowerCaseNucleotide {
     private String hashCollisionFilePath
     private EVADatabaseEnvironment dbEnv
     private Function<ISubmittedVariant, String> hashingFunction
-
     static def logger = LoggerFactory.getLogger(Application.class)
 
     RemediateLowerCaseNucleotide(envPropertiesFile, hashcollisionFile) {
