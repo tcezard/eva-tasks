@@ -27,23 +27,27 @@ class CollectSplitsAndMerges {
         this.devEnv = devEnv
     }
 
-    def run = {
+    def collectAndCount = {
         def evaAndDbsnpSveCursorsProd = [sveClass, dbsnpSveClass].collect { collectionClass ->
             new RetryableBatchingCursor<>(
-                    where("seq").is(assembly).and("remappedFrom").exists(true).and("rs").exists(true),
+                    where("seq").is(assembly).and("rs").exists(true),
                     prodEnv.mongoTemplate, collectionClass)
         }
         def numRecordsProcessed = 0
         evaAndDbsnpSveCursorsProd.each { cursor ->
             cursor.each { List<SubmittedVariantEntity> sves ->
-                detectPendingSplits(sves)
-                gatherPossibleMerges(sves)
-                numRecordsProcessed += sves.size()
-                logger.info("${numRecordsProcessed} SS processed so far...")
+                def remappedSves = sves.findAll { !it.remappedFrom.equals("") }
+                if (!remappedSves.isEmpty()) {
+                    gatherPossibleSplits(remappedSves)
+                    gatherPossibleMerges(remappedSves)
+                    numRecordsProcessed += remappedSves.size()
+                    logger.info("${numRecordsProcessed} SS processed so far...")
+                }
             }
         }
         logger.info("Scan through SVE and dbsnpSVE collections complete")
 
+        detectPendingSplits()
         detectPendingMerges()
 
         // Counts
@@ -53,25 +57,33 @@ class CollectSplitsAndMerges {
     }
 
     /**
-     * Detect and store pending splits: >1 SVE with same rsID and different CVE hash
+     * First step to detecting splits: store CVE hashes grouped by RS ID
      */
-    def detectPendingSplits = { List<SubmittedVariantEntity> sves ->
-        // Only process rsIds that we haven't yet recorded in rsHashesWithId
-        def rsIds = sves.collect { it.clusteredVariantAccession }
+    def gatherPossibleSplits = { List<SubmittedVariantEntity> sves ->
+        def svesGroupedByRsId = sves.groupBy { it.clusteredVariantAccession }
+        def rsIds = svesGroupedByRsId.keySet()
         def existingRecords = devEnv.mongoTemplate.find(
                 query(where("_id").in(rsIds.collect { "${assembly}#${it}" })), CveHashesWithRsId.class)
+
+        // Add to existing records
+        if (!existingRecords.isEmpty()) {
+            def bulkOps = devEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, CveHashesWithRsId.class)
+            existingRecords.each { cveHashesWithRsId ->
+                def svesToProcess = svesGroupedByRsId.get(cveHashesWithRsId.rsId)
+                def cveHashesToAdd = svesToProcess.collect { EVAObjectModelUtils.getClusteredVariantHash(it) }
+                cveHashesWithRsId.cveHashes.addAll(cveHashesToAdd)
+                bulkOps.updateOne(query(where("_id").is(cveHashesWithRsId.id)), Update.update("cveHashes", cveHashesWithRsId.cveHashes))
+            }
+            bulkOps.execute()
+        }
+
+        // Create new records
         def processedRsIds = existingRecords.collect { it.rsId }
         def rsIdsToProcess = rsIds.findAll { !processedRsIds.contains(it) }
-
-        // For these rsIds, get all SVEs and corresponding hashes
-        def svesInDbWithRs = [sveClass, dbsnpSveClass].collectMany { entityClass ->
-            prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsIdsToProcess)), entityClass)
-        }
-        def svesGroupedByRs = svesInDbWithRs.groupBy { it.clusteredVariantAccession }
         def recordsToInsert = []
-        svesGroupedByRs.each { rsId, svesWithRs ->
-            def cveHashes = svesWithRs.collect { EVAObjectModelUtils.getClusteredVariantHash(it) }.toSet()
-            if (cveHashes.size() > 1) {
+        svesGroupedByRsId.each { rsId, svesWithRsId ->
+            if (rsIdsToProcess.contains(rsId)) {
+                def cveHashes = svesWithRsId.collect { EVAObjectModelUtils.getClusteredVariantHash(it) }.toSet()
                 recordsToInsert.add(new CveHashesWithRsId("${assembly}#${rsId}", assembly, rsId, cveHashes))
             }
         }
@@ -89,7 +101,6 @@ class CollectSplitsAndMerges {
         def svesGroupedByCveHash = sves.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it) }
         def cveHashes = svesGroupedByCveHash.keySet()
         def existingRecords = devEnv.mongoTemplate.find(query(where("_id").in(cveHashes.collect { "${assembly}#${it}" })), RsIdsWithCveHash.class)
-        def processedCveHashes = existingRecords.collect { it.cveHash }
 
         // Add to existing records
         if (!existingRecords.isEmpty()) {
@@ -98,12 +109,13 @@ class CollectSplitsAndMerges {
                 def svesToProcess = svesGroupedByCveHash.get(rsIdsWithHash.cveHash)
                 def rsIdsToAdd = svesToProcess.collect { it.clusteredVariantAccession }
                 rsIdsWithHash.rsIds.addAll(rsIdsToAdd)
-                bulkOps.updateOne(query(where("_id").is("${assembly}#${rsIdsWithHash.cveHash}")), Update.update("rsIds", rsIdsWithHash.rsIds))
+                bulkOps.updateOne(query(where("_id").is(rsIdsWithHash.id)), Update.update("rsIds", rsIdsWithHash.rsIds))
             }
             bulkOps.execute()
         }
 
         // Create new records
+        def processedCveHashes = existingRecords.collect { it.cveHash }
         def cveHashesToProcess = cveHashes.findAll { !processedCveHashes.contains(it) }
         def recordsToInsert = []
         svesGroupedByCveHash.each { hash, svesWithHash ->
@@ -114,9 +126,21 @@ class CollectSplitsAndMerges {
         }
         def insertedCount = 0
         if (!recordsToInsert.isEmpty()) {
-            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash)
+            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash.class)
         }
         logger.info("Inserted ${insertedCount} merge candidate documents (RsIdsWithCveHash)")
+    }
+
+    /**
+     * Second step to detecting splits: remove records for rsIDs without multiple CVE hashes associated
+     */
+    def detectPendingSplits = {
+        def possibleSplitCursor = new RetryableBatchingCursor<>(where("_id").regex(/^${assembly}#/), devEnv.mongoTemplate, CveHashesWithRsId.class)
+        possibleSplitCursor.each { List<CveHashesWithRsId> batch ->
+            def recordsToRemove = batch.findAll { it.cveHashes.size() < 2 }
+            def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), CveHashesWithRsId.class)
+            logger.info("Removed ${removed.size()} split candidate documents (CveHashesWithRsId)")
+        }
     }
 
     /**
@@ -126,7 +150,7 @@ class CollectSplitsAndMerges {
         def possibleMergeCursor = new RetryableBatchingCursor<>(where("_id").regex(/^${assembly}#/), devEnv.mongoTemplate, RsIdsWithCveHash.class)
         possibleMergeCursor.each { List<RsIdsWithCveHash> batch ->
             def recordsToRemove = batch.findAll { it.rsIds.size() < 2 }
-            def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect { "${assembly}#${it.cveHash}" })), RsIdsWithCveHash.class)
+            def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), RsIdsWithCveHash.class)
             logger.info("Removed ${removed.size()} merge candidate documents (RsIdsWithCveHash)")
         }
     }

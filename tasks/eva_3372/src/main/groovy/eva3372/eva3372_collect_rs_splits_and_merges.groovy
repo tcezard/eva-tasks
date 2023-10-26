@@ -23,5 +23,5 @@ if (!options) {
 if (this.getClass().getName().equals('eva3372.eva3372_collect_rs_splits_and_merges')) {
     def prodEnv = createFromSpringContext(options.prodPropertiesFile, GenericApplication.class)
     def devEnv = createFromSpringContext(options.devPropertiesFile, GenericApplication.class)
-    new CollectSplitsAndMerges(options.assemblyAccession, prodEnv, devEnv).run()
+    new CollectSplitsAndMerges(options.assemblyAccession, prodEnv, devEnv).collectAndCount()
 }
