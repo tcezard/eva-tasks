@@ -63,18 +63,27 @@ class CollectSplitsAndMerges {
         def svesGroupedByRsId = sves.groupBy { it.clusteredVariantAccession }
         def rsIds = svesGroupedByRsId.keySet()
         def existingRecords = devEnv.mongoTemplate.find(
-                query(where("_id").in(rsIds.collect { "${assembly}#${it}" })), CveHashesWithRsId.class)
+                query(where("_id").in(rsIds.collect { "${assembly}#${it}".toString() })), CveHashesWithRsId.class)
 
         // Add to existing records
         if (!existingRecords.isEmpty()) {
+            boolean needsUpdate = false
             def bulkOps = devEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, CveHashesWithRsId.class)
             existingRecords.each { cveHashesWithRsId ->
                 def svesToProcess = svesGroupedByRsId.get(cveHashesWithRsId.rsId)
                 def cveHashesToAdd = svesToProcess.collect { EVAObjectModelUtils.getClusteredVariantHash(it) }
-                cveHashesWithRsId.cveHashes.addAll(cveHashesToAdd)
-                bulkOps.updateOne(query(where("_id").is(cveHashesWithRsId.id)), Update.update("cveHashes", cveHashesWithRsId.cveHashes))
+                if (!cveHashesWithRsId.cveHashes.containsAll(cveHashesToAdd)) {
+                    cveHashesWithRsId.cveHashes.addAll(cveHashesToAdd)
+                    bulkOps.updateOne(query(where("_id").is(cveHashesWithRsId.id)), Update.update("cveHashes", cveHashesWithRsId.cveHashes))
+                    needsUpdate = true
+                }
             }
-            bulkOps.execute()
+            if (needsUpdate) {
+                def bulkResult = bulkOps.execute()
+                if (bulkResult.modifiedCountAvailable && bulkResult.modifiedCount > 0) {
+                    logger.info("Updated ${bulkResult.modifiedCount} split candidate documents (CveHashesWithRsId)")
+                }
+            }
         }
 
         // Create new records
@@ -87,11 +96,11 @@ class CollectSplitsAndMerges {
                 recordsToInsert.add(new CveHashesWithRsId("${assembly}#${rsId}", assembly, rsId, cveHashes))
             }
         }
-        def insertedCount = 0
         if (!recordsToInsert.isEmpty()) {
-            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, CveHashesWithRsId.class)
+            def insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, CveHashesWithRsId.class)
+            logger.info("Inserted ${insertedCount} split candidate documents (CveHashesWithRsId)")
         }
-        logger.info("Inserted ${insertedCount} split candidate documents (CveHashesWithRsId)")
+
     }
 
     /**
@@ -100,18 +109,27 @@ class CollectSplitsAndMerges {
     def gatherPossibleMerges = { List<SubmittedVariantEntity> sves ->
         def svesGroupedByCveHash = sves.groupBy { EVAObjectModelUtils.getClusteredVariantHash(it) }
         def cveHashes = svesGroupedByCveHash.keySet()
-        def existingRecords = devEnv.mongoTemplate.find(query(where("_id").in(cveHashes.collect { "${assembly}#${it}" })), RsIdsWithCveHash.class)
+        def existingRecords = devEnv.mongoTemplate.find(query(where("_id").in(cveHashes.collect { "${assembly}#${it}".toString() })), RsIdsWithCveHash.class)
 
         // Add to existing records
         if (!existingRecords.isEmpty()) {
+            boolean needsUpdate = false
             def bulkOps = devEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, RsIdsWithCveHash.class)
             existingRecords.each { rsIdsWithHash ->
                 def svesToProcess = svesGroupedByCveHash.get(rsIdsWithHash.cveHash)
                 def rsIdsToAdd = svesToProcess.collect { it.clusteredVariantAccession }
-                rsIdsWithHash.rsIds.addAll(rsIdsToAdd)
-                bulkOps.updateOne(query(where("_id").is(rsIdsWithHash.id)), Update.update("rsIds", rsIdsWithHash.rsIds))
+                if (!rsIdsWithHash.rsIds.containsAll(rsIdsToAdd)) {
+                    rsIdsWithHash.rsIds.addAll(rsIdsToAdd)
+                    bulkOps.updateOne(query(where("_id").is(rsIdsWithHash.id)), Update.update("rsIds", rsIdsWithHash.rsIds))
+                    needsUpdate = true
+                }
             }
-            bulkOps.execute()
+            if (needsUpdate) {
+                def bulkResult = bulkOps.execute()
+                if (bulkResult.modifiedCountAvailable && bulkResult.modifiedCount > 0) {
+                    logger.info("Updated ${bulkResult.modifiedCount} merge candidate documents (RsIdsWithCveHash)")
+                }
+            }
         }
 
         // Create new records
@@ -124,11 +142,10 @@ class CollectSplitsAndMerges {
                 recordsToInsert.add(new RsIdsWithCveHash("${assembly}#${hash}", assembly, hash, rsIds))
             }
         }
-        def insertedCount = 0
         if (!recordsToInsert.isEmpty()) {
-            insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash.class)
+            def insertedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToInsert, RsIdsWithCveHash.class)
+            logger.info("Inserted ${insertedCount} merge candidate documents (RsIdsWithCveHash)")
         }
-        logger.info("Inserted ${insertedCount} merge candidate documents (RsIdsWithCveHash)")
     }
 
     /**
@@ -139,7 +156,9 @@ class CollectSplitsAndMerges {
         possibleSplitCursor.each { List<CveHashesWithRsId> batch ->
             def recordsToRemove = batch.findAll { it.cveHashes.size() < 2 }
             def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), CveHashesWithRsId.class)
-            logger.info("Removed ${removed.size()} split candidate documents (CveHashesWithRsId)")
+            if (!removed.isEmpty()) {
+                logger.info("Removed ${removed.size()} split candidate documents (CveHashesWithRsId)")
+            }
         }
     }
 
@@ -151,7 +170,9 @@ class CollectSplitsAndMerges {
         possibleMergeCursor.each { List<RsIdsWithCveHash> batch ->
             def recordsToRemove = batch.findAll { it.rsIds.size() < 2 }
             def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), RsIdsWithCveHash.class)
-            logger.info("Removed ${removed.size()} merge candidate documents (RsIdsWithCveHash)")
+            if (!removed.isEmpty()) {
+                logger.info("Removed ${removed.size()} merge candidate documents (RsIdsWithCveHash)")
+            }
         }
     }
 }
