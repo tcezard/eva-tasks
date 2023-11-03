@@ -31,7 +31,6 @@ if (!options) {
     cli.usage()
     throw new Exception("Invalid command line options provided!")
 }
-def logger = LoggerFactory.getLogger(this.class)
 
 static String getCustomAssemblyReportPath (String assembly, String fastaDir) {
     def customAssemblyReportPath = runProcess("find ${fastaDir} -maxdepth 3 -iname ".toString() +
@@ -71,7 +70,10 @@ static List<ClashingSSHashes> getClashingSSRecordsFromDb (List<SubmittedVariantE
         def existingSSIDsForHash = clashingHashesRecord.clashingSS.collect{it.accession}.toSet()
         def clashingSvesFromVCF =
                 svesFromVcfGroupedByHash.get(ssHash).findAll{!existingSSIDsForHash.contains(it.accession)}
-        clashingHashesRecord.clashingSS.addAll(clashingSvesFromVCF)
+        existingSSIDsForHash += clashingSvesFromVCF.collect{it.accession}.toSet()
+        def clashingSvesFromDB =
+                svesWithHashFromDB.findAll{!existingSSIDsForHash.contains(it.accession)}
+        clashingHashesRecord.clashingSS.addAll(clashingSvesFromVCF + clashingSvesFromDB)
         return clashingHashesRecord
     }.findAll{it.clashingSS.size() > 1}
 }
@@ -90,10 +92,12 @@ static void collectCollidingSSHashes (EVADatabaseEnvironment prodEnv, EVADatabas
         nextVariant = changedVariantsVCFReader.read()
         if(variantsPostNorm.size() == batchSize || Objects.isNull(nextVariant)) {
             numProcessedSoFar += variantsPostNorm.size()
+
             def (dbsnpSvesFromVCF, evaSvesFromVCF) =
             getNormalizedDbsnpAndEvaSves(variantsPostNorm, prodEnv, devEnv)
             List<ClashingSSHashes> clashingSSRecords =
                     getClashingSSRecordsFromDb(evaSvesFromVCF + dbsnpSvesFromVCF, devEnv, prodEnv)
+            clashingSSRecords.each{logger.info("Creating clashing SS record with ${it.clashingSS.collect{it.toString()}.join(",")}...")}
             clashingSSRecords.each{devEnv.mongoTemplate.save(it)}
             variantsPostNorm.clear()
             logger.info("${numProcessedSoFar} variants processed so far...")
@@ -103,7 +107,7 @@ static void collectCollidingSSHashes (EVADatabaseEnvironment prodEnv, EVADatabas
 }
 
 // this is equivalent to if __name__ == '__main__' in Python
-if (this.getClass().getName().equals('eva3380.eva3380_collect_colliding_ss_hashes')) {
+if (this.getClass().getName().equals('eva3399.eva3380_collect_colliding_ss_hashes')) {
     String impactedAssembly = options.assemblyAccession
     def changedVariantsVCF = "${options.normalizedVcfDir}/${impactedAssembly}/" +
             "${impactedAssembly}_changed_after_norm_sorted.vcf.gz"

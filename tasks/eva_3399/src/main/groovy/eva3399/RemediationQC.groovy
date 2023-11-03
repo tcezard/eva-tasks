@@ -142,23 +142,24 @@ class RemediationQC {
         def remappedSves = prodSves.findAll{
             Objects.nonNull(it.remappedFrom) && Objects.nonNull(it.clusteredVariantAccession)}
         Map<Long, SubmittedVariantEntity> remappedSvesGroupedByAccession =
-                remappedSves.collectEntries {[it.accession, it]}
+                remappedSves.collectEntries {[it.remappedFrom + "_" + it.accession, it]}
         def sourceAssemblies = remappedSves.collect{it.remappedFrom}.toSet()
         def remappedSveIDs = prodSves.collect{it.accession}
         List<SubmittedVariantEntity> svesInProd = [sveClass, dbsnpSveClass].collect {
             this.prodEnv.mongoTemplate.find(query(where("accession").in(remappedSveIDs)
                     .and("seq").in(sourceAssemblies)), it)}.flatten()
         svesInProd.each {sve ->
-            def expectedBackPropRS = remappedSvesGroupedByAccession[sve.accession].clusteredVariantAccession
-            if (Objects.isNull(sve.backPropagatedVariantAccession) && sve.clusteredVariantAccession != expectedBackPropRS)
-            {
-                logger.error("No backpropagated RS entry for RS ${expectedBackPropRS} in the source assembly " +
-                        "originating from the remapped assembly ${this.assemblyToQC}!")
-            }
-            else if (Objects.nonNull(sve.backPropagatedVariantAccession) &&
-                    sve.backPropagatedVariantAccession != expectedBackPropRS) {
-                logger.error("Expected back-propagated RS ${expectedBackPropRS} " +
-                        "but found ${sve.backPropagatedVariantAccession} for SS ${sve}!")
+            if (remappedSvesGroupedByAccession.containsKey(sve.referenceSequenceAccession + "_" + sve.accession)) {
+                def expectedBackPropRS = remappedSvesGroupedByAccession[sve.referenceSequenceAccession + "_" + sve.accession].clusteredVariantAccession
+                if (Objects.isNull(sve.backPropagatedVariantAccession) && sve.clusteredVariantAccession != expectedBackPropRS) {
+                    logger.error("No backpropagated RS entry for RS ${expectedBackPropRS} in the source assembly " +
+                            "${sve.referenceSequenceAccession} " +
+                            "from SS ${sve.accession} in the remapped assembly ${this.assemblyToQC}!")
+                } else if (Objects.nonNull(sve.backPropagatedVariantAccession) &&
+                        sve.backPropagatedVariantAccession != expectedBackPropRS) {
+                    logger.error("Expected back-propagated RS ${expectedBackPropRS} " +
+                            "but found ${sve.backPropagatedVariantAccession} for SS ${sve}!")
+                }
             }
         }
     }

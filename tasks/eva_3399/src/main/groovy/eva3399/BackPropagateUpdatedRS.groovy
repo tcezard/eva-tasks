@@ -32,8 +32,9 @@ class BackPropagateUpdatedRS {
                         "inactiveObjects.remappedFrom").is(this.sourceAssembly),
                 this.backPropEnv.mongoTemplate, it),
              new RetryableBatchingCursor<>(
-                    where("_id").regex("^EVA3399_MERGED_${this.remappedAssembly}_.*").and(
-                            "inactiveObjects.remappedFrom").is(this.sourceAssembly),
+                     // No condition on remappedFrom attribute as above because merges
+                     // can originate from a SS remapped in another assembly into SS remapped from the source assembly
+                    where("_id").regex("^EVA3399_MERGED_${this.remappedAssembly}_.*"),
                     this.backPropEnv.mongoTemplate, it)]
         }
         opsOfImpactedSS.each{it.each{ it.each{List<SubmittedVariantOperationEntity> opsInBatch ->
