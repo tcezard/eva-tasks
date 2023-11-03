@@ -32,7 +32,7 @@ class RemediationQC {
 
     void checkMergedSvesInProd() {
         def ssOpCursors = [svoeClass, dbsnpSvoeClass].collect{opClass ->
-            new RetryableBatchingCursor<>(where("_id").regex("EVA3399_MERGED_${this.assemblyToQC}_.*"),
+            new RetryableBatchingCursor<>(where("_id").regex("^EVA3399_MERGED_${this.assemblyToQC}_.*"),
                     this.prodEnv.mongoTemplate, opClass)
         }
         ssOpCursors.each {it.each{List<SubmittedVariantOperationEntity> svoes ->
@@ -46,7 +46,7 @@ class RemediationQC {
 
     void ensureProperRSAssignment() {
         def ssOpCursors = [svoeClass, dbsnpSvoeClass].collect{opClass ->
-            new RetryableBatchingCursor<>(where("_id").regex("EVA3399_UPD_LOCUS_${this.assemblyToQC}_.*"),
+            new RetryableBatchingCursor<>(where("_id").regex("^EVA3399_UPD_LOCUS_${this.assemblyToQC}_.*"),
                     this.prodEnv.mongoTemplate, opClass)
         }
         ssOpCursors.each {it.each { List<SubmittedVariantOperationEntity> svoes ->
@@ -76,7 +76,7 @@ class RemediationQC {
             mergeeSves.each {mergeeSve ->
                 if (mergeeSve.accession < prodSve.accession) {
                     logger.error("Submitted variant with ID ${prodSve.accession} in PROD " +
-                            "should not have been the merge target! Expected ${expectedID}! to be the merge target")
+                            "should not have been the merge target! Expected ${mergeeSve.accession} to be the merge target")
                 }
             }
         }
@@ -190,7 +190,7 @@ class RemediationQC {
 
                 def mergeTargetAndMergeeList = mergeableSS.collect {
                     this.remediateIndelsObj._getMergeTargetAndMergees(it) }
-                def mergeTargetList = mergeTargetAndMergeeList.collect{it[0]}
+                def mergeTargetList = mergeTargetAndMergeeList.collect{it[0]}.findAll{Objects.nonNull(it)}
                 def mergeeList = mergeTargetAndMergeeList.collect{it[1]}
                 prodQCChecks(mergeTargetList)
             }
