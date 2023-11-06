@@ -220,7 +220,7 @@ class RemediateLowerCaseNucleotide {
 
                                     // sve with hash collision
                                     List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
-                                    if (!hashCollisionSVEList.isEmpty()) {
+                                    if (hashCollisionSVEList!=null && !hashCollisionSVEList.isEmpty()) {
                                         logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
                                         // capture in file - sve hash collision details
                                         updateFileWithHashCollisionList(hashCollisionSVEList, mapOldHashNewHash, alreadyExistingHashSVEList)
