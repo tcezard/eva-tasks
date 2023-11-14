@@ -15,6 +15,10 @@ import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.getSveClass
 
 class CollectSplitsAndMerges {
     static def logger = LoggerFactory.getLogger(CollectSplitsAndMerges.class)
+
+    public static final String PENDING_MERGES_COLLECTION_NAME = "pendingMerges"
+    public static final String PENDING_SPLITS_COLLECTION_NAME = "pendingSplits"
+
     String assembly
     EVADatabaseEnvironment prodEnv
     EVADatabaseEnvironment devEnv
@@ -51,8 +55,8 @@ class CollectSplitsAndMerges {
         detectPendingMerges()
 
         // Counts
-        def numSplits = devEnv.mongoTemplate.count(query(where("_id").regex(/^${assembly}#/)), CveHashesWithRsId.class)
-        def numMerges = devEnv.mongoTemplate.count(query(where("_id").regex(/^${assembly}#/)), RsIdsWithCveHash.class)
+        def numSplits = devEnv.mongoTemplate.count(query(where("_id").regex(/^${assembly}#/)), CveHashesWithRsId.class, PENDING_SPLITS_COLLECTION_NAME)
+        def numMerges = devEnv.mongoTemplate.count(query(where("_id").regex(/^${assembly}#/)), RsIdsWithCveHash.class, PENDING_MERGES_COLLECTION_NAME)
         logger.info("Processing for ${assembly} complete: ${numSplits} pending splits, ${numMerges} pending merges")
     }
 
@@ -154,12 +158,13 @@ class CollectSplitsAndMerges {
     def detectPendingSplits = {
         def possibleSplitCursor = new RetryableBatchingCursor<>(where("_id").regex(/^${assembly}#/), devEnv.mongoTemplate, CveHashesWithRsId.class)
         possibleSplitCursor.each { List<CveHashesWithRsId> batch ->
-            def recordsToRemove = batch.findAll { it.cveHashes.size() < 2 }
-            def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), CveHashesWithRsId.class)
-            if (!removed.isEmpty()) {
-                logger.info("Removed ${removed.size()} split candidate documents (CveHashesWithRsId)")
+            def recordsToCopy = batch.findAll { it.cveHashes.size() > 1 }
+            if (!recordsToCopy.isEmpty()) {
+                def copiedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToCopy, CveHashesWithRsId.class, PENDING_SPLITS_COLLECTION_NAME)
+                logger.info("Copied ${copiedCount} split candidate documents (CveHashesWithRsId)")
             }
         }
+        devEnv.mongoTemplate.dropCollection("cveHashesWithRsId")
     }
 
     /**
@@ -168,11 +173,12 @@ class CollectSplitsAndMerges {
     def detectPendingMerges = {
         def possibleMergeCursor = new RetryableBatchingCursor<>(where("_id").regex(/^${assembly}#/), devEnv.mongoTemplate, RsIdsWithCveHash.class)
         possibleMergeCursor.each { List<RsIdsWithCveHash> batch ->
-            def recordsToRemove = batch.findAll { it.rsIds.size() < 2 }
-            def removed = devEnv.mongoTemplate.findAllAndRemove(query(where("_id").in(recordsToRemove.collect {it.id })), RsIdsWithCveHash.class)
-            if (!removed.isEmpty()) {
-                logger.info("Removed ${removed.size()} merge candidate documents (RsIdsWithCveHash)")
+            def recordsToCopy = batch.findAll { it.rsIds.size() > 1 }
+            if (!recordsToCopy.isEmpty()) {
+                def copiedCount = devEnv.bulkInsertIgnoreDuplicates(recordsToCopy, RsIdsWithCveHash.class, PENDING_MERGES_COLLECTION_NAME)
+                logger.info("Copied ${copiedCount} merge candidate documents (RsIdsWithCveHash)")
             }
         }
+        devEnv.mongoTemplate.dropCollection("rsIdsWithCveHash")
     }
 }
