@@ -106,7 +106,7 @@ class RemediateLowerCaseNucleotide {
                         .filter(s -> s.getHashedMessage().equals(sveNewHash))
                         .findFirst().get()
                 //capture assembly, hash and accession of both the sve that has a collision
-                String line = sve.getReferenceSequenceAccession() + "," + sve.getHashedMessage() + ","+sve.getAccession()+","+existingSVE.getAccession()
+                String line = sve.getReferenceSequenceAccession() + "," + sve.getHashedMessage() + "," + sve.getAccession() + "," + existingSVE.getAccession()
                 writer.write(line)
                 writer.newLine();
             }
@@ -184,15 +184,24 @@ class RemediateLowerCaseNucleotide {
         [sveClass, dbsnpSveClass].each {
             ssClass ->
                 {
+                    logger.info("Started processing for: " + ssClass)
+                    long totalProcessed = 0
+                    long totalImpacted = 0
                     // read all the documents from SubmittedVariantEntity
                     new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, ssClass).each {
                         sveBatchList ->
                             {
+                                long currentBatchSize = sveBatchList.size()
+                                logger.info("processing in this batch " + currentBatchSize)
+
                                 // find which sve from the batch are impacted by lower case nucleotide issue
                                 List<SubmittedVariantEntity> impactedSVEList = getImpactedSVEList(sveBatchList)
 
                                 // if there are any sve impacted
                                 if (!impactedSVEList.isEmpty()) {
+                                    logger.info("impacted in this batch = " + impactedSVEList.size())
+                                    totalImpacted = totalImpacted + impactedSVEList.size()
+
                                     // make a map of old hash ids of sve and new hash
                                     Map<String, String> mapOldHashNewHash = impactedSVEList.stream()
                                             .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
@@ -220,7 +229,7 @@ class RemediateLowerCaseNucleotide {
 
                                     // sve with hash collision
                                     List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
-                                    if (hashCollisionSVEList!=null && !hashCollisionSVEList.isEmpty()) {
+                                    if (hashCollisionSVEList != null && !hashCollisionSVEList.isEmpty()) {
                                         logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
                                         // capture in file - sve hash collision details
                                         updateFileWithHashCollisionList(hashCollisionSVEList, mapOldHashNewHash, alreadyExistingHashSVEList)
@@ -229,6 +238,10 @@ class RemediateLowerCaseNucleotide {
                                     //update existing SVE Operations
                                     updateExistingSVOE(impactedSVEList, mapOldHashNewHash)
                                 }
+
+                                totalProcessed = totalProcessed + currentBatchSize
+                                logger.info("total Processed till now = " + totalProcessed)
+                                logger.info("total impacted till now = " + totalImpacted)
                             }
                     }
                 }
