@@ -118,10 +118,20 @@ class RemediateLowerCaseNucleotide {
 
     void updateExistingSVOE(List<SubmittedVariantEntity> impactedSVEList, Map<String, String> mapOldHashNewHash) {
         List<String> impactedSVEIds = impactedSVEList.stream()
-                .map { sve -> sve.getHashedMessage() }
+                .map(sve -> sve.getHashedMessage())
                 .collect(Collectors.toList())
-        Criteria filterCriteria = new Criteria("inactiveObjects.hashedMessage").in(impactedSVEIds)
+        List<String> impactedAssemblies = impactedSVEList.stream()
+                .map(sve -> sve.getReferenceSequenceAccession())
+                .collect(Collectors.toSet()).stream()
+                .collect(Collectors.toList())
+        List<Long> impactedAccessions = impactedSVEList.stream()
+                .map(sve -> sve.getAccession())
+                .collect(Collectors.toList())
+
+        Criteria filterCriteria = new Criteria("inactiveObjects.seq").in(impactedAssemblies)
+                .and("accession").in(impactedAccessions)
                 .and("eventType").is("UPDATED")
+                .and("inactiveObjects.hashedMessage").in(impactedSVEIds)
         new RetryableBatchingCursor<SubmittedVariantOperationEntity>(filterCriteria, dbEnv.mongoTemplate, svoeClass).each {
             sveOperationBatchList ->
                 {
