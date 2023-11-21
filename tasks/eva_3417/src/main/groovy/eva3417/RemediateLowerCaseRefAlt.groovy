@@ -19,6 +19,7 @@ import uk.ac.ebi.eva.accession.deprecate.Application
 import uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment
 import uk.ac.ebi.eva.groovy.commons.RetryableBatchingCursor
 
+import java.time.LocalDateTime
 import java.util.function.Function
 import java.util.stream.Collectors
 
@@ -132,9 +133,12 @@ class RemediateLowerCaseNucleotide {
                 .and("accession").in(impactedAccessions)
                 .and("eventType").is("UPDATED")
                 .and("inactiveObjects.hashedMessage").in(impactedSVEIds)
+                .and("_id").not().regex("^EVA3417_UPDATED_");
         new RetryableBatchingCursor<SubmittedVariantOperationEntity>(filterCriteria, dbEnv.mongoTemplate, svoeClass).each {
             sveOperationBatchList ->
                 {
+                    logger.info("Existing SVOE operations to update: " + sveOperationBatchList)
+
                     def svoeBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, svoeClass)
 
                     for (SubmittedVariantOperationEntity svoe : sveOperationBatchList) {
@@ -145,7 +149,7 @@ class RemediateLowerCaseNucleotide {
                         String newAlt = inactiveSVEDocument.getAlternateAllele().toUpperCase()
                         String newHash = mapOldHashNewHash.get(oldHash)
 
-                        Query findQuery = query(where("inactiveObjects.hashedMessage").is(oldHash))
+                        Query findQuery = query(where("_id").is(svoe.getId()).and("inactiveObjects.hashedMessage").is(oldHash))
                         Update updateQuery = new Update()
                                 .set("inactiveObjects.\$.ref", newRef)
                                 .set("inactiveObjects.\$.alt", newAlt)
@@ -186,7 +190,7 @@ class RemediateLowerCaseNucleotide {
                 .collect(Collectors.toList())
         Query findQuery = query(where("_id").in(impactedSVEIds))
 
-        dbEnv.mongoTemplate.findAllAndRemove(findQuery, ssClass)
+        dbEnv.mongoTemplate.remove(findQuery, ssClass)
     }
 
 
@@ -201,6 +205,7 @@ class RemediateLowerCaseNucleotide {
                     new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, ssClass).each {
                         sveBatchList ->
                             {
+                                logger.info("start: processing batch : " + LocalDateTime.now())
                                 long currentBatchSize = sveBatchList.size()
                                 logger.info("processing in this batch " + currentBatchSize)
 
@@ -217,10 +222,12 @@ class RemediateLowerCaseNucleotide {
                                             .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
 
                                     // find which of the new hashes already exist in db (will cause hash collision)
+                                    logger.info("start: get existing hash SVE : " + LocalDateTime.now())
                                     Set<SubmittedVariantEntity> alreadyExistingHashSVEList = getExistingHashSVEList(mapOldHashNewHash.values())
                                     Set<String> newHashExistSet = alreadyExistingHashSVEList.stream()
                                             .map(sve -> sve.getHashedMessage())
                                             .collect(Collectors.toSet())
+                                    logger.info("done: get existing hash SVE : " + LocalDateTime.now())
 
                                     // partition the impacted sve list into 2 parts  (hash collision and no hash collision)
                                     Map<Boolean, List<SubmittedVariantEntity>> svePartitionMap = impactedSVEList.stream()
@@ -229,12 +236,21 @@ class RemediateLowerCaseNucleotide {
                                     // sve with no hash collision
                                     List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
                                     logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
+
                                     // insert sve with new hash (can't update in place as _id is immutable)
+                                    logger.info("start: insert new hash SVE : " + LocalDateTime.now())
                                     insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
-                                    // insert sve update operation
-                                    insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
+                                    logger.info("done: insert new hash SVE : " + LocalDateTime.now())
+
                                     // remove all impacted sve from the table
+                                    logger.info("start: insert update operation into SVOE : " + LocalDateTime.now())
+                                    insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
+                                    logger.info("done: insert update operation into SVOE : " + LocalDateTime.now())
+
+                                    // remove all impacted sve from the table
+                                    logger.info("start: remove impacted SVE : " + LocalDateTime.now())
                                     removeImpactedSVE(noHashCollisionSVEList, ssClass)
+                                    logger.info("end: remove impacted SVE : " + LocalDateTime.now())
 
 
                                     // sve with hash collision
@@ -242,16 +258,22 @@ class RemediateLowerCaseNucleotide {
                                     if (hashCollisionSVEList != null && !hashCollisionSVEList.isEmpty()) {
                                         logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
                                         // capture in file - sve hash collision details
+                                        logger.info("start: update hash collision file: " + LocalDateTime.now())
                                         updateFileWithHashCollisionList(hashCollisionSVEList, mapOldHashNewHash, alreadyExistingHashSVEList)
+                                        logger.info("end: update hash collision file: " + LocalDateTime.now())
                                     }
 
                                     //update existing SVE Operations
+                                    logger.info("start: update existing SVOE : " + LocalDateTime.now())
                                     updateExistingSVOE(impactedSVEList, mapOldHashNewHash)
+                                    logger.info("done: update existing SVOE : " + LocalDateTime.now())
                                 }
 
                                 totalProcessed = totalProcessed + currentBatchSize
                                 logger.info("total Processed till now = " + totalProcessed)
                                 logger.info("total impacted till now = " + totalImpacted)
+
+                                logger.info("done: processing batch : " + LocalDateTime.now())
                             }
                     }
                 }
