@@ -100,14 +100,15 @@ class RemediateLowerCaseNucleotide {
 
     void updateFileWithHashCollisionList(List<SubmittedVariantEntity> sveList, Map<String, String> mapOldHashNewHash,
                                          Set<SubmittedVariantEntity> alreadyExistingHashSVEList) {
+        Map<String, SubmittedVariantEntity> mapOfHashAndExistingSVE = alreadyExistingHashSVEList.stream()
+                                    .collect(Collectors.toMap(sve->sve.getHashedMessage(), sve->sve))
+
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.hashCollisionFilePath, true))) {
             for (SubmittedVariantEntity sve : sveList) {
                 String sveNewHash = mapOldHashNewHash.get(sve.getHashedMessage())
-                SubmittedVariantEntity existingSVE = alreadyExistingHashSVEList.stream()
-                        .filter(s -> s.getHashedMessage().equals(sveNewHash))
-                        .findFirst().get()
+                SubmittedVariantEntity existingSVE = mapOfHashAndExistingSVE.get(sveNewHash)
                 //capture assembly, hash and accession of both the sve that has a collision
-                String line = sve.getReferenceSequenceAccession() + "," + sve.getHashedMessage() + "," + sve.getAccession() + "," + existingSVE.getAccession()
+                String line = sve.getReferenceSequenceAccession() + "," + sve.getHashedMessage() + "," + existingSVE.getHashedMessage() + "," + sve.getAccession() + "," + existingSVE.getAccession()
                 writer.write(line)
                 writer.newLine();
             }
@@ -194,6 +195,43 @@ class RemediateLowerCaseNucleotide {
     }
 
 
+    List<SubmittedVariantEntity> findHashCollisionInBatch(List<SubmittedVariantEntity> sveList,
+                                                          Map<String,String> mapOldHashNewHash){
+        List<SubmittedVariantEntity> hashCollisionSVEInBatch = new ArrayList<>();
+        Set<String> setOfUniqueHash = new HashSet<>();
+        for(SubmittedVariantEntity sve: sveList){
+            String sveNewHash = mapOldHashNewHash.get(sve.getHashedMessage())
+            // try to add the hash in the  set of unique hashes
+            boolean res = setOfUniqueHash.add(sveNewHash)
+            //if it fails to add (res=false), that means we have already seen this hash
+            if (!res){
+                hashCollisionSVEInBatch.add(sve);
+            }
+        }
+
+        logger.info("SVE that will cause hash collision in the Batch: " + hashCollisionSVEInBatch)
+        return hashCollisionSVEInBatch
+    }
+
+    void processNoHashCollision(List<SubmittedVariantEntity> noHashCollisionSVEList, Map<String,String> mapOldHashNewHash,
+                                Class ssClass){
+        // insert SVEs with new hash (can't update in place as _id is immutable)
+        logger.info("start: insert new hash SVE : " + LocalDateTime.now())
+        insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
+        logger.info("done: insert new hash SVE : " + LocalDateTime.now())
+
+        // insert update operations for all the above inserts (SVEs with new hash) in SVOE
+        logger.info("start: insert update operation into SVOE : " + LocalDateTime.now())
+        insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
+        logger.info("done: insert update operation into SVOE : " + LocalDateTime.now())
+
+        // remove all impacted SVEs (SVE with old hash) from the table
+        logger.info("start: remove impacted SVE : " + LocalDateTime.now())
+        removeImpactedSVE(noHashCollisionSVEList, ssClass)
+        logger.info("end: remove impacted SVE : " + LocalDateTime.now())
+    }
+
+
     void remediate() {
         [sveClass, dbsnpSveClass].each {
             ssClass ->
@@ -224,39 +262,40 @@ class RemediateLowerCaseNucleotide {
                                     // find which of the new hashes already exist in db (will cause hash collision)
                                     logger.info("start: get existing hash SVE : " + LocalDateTime.now())
                                     Set<SubmittedVariantEntity> alreadyExistingHashSVEList = getExistingHashSVEList(mapOldHashNewHash.values())
-                                    Set<String> newHashExistSet = alreadyExistingHashSVEList.stream()
+                                    Set<String> alreadyExistingHash = alreadyExistingHashSVEList.stream()
                                             .map(sve -> sve.getHashedMessage())
                                             .collect(Collectors.toSet())
                                     logger.info("done: get existing hash SVE : " + LocalDateTime.now())
 
                                     // partition the impacted sve list into 2 parts  (hash collision and no hash collision)
                                     Map<Boolean, List<SubmittedVariantEntity>> svePartitionMap = impactedSVEList.stream()
-                                            .collect(Collectors.groupingBy { sve -> newHashExistSet.contains(mapOldHashNewHash.get(sve.getHashedMessage())) })
+                                            .collect(Collectors.groupingBy { sve -> alreadyExistingHash.contains(mapOldHashNewHash.get(sve.getHashedMessage())) })
 
                                     // sve with no hash collision
                                     List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
                                     logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
 
-                                    // insert sve with new hash (can't update in place as _id is immutable)
-                                    logger.info("start: insert new hash SVE : " + LocalDateTime.now())
-                                    insertSVEWithNewHash(noHashCollisionSVEList, mapOldHashNewHash)
-                                    logger.info("done: insert new hash SVE : " + LocalDateTime.now())
-
-                                    // remove all impacted sve from the table
-                                    logger.info("start: insert update operation into SVOE : " + LocalDateTime.now())
-                                    insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
-                                    logger.info("done: insert update operation into SVOE : " + LocalDateTime.now())
-
-                                    // remove all impacted sve from the table
-                                    logger.info("start: remove impacted SVE : " + LocalDateTime.now())
-                                    removeImpactedSVE(noHashCollisionSVEList, ssClass)
-                                    logger.info("end: remove impacted SVE : " + LocalDateTime.now())
-
-
                                     // sve with hash collision
                                     List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
+
+                                    // check if there can be a hash collision in the batch
+                                    // i.e. if there are any 2 or more SVEs that has the same new hash
+                                    // when one is inserted, 2nd will fail with duplicate key error
+                                    int numOfUniqueNewHash = mapOldHashNewHash.values().stream().collect(Collectors.toSet()).size()
+                                    if(numOfUniqueNewHash != impactedSVEList.size()){
+                                        List<SubmittedVariantEntity> hashCollisionInBatch = findHashCollisionInBatch(noHashCollisionSVEList, mapOldHashNewHash)
+                                        //remove the SVEs from the no hash collision list
+                                        noHashCollisionSVEList.removeAll(hashCollisionInBatch)
+                                        // add the SVEs into the hash collision list
+                                        hashCollisionSVEList.addAll(hashCollisionInBatch)
+                                    }
+
+                                    // process sve with no hash collision
+                                    processNoHashCollision(noHashCollisionSVEList, mapOldHashNewHash, ssClass)
+
+                                    // process sve with hash collision
                                     if (hashCollisionSVEList != null && !hashCollisionSVEList.isEmpty()) {
-                                        logger.info("Impacted sve List (Hash Collision): " + hashCollisionSVEList)
+                                        logger.info("Impacted sve List (Hash Collision + hash collision in batch): " + hashCollisionSVEList)
                                         // capture in file - sve hash collision details
                                         logger.info("start: update hash collision file: " + LocalDateTime.now())
                                         updateFileWithHashCollisionList(hashCollisionSVEList, mapOldHashNewHash, alreadyExistingHashSVEList)
