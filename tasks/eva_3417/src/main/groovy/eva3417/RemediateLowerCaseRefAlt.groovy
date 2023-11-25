@@ -110,6 +110,7 @@ class RemediateLowerCaseNucleotide {
         List<SubmittedVariantEntity> SVEToDiscardList = new ArrayList<>()
         Map<Long, List<SubmittedVariantEntity>> SVEToMergeMap =  new HashMap<>()
         List<SubmittedVariantEntity> SVEToInsertList = new ArrayList<>()
+        List<SubmittedVariantEntity> SVEToRemoveList = new ArrayList<>()
 
         // go through each hash collision one at a time
         for(Map.Entry<String, List<SubmittedVariantEntity>> entry: mapOfNewHashAndSVEList.entrySet()){
@@ -138,15 +139,19 @@ class RemediateLowerCaseNucleotide {
                 Long lowestAcc = sveInDB.getAccession()
                 int startIndex = 0
 
+                SubmittedVariantEntity firstSVEInSorted = sortedList.get(0)
+
                 // update values if the lowest accession is not in db but in sorted List
-                if(sortedList.get(0).getAccession() < sveInDB.getAccession()){
+                if(firstSVEInSorted.getAccession() < sveInDB.getAccession()){
                     // we need to process first element separately (it needs to be inserted not discarded or merged)
                     startIndex = 1
-                    lowestAcc = sortedList.get(0).getAccession()
+                    lowestAcc = firstSVEInSorted.getAccession()
                     // Add the SVE in DB to the list for processing (will be discarded or merged based on the accession)
                     sortedList.add(sveInDB)
+                    // need to remove this SVE (will be inserted after fixing lower nucleotide)
+                    SVEToRemoveList.add(firstSVEInSorted)
                     // need to insert the SVE from the sorted list (with lowest accession) into db
-                    SVEToInsertList.add(sortedList.get(0))
+                    SVEToInsertList.add(firstSVEInSorted)
                 }
 
                 for(int i=startIndex; i<sortedList.size(); i++){
@@ -165,12 +170,17 @@ class RemediateLowerCaseNucleotide {
         // discard SVEs
         logger.info("Hash Collision Discard SVE List: " + SVEToDiscardList)
         discardSVEAndInsertOperations(SVEToDiscardList, ssClass)
+
         // merge SVEs
         mergeSVEAndInsertOperations(SVEToMergeMap, ssClass)
 
         // Insert SVEs
         logger.info("Hash Collision Insert SVE List: " + SVEToInsertList)
         insertSVEWithNewHash(SVEToInsertList, ssClass)
+
+        // delete the corrected SVEs
+        removeImpactedSVE(SVEToRemoveList, ssClass)
+
     }
 
     void discardSVEAndInsertOperations(List<SubmittedVariantEntity> discardSVEList, Class ssClass){
