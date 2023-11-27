@@ -393,6 +393,9 @@ class RemediateLowerCaseNucleotide {
 
                                     // sve with hash collision
                                     List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)
+                                    if(hashCollisionSVEList == null){
+                                        hashCollisionSVEList = new ArrayList<>()
+                                    }
 
                                     // check if there can be a hash collision in the batch
                                     // i.e. if there are any 2 or more SVEs that has the same new hash
