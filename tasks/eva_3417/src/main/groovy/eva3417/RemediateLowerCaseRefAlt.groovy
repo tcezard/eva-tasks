@@ -73,7 +73,7 @@ class RemediateLowerCaseNucleotide {
         return hashingFunction.apply(temp)
     }
 
-    Set<SubmittedVariantEntity> getExistingHashSVEList(Collection<String> newHashList) {
+    List<SubmittedVariantEntity> getExistingHashSVEList(Collection<String> newHashList) {
         List<SubmittedVariantEntity> existingHashSVEList = [sveClass, dbsnpSveClass]
                 .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("_id").in(newHashList)), ssClass))
                 .flatten()
@@ -179,6 +179,7 @@ class RemediateLowerCaseNucleotide {
         insertSVEWithNewHash(SVEToInsertList, ssClass)
 
         // delete the corrected SVEs
+        logger.info("Hash Collision Remove SVE List: " + SVEToRemoveList)
         removeImpactedSVE(SVEToRemoveList, ssClass)
 
     }
@@ -228,7 +229,7 @@ class RemediateLowerCaseNucleotide {
                 svoe.fill(EventType.MERGED, sve.getAccession(), lowestAcc,
                         "After fixing lowercase nucleotide issue, variant merged due to duplicate hash",
                         Collections.singletonList(new SubmittedVariantInactiveEntity(submittedVariantEntity)))
-                svoe.setId("EVA3417_MERGED_"+sve.getAccession()+"_INTO_"+lowestAcc+"_Hash_" + sve.getHashedMessage() )
+                svoe.setId("EVA3417_MERGED_"+sve.getAccession()+"_INTO_"+lowestAcc+"_HASH_" + sve.getHashedMessage() )
 
                 //add to the list of operations
                 svoeList.add(svoe)
@@ -336,15 +337,12 @@ class RemediateLowerCaseNucleotide {
 
     void processNoHashCollision(List<SubmittedVariantEntity> noHashCollisionSVEList, Class ssClass){
         // insert SVEs with new hash (can't update in place as _id is immutable)
-        logger.info("start: insert new hash SVE : " + LocalDateTime.now())
         insertSVEWithNewHash(noHashCollisionSVEList, ssClass)
 
         // insert update operations for all the above inserts (SVEs with new hash) in SVOE
-        logger.info("start: insert update operation into SVOE : " + LocalDateTime.now())
         insertSVOEUpdateOp(noHashCollisionSVEList, ssClass)
 
         // remove all impacted SVEs (SVE with old hash) from the table
-        logger.info("start: remove impacted SVE : " + LocalDateTime.now())
         removeImpactedSVE(noHashCollisionSVEList, ssClass)
     }
 
@@ -377,8 +375,7 @@ class RemediateLowerCaseNucleotide {
                                             .collect(Collectors.toMap(sve -> sve.getHashedMessage(), sve -> getSVENewHash(sve)))
 
                                     // find which of the new hashes already exist in db (will cause hash collision)
-                                    logger.info("start: get existing hash SVE : " + LocalDateTime.now())
-                                    Set<SubmittedVariantEntity> alreadyExistingSVEList = getExistingHashSVEList(mapOldHashNewHash.values())
+                                    List<SubmittedVariantEntity> alreadyExistingSVEList = getExistingHashSVEList(mapOldHashNewHash.values())
                                     Set<String> alreadyExistingHash = alreadyExistingSVEList.stream()
                                             .map(sve -> sve.getHashedMessage())
                                             .collect(Collectors.toSet())
@@ -389,7 +386,9 @@ class RemediateLowerCaseNucleotide {
 
                                     // sve with no hash collision
                                     List<SubmittedVariantEntity> noHashCollisionSVEList = svePartitionMap.get(Boolean.FALSE)
-                                    logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
+                                    if(noHashCollisionSVEList == null){
+                                        noHashCollisionSVEList = new ArrayList<>()
+                                    }
 
                                     // sve with hash collision
                                     List<SubmittedVariantEntity> hashCollisionSVEList = svePartitionMap.get(Boolean.TRUE)

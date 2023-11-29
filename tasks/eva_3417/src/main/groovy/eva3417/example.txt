@@ -11,7 +11,7 @@ ss2  |  965D6E53683613AAE32D65AE4E9D7EA458E1FF14   |   9186813621  |   PRJEB2475
 ss3  |  965D6E53683613AAE32D65AE4E9D7EA458E1FF15   |   9186813621  |   PRJEB24756  |   CM001011.2  |  60803218  |   t  |   g   |   # collision with ss2 (same accession - discard)
 ss4  |  965D6E53683613AAE32D65AE4E9D7EA458E1FF16   |   9186813622  |   PRJEB24756  |   CM001011.2  |  60803218  |   T  |   g   |   # collision with ss2 (different accession - merge into ss2)
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# collision with SVE in the same batch (no collision
+# collision with SVE in the same batch (no collision with any SVE in db)
 ss5  |  55BA40460BFB7CB12A5BF5A3E0BB5D7B3D73E931   |   9186813783  |   PRJEB24756  |   CM001000.2  |  97063090  |   T  |   c   |   # will be remediated and kept
 ss6  |  55BA40460BFB7CB12A5BF5A3E0BB5D7B3D73E932   |   9186813783  |   PRJEB24756  |   CM001000.2  |  97063090  |   t  |   C   |   # collision with ss5 (same accession - discard)
 ss7  |  55BA40460BFB7CB12A5BF5A3E0BB5D7B3D73E933   |   9186813784  |   PRJEB24756  |   CM001000.2  |  97063090  |   t  |   c   |   # collision with ss5 (different accession - merge into ss5)
