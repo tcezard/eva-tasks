@@ -3,10 +3,8 @@ package eva3417
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import groovy.cli.picocli.CliBuilder
-import org.apache.commons.lang3.tuple.ImmutablePair
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.query.Criteria
-import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
 import uk.ac.ebi.ampt2d.commons.accession.hashing.SHA1HashingFunction
 import uk.ac.ebi.eva.accession.core.model.ISubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
@@ -214,7 +212,23 @@ class RemediationQC {
     }
 
     void qcExistingSVOEOperationAreRemediated(List<SubmittedVariantOperationEntity> svoeList){
-        //TODO: implement
+        List<String> svoeIds = svoeList.stream().map(svoe->svoe.getId())
+                .collect(Collectors.toList())
+        List<SubmittedVariantOperationEntity> svoeInDB = [svoeClass, dbsnpSvoeClass]
+                .collectMany(opClass -> dbEnv.mongoTemplate.find(query(where("_id").in(svoeIds)), opClass))
+                .flatten()
+        List<SubmittedVariantOperationEntity> svoeNotUpdated = new ArrayList<>();
+        for(SubmittedVariantOperationEntity svoe: svoeInDB){
+            SubmittedVariantInactiveEntity inactiveSVEDocument = svoe.getInactiveObjects()[0]
+            if(inactiveSVEDocument.getReferenceAllele()!=inactiveSVEDocument.getReferenceAllele().toUpperCase()
+                    ||inactiveSVEDocument.getAlternateAllele()!=inactiveSVEDocument.getAlternateAllele()){
+                svoeNotUpdated.add(svoe)
+            }
+        }
+
+        if(svoeNotUpdated.size()>0){
+            logger.error("Existing SVOE not updated: " + gson.toJson(svoeNotUpdated))
+        }
     }
 
     void runQC() {

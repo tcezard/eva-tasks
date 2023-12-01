@@ -129,6 +129,7 @@ class RemediateLowerCaseNucleotide {
 
             if(rsSet.size() > 1){
                 //all sve involved does not have same RS, document SVEs in file - don't process
+                logger.error("Not all SVE involved have same RS : " + gson.toJson(sveList))
                 documentInFile(sveList)
             } else{
                 //sort the SVEs involved in asc order of accession and created date
