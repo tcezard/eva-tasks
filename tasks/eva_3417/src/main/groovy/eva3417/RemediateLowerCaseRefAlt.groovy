@@ -1,5 +1,6 @@
 package eva3417
 
+import com.google.gson.Gson
 import groovy.cli.picocli.CliBuilder
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.BulkOperations
@@ -45,11 +46,13 @@ class RemediateLowerCaseNucleotide {
     private EVADatabaseEnvironment dbEnv
     private Function<ISubmittedVariant, String> hashingFunction
     static def logger = LoggerFactory.getLogger(Application.class)
+    private Gson gson
 
     RemediateLowerCaseNucleotide(envPropertiesFile, hashcollisionFile) {
         this.dbEnv = createFromSpringContext(envPropertiesFile, Application.class)
         this.hashCollisionFilePath = hashcollisionFile
         this.hashingFunction = new SubmittedVariantSummaryFunction().andThen(new SHA1HashingFunction())
+        this.gson = new Gson()
     }
 
     List<SubmittedVariantEntity> getImpactedSVEList(List<SubmittedVariantEntity> sveList) {
@@ -99,7 +102,7 @@ class RemediateLowerCaseNucleotide {
     }
 
     void processHashCollision(List<SubmittedVariantEntity> hashCollisionSVEList,
-                              Set<SubmittedVariantEntity> alreadyExistingHashSVEList, Class ssClass){
+                              List<SubmittedVariantEntity> alreadyExistingHashSVEList, Class ssClass){
         // In most cases, we should have only one SVE that has a collision
         // but there can be cases where we have 2 or more SVE in the batch that has a collision
         Map<String, List<SubmittedVariantEntity>> mapOfNewHashAndSVEList = hashCollisionSVEList.stream()
@@ -146,7 +149,7 @@ class RemediateLowerCaseNucleotide {
                     // we need to process first element separately (it needs to be inserted not discarded or merged)
                     startIndex = 1
                     lowestAcc = firstSVEInSorted.getAccession()
-                    // Add the SVE in DB to the list for processing (will be discarded or merged based on the accession)
+                    // Add the SVE in DB to the list for processing (will be merged)
                     sortedList.add(sveInDB)
                     // need to remove this SVE (will be inserted after fixing lower nucleotide)
                     SVEToRemoveList.add(firstSVEInSorted)
@@ -168,18 +171,18 @@ class RemediateLowerCaseNucleotide {
         }
 
         // discard SVEs
-        logger.info("Hash Collision Discard SVE List: " + SVEToDiscardList)
+        logger.info("Hash Collision Discard SVE List: " + gson.toJson(SVEToDiscardList))
         discardSVEAndInsertOperations(SVEToDiscardList, ssClass)
 
         // merge SVEs
         mergeSVEAndInsertOperations(SVEToMergeMap, ssClass)
 
         // Insert SVEs
-        logger.info("Hash Collision Insert SVE List: " + SVEToInsertList)
+        logger.info("Hash Collision Insert SVE List: " + gson.toJson(SVEToInsertList))
         insertSVEWithNewHash(SVEToInsertList, ssClass)
 
         // delete the corrected SVEs
-        logger.info("Hash Collision Remove SVE List: " + SVEToRemoveList)
+        logger.info("Hash Collision Remove SVE List: " + gson.toJson(SVEToRemoveList))
         removeImpactedSVE(SVEToRemoveList, ssClass)
 
     }
@@ -240,11 +243,24 @@ class RemediateLowerCaseNucleotide {
         List<SubmittedVariantEntity> mergeSVEList = mergeSVEMap.entrySet().stream()
                 .flatMap(entry->entry.getValue().stream())
                 .collect(Collectors.toList())
-        logger.info("Hash Collision Merge SVE List: " + mergeSVEList)
-        removeImpactedSVE(mergeSVEList, ssClass)
+        logger.info("Hash Collision Merge SVE List: " + gson.toJson(mergeSVEList))
+        removeMergedSVE(mergeSVEList, ssClass)
 
         // Add the merge operation for all SVEs
         dbEnv.mongoTemplate.insert(svoeList, ssClass.equals(sveClass) ? svoeClass : dbsnpSvoeClass)
+    }
+
+    void removeMergedSVE(List<SubmittedVariantEntity> mergeSVEList, Class ssClass){
+        List<String> mergedSVEIds = mergeSVEList.stream()
+                .map(sve -> sve.getHashedMessage())
+                .collect(Collectors.toList())
+        List<String> mergedSVEAcc = mergeSVEList.stream()
+                .map(sve -> sve.getAccession())
+                .collect(Collectors.toList())
+
+        Query findQuery = query(where("_id").in(mergedSVEIds).and("accession").in(mergedSVEAcc))
+
+        dbEnv.mongoTemplate.remove(findQuery, ssClass)
     }
 
 
@@ -278,7 +294,7 @@ class RemediateLowerCaseNucleotide {
         new RetryableBatchingCursor<SubmittedVariantOperationEntity>(filterCriteria, dbEnv.mongoTemplate, ssClass).each {
             sveOperationBatchList ->
                 {
-                    logger.info("Existing SVOE operations to update: " + sveOperationBatchList)
+                    logger.info("Existing SVOE operations to update: " + gson.toJson(sveOperationBatchList))
 
                     def svoeBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, ssClass)
 
@@ -316,7 +332,7 @@ class RemediateLowerCaseNucleotide {
                     "EVA3417 - SS updated with upper case ref, alt and a new hash",
                     Arrays<SubmittedVariantInactiveEntity>.asList(new SubmittedVariantInactiveEntity(sve)).asList())
 
-            updateOpToWrite.setId("EVA3417_UPDATED_${sve.getReferenceSequenceAccession()}_${sve.getAccession()}")
+            updateOpToWrite.setId("EVA3417_UPDATED_"+sve.getReferenceSequenceAccession()+"_"+sve.getAccession())
 
             sveUpdateOpList.add(updateOpToWrite)
         }
@@ -432,12 +448,12 @@ class RemediateLowerCaseNucleotide {
                                     }
 
                                     // process sve with no hash collision
-                                    logger.info("Impacted sve List (No Hash Collision): " + noHashCollisionSVEList)
+                                    logger.info("Impacted sve List (No Hash Collision): " + gson.toJson(noHashCollisionSVEList))
                                     processNoHashCollision(noHashCollisionSVEList, ssClass)
 
                                     // process sve with hash collision
                                     if (hashCollisionSVEList != null && !hashCollisionSVEList.isEmpty()) {
-                                        logger.info("Impacted sve List (Hash Collision + hash collision in batch): " + hashCollisionSVEList)
+                                        logger.info("Impacted sve List (Hash Collision + hash collision in batch): " + gson.toJson(hashCollisionSVEList))
                                         processHashCollision(hashCollisionSVEList, alreadyExistingSVEList, ssClass)
                                     }
 
