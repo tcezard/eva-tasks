@@ -221,7 +221,7 @@ class RemediationQC {
         for(SubmittedVariantOperationEntity svoe: svoeInDB){
             SubmittedVariantInactiveEntity inactiveSVEDocument = svoe.getInactiveObjects()[0]
             if(inactiveSVEDocument.getReferenceAllele()!=inactiveSVEDocument.getReferenceAllele().toUpperCase()
-                    ||inactiveSVEDocument.getAlternateAllele()!=inactiveSVEDocument.getAlternateAllele()){
+                    ||inactiveSVEDocument.getAlternateAllele()!=inactiveSVEDocument.getAlternateAllele().toUpperCase()){
                 svoeNotUpdated.add(svoe)
             }
         }
