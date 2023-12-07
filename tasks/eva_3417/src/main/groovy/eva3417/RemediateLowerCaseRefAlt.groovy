@@ -282,7 +282,8 @@ class RemediateLowerCaseNucleotide {
 
     void documentInFile(List<SubmittedVariantEntity> sveList) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.hashCollisionFilePath, true))) {
-            writer.write(sveList)
+            writer.write(gson.toJson(sveList))
+            writer.write("\n")
         } catch (IOException e) {
             e.printStackTrace()
         }
