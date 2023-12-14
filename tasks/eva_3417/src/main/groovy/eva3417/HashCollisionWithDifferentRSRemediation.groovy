@@ -122,7 +122,7 @@ class SummariseHashCollision {
 
         for (String asm : affectedAsmList) {
             File asmHashCollisionFile = new File(baseDirPath + "/" + asm + "/hash_collision.txt")
-            // read all the hash collision sve from the list (filter out if already remediated)
+            // read all the hash collision sve from the list
             List<List<SubmittedVariantEntity>> sveInCollisionFile = Files.lines(asmHashCollisionFile.toPath())
                     .map(line -> getListOfSVEFromLine(line))
                     .collect(Collectors.toList())
