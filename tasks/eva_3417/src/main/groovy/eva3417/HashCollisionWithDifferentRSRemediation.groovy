@@ -30,7 +30,7 @@ import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 def cli = new CliBuilder()
 cli.envPropertiesFile(args: 1, "properties file for connecting to db", required: true)
 cli.baseDirPath(args: 2, "Path to the base dir of logs", required: true)
-cli.summaryFilePath(args: 2, "Path to the base dir of logs", required: true)
+cli.summaryFilePath(args: 3, "Path to the summary file dir", required: true)
 
 def options = cli.parse(args)
 if (!options) {
@@ -190,18 +190,21 @@ class SummariseHashCollision {
             String assembly = asmSummary.getKey()
             logger.info("processing for assembly : " + assembly)
             List<CollisionSummary> collisionSummaryList = asmSummary.getValue()
-            // filter and take sve where we have only one valid rs (in this method we will remediate only these)
-            List<CollisionSummary> listOfCollisionWithOneValidRS = collisionSummaryList.stream()
-                    .filter(colsum -> colsum.getCategory() == CATEGORY.BOTH_SVE_HAS_RS_ONE_VALID
-                            || colsum.getCategory() == CATEGORY.ONE_SVE_HAS_RS_ONE_VALID)
+            // filter and take sve where we have  at the most one valid RS (in this method we will remediate only these)
+            List<CollisionSummary> listOfValidCollision = collisionSummaryList.stream()
+                    .filter(colsum -> colsum.getCategory() != CATEGORY.BOTH_SVE_HAS_RS_BOTH_VALID)
                     .collect(Collectors.toList())
-            logger.info("Number of collisions with one valid rs: " + listOfCollisionWithOneValidRS.size())
+            logger.info("Number of collisions with no or one valid rs: " + listOfValidCollision.size())
+            if (listOfValidCollision == null || listOfValidCollision.isEmpty()) {
+                logger.info("No collision with 0 or 1 valid RS found in assembly " + assembly)
+                continue
+            }
 
             // find out the residing collection for both sve in file and sve in db
-            Set<String> sveInFileHashes = listOfCollisionWithOneValidRS.stream()
+            Set<String> sveInFileHashes = listOfValidCollision.stream()
                     .map(colsum -> colsum.getSveInFile().getHashedMessage())
                     .collect(Collectors.toSet())
-            Set<String> sveInDBHashes = listOfCollisionWithOneValidRS.stream()
+            Set<String> sveInDBHashes = listOfValidCollision.stream()
                     .map(colsum -> colsum.getSveInDB().getHashedMessage())
                     .collect(Collectors.toSet())
             Set<String> allHashes = new HashSet<>()
@@ -218,40 +221,47 @@ class SummariseHashCollision {
             List<SubmittedVariantEntity> sveDeleteList = new ArrayList<>()
             List<SubmittedVariantEntity> sveInsertList = new ArrayList<>()
             List<SubmittedVariantOperationEntity> svoeInsertList = new ArrayList<>()
+            List<SubmittedVariantEntity> sveRSUpdateList = new ArrayList<>()
+            List<SubmittedVariantEntity> dbsnpSveDeleteList = new ArrayList<>()
             List<SubmittedVariantEntity> dbsnpSveInsertList = new ArrayList<>()
             List<SubmittedVariantOperationEntity> dbsnpSvoeInsertList = new ArrayList<>()
-            List<SubmittedVariantEntity> sveRSUpdateList = new ArrayList<>()
             List<SubmittedVariantEntity> dbsnpSveRSUpdateList = new ArrayList<>()
 
-            for (CollisionSummary colSummary : listOfCollisionWithOneValidRS) {
-                SubmittedVariantEntity sveInFile = colSummary.getSveInFile()
-                SubmittedVariantEntity sveInDB = colSummary.getSveInDB()
-
+            for (CollisionSummary colSummary : listOfValidCollision) {
                 //  There can be different cases here
                 //  1. if both sve are not remapped
                 //      - take the one with lowest created date and accession (copy rs from other sve if required)
                 //  2. if both sve are remapped
-                //      - see what sve accession exist in the original assembly -> keep that and copy the valid rs if required
+                //      - see what sve accession exist in the original assembly
+                //          - if only one exist, take that one
+                //          - if both exist or both do not exist, take the one with lowest created date/accession
                 //  3. if only one is remapped
-                //      a. priority belongs to the non-remapped (copy rs from other sve if required)
+                //      - take the non-remapped one
+                // in all cases, if the one we are keeping does not have a valid rs, copy valid rs from the other
 
+                SubmittedVariantEntity sveInFile = colSummary.getSveInFile()
+                SubmittedVariantEntity sveInDB = colSummary.getSveInDB()
                 // assume we need to keep the sve in db and merge the sve in file (lowercase)
                 SubmittedVariantEntity sveToKeep = sveInDB
                 boolean sveToKeepRSValid = colSummary.getRsInDBValid()
                 SubmittedVariantEntity sveToMerge = sveInFile
+                boolean sveToMergeRSValid = colSummary.getRsInFileValid()
                 Boolean sveToKeepIsInFile = false
+
                 if (sveInFile.getRemappedFrom() == null && sveInDB.getRemappedFrom() == null) {
-                    // case 1: both are not remapped (take the one with lowest created date, sve accession)
+                    // case 1: both are not remapped (take the one with lowest created date/accession)
                     if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
                         sveToKeep = sveInFile
                         sveToMerge = sveInDB
                         sveToKeepRSValid = colSummary.getRsInFileValid()
+                        sveToMergeRSValid = colSummary.getRsInDBValid()
                         sveToKeepIsInFile = true
                     } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
                         if (sveInFile.getAccession() < sveInDB.getAccession()) {
                             sveToKeep = sveInFile
                             sveToMerge = sveInDB
                             sveToKeepRSValid = colSummary.getRsInFileValid()
+                            sveToMergeRSValid = colSummary.getRsInDBValid()
                             sveToKeepIsInFile = true
                         }
                     }
@@ -259,18 +269,32 @@ class SummariseHashCollision {
                     // case 2: both are remapped check which sve accession is present in original assembly that gets the priority
                     List<SubmittedVariantEntity> sveInFileOrgAsm = findSVEAccessionInOrgAssembly(sveInFile.getRemappedFrom(), sveInFile.getAccession())
                     List<SubmittedVariantEntity> sveInDBOrgAsm = findSVEAccessionInOrgAssembly(sveInDB.getRemappedFrom(), sveInDB.getAccession())
-                    if ((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm != null && !sveInDBOrgAsm.isEmpty())) {
-                        // both sve accession are present in original assembly
-                        throw new RuntimeException("Both sve accession present in org assembly, need to check" + gson.toJson(colSummary))
-                    } else if ((sveInFileOrgAsm == null || sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null && sveInDBOrgAsm.isEmpty())) {
-                        // both sve accession are not present in the original assembly
-                        throw new RuntimeException("Both sve accession not present in org assembly, need to check" + gson.toJson(colSummary))
+                    if (((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm != null && !sveInDBOrgAsm.isEmpty()))
+                            || ((sveInFileOrgAsm == null || sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()))) {
+                        // both sve accession are present in original assembly or both sve accession are not present in the original assembly
+                        // similar to case 1 - take the one with lower created date and sve accession
+                        if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
+                            sveToKeep = sveInFile
+                            sveToMerge = sveInDB
+                            sveToKeepRSValid = colSummary.getRsInFileValid()
+                            sveToMergeRSValid = colSummary.getRsInDBValid()
+                            sveToKeepIsInFile = true
+                        } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
+                            if (sveInFile.getAccession() < sveInDB.getAccession()) {
+                                sveToKeep = sveInFile
+                                sveToMerge = sveInDB
+                                sveToKeepRSValid = colSummary.getRsInFileValid()
+                                sveToMergeRSValid = colSummary.getRsInDBValid()
+                                sveToKeepIsInFile = true
+                            }
+                        }
                     } else {
                         // only one asm accession is present in original assembly, take the one that is present
                         if (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()) {
                             sveToKeep = sveInFile
                             sveToMerge = sveInDB
                             sveToKeepRSValid = colSummary.getRsInFileValid()
+                            sveToMergeRSValid = colSummary.getRsInDBValid()
                             sveToKeepIsInFile = true
                         }
                     }
@@ -280,6 +304,7 @@ class SummariseHashCollision {
                         sveToKeep = sveInFile
                         sveToMerge = sveInDB
                         sveToKeepRSValid = colSummary.getRsInFileValid()
+                        sveToMergeRSValid = colSummary.getRsInDBValid()
                         sveToKeepIsInFile = true
                     }
                 }
@@ -287,17 +312,17 @@ class SummariseHashCollision {
                 Class sveToKeepCollection = getCollection(sveCollection, dbsnpSVECollection, sveToKeep)
                 Class sveToMergeCollection = getCollection(sveCollection, dbsnpSVECollection, sveToMerge)
 
-                // create a merge operation for sve to merge
+                // create a merge operation for sve to merge and delete the merged sve
                 if (sveToMergeCollection == sveClass) {
                     svoeInsertList.add(getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession()))
+                    sveDeleteList.add(sveToMerge)
                 } else {
                     dbsnpSvoeInsertList.add(getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession()))
+                    dbsnpSveDeleteList.add(sveToMerge)
                 }
-                // delete the merged sve
-                sveDeleteList.add(sveToMerge)
 
-                // if sve to keep does not have a valid rs, copy it from the the sve to merge
-                if (!sveToKeepRSValid) {
+                // if sve to keep does not have a valid rs but sve to merge has, copy it to sve to keep
+                if (sveToKeepRSValid==false && sveToMergeRSValid==true) {
                     sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
                 }
 
@@ -311,8 +336,8 @@ class SummariseHashCollision {
                         dbsnpSveInsertList.add(getRemediatedSVE(sveToKeep))
                     }
                 } else {
-                    //sve to keep is present in db but does not have a valid rs, copy it from sve to merge
-                    if (!sveToKeepRSValid) {
+                    // if sve to keep is present in db but does not have a valid rs, then update the rs
+                    if (sveToKeepRSValid==false && sveToMergeRSValid==true) {
                         if (sveToKeepCollection == sveClass) {
                             sveRSUpdateList.add(sveToKeep)
                         } else {
@@ -334,8 +359,12 @@ class SummariseHashCollision {
 
             // delete the merged SVEs - delete first before inserting in order to avoid deleting the remediated one
             logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Delete Merged SVE : " + gson.toJson(sveDeleteList))
-            removeMergedSVE(sveDeleteList, sveClass)
-            removeMergedSVE(sveDeleteList, dbsnpSveClass)
+            if (sveDeleteList != null && !sveDeleteList.isEmpty()) {
+                removeMergedSVE(sveDeleteList, sveClass)
+            }
+            if (dbsnpSveDeleteList != null && !dbsnpSveDeleteList.isEmpty()) {
+                removeMergedSVE(dbsnpSveDeleteList, dbsnpSveClass)
+            }
 
             // insert updated SVEs into DB
             logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Insert SVE : " + gson.toJson(sveInsertList))
@@ -441,23 +470,21 @@ class SummariseHashCollision {
 
 
 enum CATEGORY {
-    NO_SVE_HAS_RS,
-    ONE_SVE_HAS_RS_NONE_VALID,
-    ONE_SVE_HAS_RS_ONE_VALID,  // around 23262
-    BOTH_SVE_HAS_RS_NONE_VALID,
-    BOTH_SVE_HAS_RS_ONE_VALID,  // around 17
-    BOTH_SVE_HAS_RS_BOTH_VALID  // around 221
+    NO_SVE_HAS_RS,              // 0
+    ONE_SVE_HAS_RS_NONE_VALID,  // 0
+    ONE_SVE_HAS_RS_ONE_VALID,   // 23262
+    BOTH_SVE_HAS_RS_NONE_VALID, // 51
+    BOTH_SVE_HAS_RS_ONE_VALID,  // 26
+    BOTH_SVE_HAS_RS_BOTH_VALID  // 161
 }
 
 class CollisionSummary {
     private SubmittedVariantEntity sveInFile
     private Long rsInFile
-    private List<ClusteredVariantEntity> fileRSList
     private boolean rsInFileValid
 
     private SubmittedVariantEntity sveInDB
     private Long rsInDB
-    private List<ClusteredVariantEntity> dbRSList
     private boolean rsInDBValid
 
     private CATEGORY category
@@ -465,23 +492,33 @@ class CollisionSummary {
     CollisionSummary(SubmittedVariantEntity sveInFile, SubmittedVariantEntity sveInDB, Map<Long, List<ClusteredVariantEntity>> cveInDB) {
         this.sveInFile = sveInFile
         this.rsInFile = sveInFile.getClusteredVariantAccession()
-        this.fileRSList = cveInDB.get(rsInFile)
-        if (fileRSList == null || fileRSList.isEmpty()) {
-            this.rsInFileValid = false
-        } else {
-            this.rsInFileValid = true
-        }
+        this.rsInFileValid = checkIfValidRS(cveInDB, rsInFile, sveInFile.getReferenceSequenceAccession())
 
         this.sveInDB = sveInDB
         this.rsInDB = sveInDB.getClusteredVariantAccession()
-        this.dbRSList = cveInDB.get(rsInDB)
-        if (dbRSList == null || dbRSList.isEmpty()) {
-            this.rsInDBValid = false
-        } else {
-            this.rsInDBValid = true
-        }
+        this.rsInDBValid = checkIfValidRS(cveInDB, rsInDB, sveInDB.getReferenceSequenceAccession())
 
         this.category = identifyCategory()
+    }
+
+    boolean checkIfValidRS(Map<Long, List<ClusteredVariantEntity>> cveInDB, Long rs, String asm) {
+        if (rs == null) {
+            return false
+        } else {
+            List<ClusteredVariantEntity> rsList = cveInDB.get(rs)
+            if (rsList == null || rsList.isEmpty()) {
+                return false
+            } else {
+                Optional<ClusteredVariantEntity> opRS = rsList.stream()
+                        .filter(cve -> cve.getAccession() == rs && cve.getAssemblyAccession() == asm)
+                        .findAny()
+                if (opRS.isPresent()) {
+                    return true
+                } else {
+                    return false
+                }
+            }
+        }
     }
 
     CATEGORY identifyCategory() {
@@ -516,28 +553,12 @@ class CollisionSummary {
         return sveInFile
     }
 
-    Long getRsInFile() {
-        return rsInFile
-    }
-
-    List<ClusteredVariantEntity> getFileRSList() {
-        return fileRSList
-    }
-
     boolean getRsInFileValid() {
         return rsInFileValid
     }
 
     SubmittedVariantEntity getSveInDB() {
         return sveInDB
-    }
-
-    Long getRsInDB() {
-        return rsInDB
-    }
-
-    List<ClusteredVariantEntity> getDbRSList() {
-        return dbRSList
     }
 
     boolean getRsInDBValid() {
