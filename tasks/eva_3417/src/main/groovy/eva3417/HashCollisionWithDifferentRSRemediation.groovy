@@ -220,8 +220,8 @@ class SummariseHashCollision {
             List<SubmittedVariantOperationEntity> svoeInsertList = new ArrayList<>()
             List<SubmittedVariantEntity> dbsnpSveInsertList = new ArrayList<>()
             List<SubmittedVariantOperationEntity> dbsnpSvoeInsertList = new ArrayList<>()
-            List<SubmittedVariantEntity> sveUpdateList = new ArrayList<>()
-            List<SubmittedVariantEntity> dbsnpSveUpdateList = new ArrayList<>()
+            List<SubmittedVariantEntity> sveRSUpdateList = new ArrayList<>()
+            List<SubmittedVariantEntity> dbsnpSveRSUpdateList = new ArrayList<>()
 
             for (CollisionSummary colSummary : listOfCollisionWithOneValidRS) {
                 SubmittedVariantEntity sveInFile = colSummary.getSveInFile()
@@ -296,27 +296,27 @@ class SummariseHashCollision {
                 // delete the merged sve
                 sveDeleteList.add(sveToMerge)
 
+                // if sve to keep does not have a valid rs, copy it from the the sve to merge
+                if (!sveToKeepRSValid) {
+                    sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
+                }
+
                 if (sveToKeepIsInFile) {
                     // delete the lowercase sve (will insert the remediated one)
                     sveDeleteList.add(sveToKeep)
                     // remediate and add the sve to the db
                     if (sveToKeepCollection == sveClass) {
-                        // if sve to keep does not have a valid rs, copy it from the the sve to merge
-                        if (!sveToKeepRSValid) {
-                            sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
-                        }
                         sveInsertList.add(getRemediatedSVE(sveToKeep))
                     } else {
-                        dbsnpSveInsertList.add(sveToKeep)
+                        dbsnpSveInsertList.add(getRemediatedSVE(sveToKeep))
                     }
                 } else {
                     //sve to keep is present in db but does not have a valid rs, copy it from sve to merge
                     if (!sveToKeepRSValid) {
-                        sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
                         if (sveToKeepCollection == sveClass) {
-                            sveUpdateList.add(sveToKeep)
+                            sveRSUpdateList.add(sveToKeep)
                         } else {
-                            dbsnpSveUpdateList.add(sveToKeep)
+                            dbsnpSveRSUpdateList.add(sveToKeep)
                         }
                     }
                 }
@@ -347,8 +347,8 @@ class SummariseHashCollision {
                 dbEnv.mongoTemplate.insert(dbsnpSveInsertList, dbsnpSveClass)
             }
 
-            if (!sveUpdateList.isEmpty() || !dbsnpSveUpdateList.isEmpty()) {
-                updateRSForSVe(sveUpdateList, dbsnpSveUpdateList)
+            if (!sveRSUpdateList.isEmpty() || !dbsnpSveRSUpdateList.isEmpty()) {
+                updateRSForSVe(sveRSUpdateList, dbsnpSveRSUpdateList)
             }
         }
     }
