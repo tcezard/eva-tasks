@@ -118,8 +118,8 @@ class SummariseHashCollision {
         String[] affectedAsmList = [
                 "GCA_000002285.2", "GCA_000002315.3", "GCA_000003055.5", "GCA_011100555.1", "GCA_000002035.3",
                 "GCA_000001635.6", "GCA_000349105.1", "GCA_016772045.1", "GCA_000003025.6", "GCA_000349185.1",
-                // "GCA_000247795.2", "GCA_000473445.2",
-                // "GCA_001433935.1"
+                "GCA_000247795.2", "GCA_000473445.2",
+                "GCA_001433935.1"
         ]
 
         for (String asm : affectedAsmList) {
@@ -152,8 +152,9 @@ class SummariseHashCollision {
     void writeSummaryToFile() {
         try (BufferedWriter br = new BufferedWriter(new FileWriter(summaryFilePath))) {
             String[] header = new String[]{"assembly",
-                    "sve_in_file", "file_ref", "file_alt", "file_rs", "file_rs_valid", "file_remapped_from",
-                    "sve_in_db", "db_ref", "db_alt", "db_rs", "db_rs_valid", "db_remapped_from",
+                    "sve_in_file", "file_accession", "file_rs", "file_rs_valid", "file_remapped_from",
+                    "sve_in_db", "db_accession", "db_rs", "db_rs_valid", "db_remapped_from",
+                    "file_ref", "file_alt", "db_ref", "db_alt",
                     "category"}
             br.write(header.join(","))
             br.write("\n")
@@ -163,13 +164,16 @@ class SummariseHashCollision {
                     String[] row = new String[]{
                             asmSummary.getKey().toString(),
 
-                            summary.getSveInFile().getHashedMessage(), summary.getSveInFile().getReferenceAllele(),
-                            summary.getSveInFile().getAlternateAllele(), summary.getSveInFile().getClusteredVariantAccession(),
-                            summary.getRsInFileValid(), summary.getSveInFile().getRemappedFrom(),
+                            summary.getSveInFile().getHashedMessage(), summary.getSveInFile().getAccession(),
+                            summary.getSveInFile().getClusteredVariantAccession(), summary.getRsInFileValid(),
+                            summary.getSveInFile().getRemappedFrom(),
 
-                            summary.getSveInDB().getHashedMessage(), summary.getSveInDB().getReferenceAllele(),
-                            summary.getSveInDB().getAlternateAllele(), summary.getSveInDB().getClusteredVariantAccession(),
-                            summary.getRsInDBValid(), summary.getSveInDB().getRemappedFrom(),
+                            summary.getSveInDB().getHashedMessage(), summary.getSveInDB().getAccession(),
+                            summary.getSveInDB().getClusteredVariantAccession(), summary.getRsInDBValid(),
+                            summary.getSveInDB().getRemappedFrom(),
+
+                            summary.getSveInFile().getReferenceAllele(), summary.getSveInFile().getAlternateAllele(),
+                            summary.getSveInDB().getReferenceAllele(), summary.getSveInDB().getAlternateAllele(),
 
                             summary.getCategory()}
                     br.write(row.join(","))
@@ -231,21 +235,23 @@ class SummariseHashCollision {
                 //  3. if only one is remapped
                 //      a. priority belongs to the non-remapped (copy rs from other sve if required)
 
-                // assume we need to keep the one in db
+                // assume we need to keep the sve in db and merge the sve in file (lowercase)
                 SubmittedVariantEntity sveToKeep = sveInDB
+                boolean sveToKeepRSValid = colSummary.getRsInDBValid()
                 SubmittedVariantEntity sveToMerge = sveInFile
                 Boolean sveToKeepIsInFile = false
-
                 if (sveInFile.getRemappedFrom() == null && sveInDB.getRemappedFrom() == null) {
                     // case 1: both are not remapped (take the one with lowest created date, sve accession)
                     if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
                         sveToKeep = sveInFile
                         sveToMerge = sveInDB
+                        sveToKeepRSValid = colSummary.getRsInFileValid()
                         sveToKeepIsInFile = true
                     } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
                         if (sveInFile.getAccession() < sveInDB.getAccession()) {
                             sveToKeep = sveInFile
                             sveToMerge = sveInDB
+                            sveToKeepRSValid = colSummary.getRsInFileValid()
                             sveToKeepIsInFile = true
                         }
                     }
@@ -264,6 +270,7 @@ class SummariseHashCollision {
                         if (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()) {
                             sveToKeep = sveInFile
                             sveToMerge = sveInDB
+                            sveToKeepRSValid = colSummary.getRsInFileValid()
                             sveToKeepIsInFile = true
                         }
                     }
@@ -272,6 +279,7 @@ class SummariseHashCollision {
                     if (sveInFile.getRemappedFrom() == null) {
                         sveToKeep = sveInFile
                         sveToMerge = sveInDB
+                        sveToKeepRSValid = colSummary.getRsInFileValid()
                         sveToKeepIsInFile = true
                     }
                 }
@@ -293,8 +301,8 @@ class SummariseHashCollision {
                     sveDeleteList.add(sveToKeep)
                     // remediate and add the sve to the db
                     if (sveToKeepCollection == sveClass) {
-                        // if sve to keep does not have an rs, copy it from the the sve to merge
-                        if (sveToKeep.getClusteredVariantAccession() == null) {
+                        // if sve to keep does not have a valid rs, copy it from the the sve to merge
+                        if (!sveToKeepRSValid) {
                             sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
                         }
                         sveInsertList.add(getRemediatedSVE(sveToKeep))
@@ -302,8 +310,8 @@ class SummariseHashCollision {
                         dbsnpSveInsertList.add(sveToKeep)
                     }
                 } else {
-                    //if sve to keep is already present in file but does not have an rs
-                    if (sveToKeep.getClusteredVariantAccession() == null) {
+                    //sve to keep is present in db but does not have a valid rs, copy it from sve to merge
+                    if (!sveToKeepRSValid) {
                         sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
                         if (sveToKeepCollection == sveClass) {
                             sveUpdateList.add(sveToKeep)
