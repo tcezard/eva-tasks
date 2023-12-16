@@ -183,12 +183,12 @@ class SummariseHashCollision {
         }
     }
 
-    void remediateCategoryOneValidRS() {
+    void remediateCategoryAtMostOneValidRS() {
         logger.info("Processing SVEs where only one of them has a valid RS ")
 
         for (Map.Entry<String, List<CollisionSummary>> asmSummary : collisionSummaryMap.entrySet()) {
             String assembly = asmSummary.getKey()
-            logger.info("processing for assembly : " + assembly)
+            logger.info("processing for assembly: " + assembly)
             List<CollisionSummary> collisionSummaryList = asmSummary.getValue()
             // filter and take sve where we have  at the most one valid RS (in this method we will remediate only these)
             List<CollisionSummary> listOfValidCollision = collisionSummaryList.stream()
@@ -196,7 +196,7 @@ class SummariseHashCollision {
                     .collect(Collectors.toList())
             logger.info("Number of collisions with no or one valid rs: " + listOfValidCollision.size())
             if (listOfValidCollision == null || listOfValidCollision.isEmpty()) {
-                logger.info("No collision with 0 or 1 valid RS found in assembly " + assembly)
+                logger.info("No collision with 0 or 1 valid RS found in assembly: " + assembly)
                 continue
             }
 
@@ -228,6 +228,7 @@ class SummariseHashCollision {
             List<SubmittedVariantEntity> dbsnpSveRSUpdateList = new ArrayList<>()
 
             for (CollisionSummary colSummary : listOfValidCollision) {
+                logger.info("remediateAtMostOneValidRS - processing collision: " + gson.toJson(colSummary))
                 //  There can be different cases here
                 //  1. if both sve are not remapped
                 //      - take the one with lowest created date and accession (copy rs from other sve if required)
@@ -312,6 +313,9 @@ class SummariseHashCollision {
                 Class sveToKeepCollection = getCollection(sveCollection, dbsnpSVECollection, sveToKeep)
                 Class sveToMergeCollection = getCollection(sveCollection, dbsnpSVECollection, sveToMerge)
 
+                logger.info("remediateAtMostOneValidRS - sveToKeep (" + sveToKeepCollection + "): " + gson.toJson(sveToKeep))
+                logger.info("remediateAtMostOneValidRS - sveToMerge (" + sveToMergeCollection + "): " + gson.toJson(sveToMerge))
+
                 // create a merge operation for sve to merge and delete the merged sve
                 if (sveToMergeCollection == sveClass) {
                     svoeInsertList.add(getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession()))
@@ -348,8 +352,8 @@ class SummariseHashCollision {
             }
 
             // insert the merge operation entries for all SVEs
-            logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Merged Operations List (SVOE): " + gson.toJson(svoeInsertList))
-            logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Merged Operations List (DBSNPSVOE): " + gson.toJson(dbsnpSvoeInsertList))
+            logger.info("remediateAtMostOneValidRS - Merged Operations List (SVOE): " + gson.toJson(svoeInsertList))
+            logger.info("remediateAtMostOneValidRS - Merged Operations List (DBSNPSVOE): " + gson.toJson(dbsnpSvoeInsertList))
             if (svoeInsertList != null && !svoeInsertList.isEmpty()) {
                 dbEnv.mongoTemplate.insert(svoeInsertList, svoeClass)
             }
@@ -358,7 +362,8 @@ class SummariseHashCollision {
             }
 
             // delete the merged SVEs - delete first before inserting in order to avoid deleting the remediated one
-            logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Delete Merged SVE : " + gson.toJson(sveDeleteList))
+            logger.info("remediateAtMostOneValidRS - Delete Merged (SVE): " + gson.toJson(sveDeleteList))
+            logger.info("remediateAtMostOneValidRS - Delete Merged (DBSNSVE): " + gson.toJson(dbsnpSveDeleteList))
             if (sveDeleteList != null && !sveDeleteList.isEmpty()) {
                 removeMergedSVE(sveDeleteList, sveClass)
             }
@@ -367,8 +372,8 @@ class SummariseHashCollision {
             }
 
             // insert updated SVEs into DB
-            logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Insert SVE : " + gson.toJson(sveInsertList))
-            logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Insert DBSNPSVE: " + gson.toJson(dbsnpSveInsertList))
+            logger.info("remediateAtMostOneValidRS - Insert (SVE): " + gson.toJson(sveInsertList))
+            logger.info("remediateAtMostOneValidRS - Insert (DBSNPSVE): " + gson.toJson(dbsnpSveInsertList))
             if (sveInsertList != null && !sveInsertList.isEmpty()) {
                 dbEnv.mongoTemplate.insert(sveInsertList, sveClass)
             }
@@ -383,8 +388,8 @@ class SummariseHashCollision {
     }
 
     void updateRSForSVe(List<SubmittedVariantEntity> sveUpdateList, List<SubmittedVariantEntity> dbsnpSveUpdateList) {
-        logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Update RS in SVE : " + gson.toJson(sveUpdateList))
-        logger.info("remediateOneValidRSWithRSInNonRemappedSVE - Update RS in DBSNPSVE : " + gson.toJson(dbsnpSveUpdateList))
+        logger.info("remediateAtMostOneValidRS - Update RS (SVE): " + gson.toJson(sveUpdateList))
+        logger.info("remediateAtMostOneValidRS - Update RS (DBSNPSVE): " + gson.toJson(dbsnpSveUpdateList))
 
         def sveBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, sveClass)
         def dbsnpSveBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, dbsnpSveClass)
@@ -463,8 +468,8 @@ class SummariseHashCollision {
         //printSummary()
         writeSummaryToFile()
 
-        // remediate the case where only one sve has a valid rs
-        remediateCategoryOneValidRS()
+        // remediate the case where involved sve has at most one valid rs
+        remediateCategoryAtMostOneValidRS()
     }
 }
 
