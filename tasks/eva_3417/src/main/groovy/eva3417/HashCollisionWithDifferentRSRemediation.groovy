@@ -305,7 +305,10 @@ class SummariseHashCollision {
                     .collect(Collectors.toList())
             logger.info("Number of sve in collision file: " + sveInCollisionFile.size())
             // process all SVEs one by one
+            int varNum = 1
             for (SubmittedVariantEntity sveInFile : sveInCollisionFile) {
+                logger.info("processing variant number: " + varNum)
+                varNum++
                 logger.info("processing sve in file: " + gson.toJson(sveInFile))
                 SubmittedVariantEntity sveInDB = getSveForHash(getSVENewHash(sveInFile))
                 logger.info("processing sve in DB: " + gson.toJson(sveInDB))
