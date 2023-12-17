@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import groovy.cli.picocli.CliBuilder
 import org.slf4j.LoggerFactory
-import org.springframework.data.mongodb.core.BulkOperations
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import uk.ac.ebi.ampt2d.commons.accession.core.models.EventType
@@ -137,14 +136,11 @@ class SummariseHashCollision {
             collisionSummaryMap.put(asm, new ArrayList<CollisionSummary>())
 
             for (List<SubmittedVariantEntity> sveList : sveInCollisionFile) {
-                if (sveList.size() != 1) {
-                    // TODO: only one variant that has this condition, needs to be checked
-                    logger.error("skip processing as svelist size is not equal to 1 ")
-                    continue
+                for (int i = 0; i < sveList.size(); i++) {
+                    SubmittedVariantEntity sveInFile = sveList.get(i)
+                    SubmittedVariantEntity sveInDB = sveInDBMap.get(getSVENewHash(sveInFile))
+                    collisionSummaryMap.get(asm).add(new CollisionSummary(sveInFile, sveInDB, cveInDB))
                 }
-                SubmittedVariantEntity sveInFile = sveList.get(0)
-                SubmittedVariantEntity sveInDB = sveInDBMap.get(getSVENewHash(sveInFile))
-                collisionSummaryMap.get(asm).add(new CollisionSummary(sveInFile, sveInDB, cveInDB))
             }
         }
     }
@@ -183,241 +179,83 @@ class SummariseHashCollision {
         }
     }
 
-    void remediateCategoryAtMostOneValidRS() {
-        logger.info("Processing SVEs where only one of them has a valid RS ")
-
-        for (Map.Entry<String, List<CollisionSummary>> asmSummary : collisionSummaryMap.entrySet()) {
-            String assembly = asmSummary.getKey()
-            logger.info("processing for assembly: " + assembly)
-            List<CollisionSummary> collisionSummaryList = asmSummary.getValue()
-            // filter and take sve where we have  at the most one valid RS (in this method we will remediate only these)
-            List<CollisionSummary> listOfValidCollision = collisionSummaryList.stream()
-                    .filter(colsum -> colsum.getCategory() != CATEGORY.BOTH_SVE_HAS_RS_BOTH_VALID)
-                    .collect(Collectors.toList())
-            logger.info("Number of collisions with no or one valid rs: " + listOfValidCollision.size())
-            if (listOfValidCollision == null || listOfValidCollision.isEmpty()) {
-                logger.info("No collision with 0 or 1 valid RS found in assembly: " + assembly)
-                continue
-            }
-
-            // find out the residing collection for both sve in file and sve in db
-            Set<String> sveInFileHashes = listOfValidCollision.stream()
-                    .map(colsum -> colsum.getSveInFile().getHashedMessage())
-                    .collect(Collectors.toSet())
-            Set<String> sveInDBHashes = listOfValidCollision.stream()
-                    .map(colsum -> colsum.getSveInDB().getHashedMessage())
-                    .collect(Collectors.toSet())
-            Set<String> allHashes = new HashSet<>()
-            allHashes.addAll(sveInFileHashes)
-            allHashes.addAll(sveInDBHashes)
-
-            Set<String> sveCollection = dbEnv.mongoTemplate.find(query(where("_id").in(allHashes)), sveClass)
-                    .stream().map(sve -> sve.getHashedMessage())
-                    .collect(Collectors.toSet())
-            Set<String> dbsnpSVECollection = dbEnv.mongoTemplate.find(query(where("_id").in(allHashes)), dbsnpSveClass)
-                    .stream().map(sve -> sve.getHashedMessage())
-                    .collect(Collectors.toSet())
-
-            List<SubmittedVariantEntity> sveDeleteList = new ArrayList<>()
-            List<SubmittedVariantEntity> sveInsertList = new ArrayList<>()
-            List<SubmittedVariantOperationEntity> svoeInsertList = new ArrayList<>()
-            List<SubmittedVariantEntity> sveRSUpdateList = new ArrayList<>()
-            List<SubmittedVariantEntity> dbsnpSveDeleteList = new ArrayList<>()
-            List<SubmittedVariantEntity> dbsnpSveInsertList = new ArrayList<>()
-            List<SubmittedVariantOperationEntity> dbsnpSvoeInsertList = new ArrayList<>()
-            List<SubmittedVariantEntity> dbsnpSveRSUpdateList = new ArrayList<>()
-
-            for (CollisionSummary colSummary : listOfValidCollision) {
-                logger.info("remediateAtMostOneValidRS - processing collision: " + gson.toJson(colSummary))
-                //  There can be different cases here
-                //  1. if both sve are not remapped
-                //      - take the one with lowest created date and accession (copy rs from other sve if required)
-                //  2. if both sve are remapped
-                //      - see what sve accession exist in the original assembly
-                //          - if only one exist, take that one
-                //          - if both exist or both do not exist, take the one with lowest created date/accession
-                //  3. if only one is remapped
-                //      - take the non-remapped one
-                // in all cases, if the one we are keeping does not have a valid rs, copy valid rs from the other
-
-                SubmittedVariantEntity sveInFile = colSummary.getSveInFile()
-                SubmittedVariantEntity sveInDB = colSummary.getSveInDB()
-                // assume we need to keep the sve in db and merge the sve in file (lowercase)
-                SubmittedVariantEntity sveToKeep = sveInDB
-                boolean sveToKeepRSValid = colSummary.getRsInDBValid()
-                SubmittedVariantEntity sveToMerge = sveInFile
-                boolean sveToMergeRSValid = colSummary.getRsInFileValid()
-                Boolean sveToKeepIsInFile = false
-
-                if (sveInFile.getRemappedFrom() == null && sveInDB.getRemappedFrom() == null) {
-                    // case 1: both are not remapped (take the one with lowest created date/accession)
-                    if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
-                        sveToKeep = sveInFile
-                        sveToMerge = sveInDB
-                        sveToKeepRSValid = colSummary.getRsInFileValid()
-                        sveToMergeRSValid = colSummary.getRsInDBValid()
-                        sveToKeepIsInFile = true
-                    } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
-                        if (sveInFile.getAccession() < sveInDB.getAccession()) {
-                            sveToKeep = sveInFile
-                            sveToMerge = sveInDB
-                            sveToKeepRSValid = colSummary.getRsInFileValid()
-                            sveToMergeRSValid = colSummary.getRsInDBValid()
-                            sveToKeepIsInFile = true
-                        }
-                    }
-                } else if (sveInFile.getRemappedFrom() != null && sveInDB.getRemappedFrom() != null) {
-                    // case 2: both are remapped check which sve accession is present in original assembly that gets the priority
-                    List<SubmittedVariantEntity> sveInFileOrgAsm = findSVEAccessionInOrgAssembly(sveInFile.getRemappedFrom(), sveInFile.getAccession())
-                    List<SubmittedVariantEntity> sveInDBOrgAsm = findSVEAccessionInOrgAssembly(sveInDB.getRemappedFrom(), sveInDB.getAccession())
-                    if (((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm != null && !sveInDBOrgAsm.isEmpty()))
-                            || ((sveInFileOrgAsm == null || sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()))) {
-                        // both sve accession are present in original assembly or both sve accession are not present in the original assembly
-                        // similar to case 1 - take the one with lower created date and sve accession
-                        if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
-                            sveToKeep = sveInFile
-                            sveToMerge = sveInDB
-                            sveToKeepRSValid = colSummary.getRsInFileValid()
-                            sveToMergeRSValid = colSummary.getRsInDBValid()
-                            sveToKeepIsInFile = true
-                        } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
-                            if (sveInFile.getAccession() < sveInDB.getAccession()) {
-                                sveToKeep = sveInFile
-                                sveToMerge = sveInDB
-                                sveToKeepRSValid = colSummary.getRsInFileValid()
-                                sveToMergeRSValid = colSummary.getRsInDBValid()
-                                sveToKeepIsInFile = true
-                            }
-                        }
-                    } else {
-                        // only one asm accession is present in original assembly, take the one that is present
-                        if (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()) {
-                            sveToKeep = sveInFile
-                            sveToMerge = sveInDB
-                            sveToKeepRSValid = colSummary.getRsInFileValid()
-                            sveToMergeRSValid = colSummary.getRsInDBValid()
-                            sveToKeepIsInFile = true
-                        }
-                    }
-                } else if (sveInFile.getRemappedFrom() == null || sveInDB.getRemappedFrom() == null) {
-                    // case 3: only one is remapped , non remapped one gets the priority
-                    if (sveInFile.getRemappedFrom() == null) {
-                        sveToKeep = sveInFile
-                        sveToMerge = sveInDB
-                        sveToKeepRSValid = colSummary.getRsInFileValid()
-                        sveToMergeRSValid = colSummary.getRsInDBValid()
-                        sveToKeepIsInFile = true
-                    }
-                }
-
-                Class sveToKeepCollection = getCollection(sveCollection, dbsnpSVECollection, sveToKeep)
-                Class sveToMergeCollection = getCollection(sveCollection, dbsnpSVECollection, sveToMerge)
-
-                logger.info("remediateAtMostOneValidRS - sveToKeep (" + sveToKeepCollection + "): " + gson.toJson(sveToKeep))
-                logger.info("remediateAtMostOneValidRS - sveToMerge (" + sveToMergeCollection + "): " + gson.toJson(sveToMerge))
-
-                // create a merge operation for sve to merge and delete the merged sve
-                if (sveToMergeCollection == sveClass) {
-                    svoeInsertList.add(getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession()))
-                    sveDeleteList.add(sveToMerge)
-                } else {
-                    dbsnpSvoeInsertList.add(getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession()))
-                    dbsnpSveDeleteList.add(sveToMerge)
-                }
-
-                // if sve to keep does not have a valid rs but sve to merge has, copy it to sve to keep
-                if (sveToKeepRSValid==false && sveToMergeRSValid==true) {
-                    sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
-                }
-
-                if (sveToKeepIsInFile) {
-                    // delete the lowercase sve (will insert the remediated one)
-                    sveDeleteList.add(sveToKeep)
-                    // remediate and add the sve to the db
-                    if (sveToKeepCollection == sveClass) {
-                        sveInsertList.add(getRemediatedSVE(sveToKeep))
-                    } else {
-                        dbsnpSveInsertList.add(getRemediatedSVE(sveToKeep))
-                    }
-                } else {
-                    // if sve to keep is present in db but does not have a valid rs, then update the rs
-                    if (sveToKeepRSValid==false && sveToMergeRSValid==true) {
-                        if (sveToKeepCollection == sveClass) {
-                            sveRSUpdateList.add(sveToKeep)
-                        } else {
-                            dbsnpSveRSUpdateList.add(sveToKeep)
-                        }
-                    }
-                }
-            }
-
-            // insert the merge operation entries for all SVEs
-            logger.info("remediateAtMostOneValidRS - Merged Operations List (SVOE): " + gson.toJson(svoeInsertList))
-            logger.info("remediateAtMostOneValidRS - Merged Operations List (DBSNPSVOE): " + gson.toJson(dbsnpSvoeInsertList))
-            if (svoeInsertList != null && !svoeInsertList.isEmpty()) {
-                dbEnv.mongoTemplate.insert(svoeInsertList, svoeClass)
-            }
-            if (dbsnpSvoeInsertList != null && !dbsnpSvoeInsertList.isEmpty()) {
-                dbEnv.mongoTemplate.insert(dbsnpSvoeInsertList, dbsnpSvoeClass)
-            }
-
-            // delete the merged SVEs - delete first before inserting in order to avoid deleting the remediated one
-            logger.info("remediateAtMostOneValidRS - Delete Merged (SVE): " + gson.toJson(sveDeleteList))
-            logger.info("remediateAtMostOneValidRS - Delete Merged (DBSNSVE): " + gson.toJson(dbsnpSveDeleteList))
-            if (sveDeleteList != null && !sveDeleteList.isEmpty()) {
-                removeMergedSVE(sveDeleteList, sveClass)
-            }
-            if (dbsnpSveDeleteList != null && !dbsnpSveDeleteList.isEmpty()) {
-                removeMergedSVE(dbsnpSveDeleteList, dbsnpSveClass)
-            }
-
-            // insert updated SVEs into DB
-            logger.info("remediateAtMostOneValidRS - Insert (SVE): " + gson.toJson(sveInsertList))
-            logger.info("remediateAtMostOneValidRS - Insert (DBSNPSVE): " + gson.toJson(dbsnpSveInsertList))
-            if (sveInsertList != null && !sveInsertList.isEmpty()) {
-                dbEnv.mongoTemplate.insert(sveInsertList, sveClass)
-            }
-            if (dbsnpSveInsertList != null && !dbsnpSveInsertList.isEmpty()) {
-                dbEnv.mongoTemplate.insert(dbsnpSveInsertList, dbsnpSveClass)
-            }
-
-            if (!sveRSUpdateList.isEmpty() || !dbsnpSveRSUpdateList.isEmpty()) {
-                updateRSForSVe(sveRSUpdateList, dbsnpSveRSUpdateList)
-            }
+    SubmittedVariantEntity getSveForHash(String hash) {
+        List<SubmittedVariantEntity> sveList = [sveClass, dbsnpSveClass]
+                .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("_id").is(hash)), ssClass))
+                .flatten()
+        if (sveList.size() > 1) {
+            throw new RuntimeException("Multiple sve found for hash " + hash)
         }
+        return sveList.get(0)
     }
 
-    void updateRSForSVe(List<SubmittedVariantEntity> sveUpdateList, List<SubmittedVariantEntity> dbsnpSveUpdateList) {
-        logger.info("remediateAtMostOneValidRS - Update RS (SVE): " + gson.toJson(sveUpdateList))
-        logger.info("remediateAtMostOneValidRS - Update RS (DBSNPSVE): " + gson.toJson(dbsnpSveUpdateList))
-
-        def sveBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, sveClass)
-        def dbsnpSveBulkUpdates = dbEnv.mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, dbsnpSveClass)
-
-        for (SubmittedVariantEntity sve : sveUpdateList) {
-            Query findQuery = query(where("_id").is(sve.getHashedMessage()).and("rs").exists(false))
-            Update updateQuery = new Update().set("rs", sve.getClusteredVariantAccession())
-            sveBulkUpdates.updateOne(findQuery, updateQuery)
-        }
-
-        for (SubmittedVariantEntity dbsnpSve : dbsnpSveUpdateList) {
-            Query findQuery = query(where("_id").is(dbsnpSve.getHashedMessage()).and("rs").exists(false))
-            Update updateQuery = new Update().set("rs", dbsnpSve.getClusteredVariantAccession())
-            dbsnpSveBulkUpdates.updateOne(findQuery, updateQuery)
-        }
-
-        //execute all bulk updates
-        sveBulkUpdates.execute()
-        dbsnpSveBulkUpdates.execute()
-    }
-
-    Class getCollection(Set<String> sveCollection, Set<String> dbsnpSVECollection, SubmittedVariantEntity sve) {
-        if (sveCollection.contains(sve.getHashedMessage())) {
+    Class getCollectionOfSVE(String hash) {
+        List<SubmittedVariantEntity> sveList = dbEnv.mongoTemplate.find(query(where("_id").is(hash)), sveClass)
+        if (sveList != null && !sveList.isEmpty()) {
             return sveClass
-        } else if (dbsnpSVECollection.contains(sve.getHashedMessage())) {
-            return dbsnpSveClass
         } else {
-            throw new RuntimeException("Could not find the collection for sve " + gson.toJson(sve))
+            List<SubmittedVariantEntity> dbsnpSveList = dbEnv.mongoTemplate.find(query(where("_id").is(hash)), dbsnpSveClass)
+            if (dbsnpSveList != null && !dbsnpSveList.isEmpty()) {
+                return dbsnpSveClass
+            } else {
+                throw new RuntimeException("SVE with hash " + hash + " could not be found")
+            }
+        }
+    }
+
+    List<ClusteredVariantEntity> getCVEInDB(Long... accessions) {
+        Set<Long> accList = new ArrayList<>()
+        for (Long acc : accessions) {
+            accList.add(acc)
+        }
+        logger.info("getting CVE for accessions " + gson.toJson(accList))
+        List<ClusteredVariantEntity> cveInDBList = [cveClass, dbsnpCveClass]
+                .collectMany(cveClass -> dbEnv.mongoTemplate.find(query(where("accession").in(accList)), cveClass))
+                .flatten()
+
+        return cveInDBList
+    }
+
+    boolean checkIfValidRS(Long rs, String asm, List<ClusteredVariantEntity> cveList) {
+        if (rs == null) {
+            return false
+        } else {
+            Optional<ClusteredVariantEntity> opRS = cveList.stream()
+                    .filter(cve -> cve.getAccession() == rs && cve.getAssemblyAccession() == asm)
+                    .findAny()
+            if (opRS.isPresent()) {
+                return true
+            } else {
+                return false
+            }
+        }
+    }
+
+    CATEGORY getCollisionCategory(Long rsInFile, Long rsInDB, boolean rsInFileValid, boolean rsInDBValid) {
+        if (rsInFile == null && rsInDB == null) {
+            // none of the SVE contains any RS
+            return CATEGORY.NO_SVE_HAS_RS
+        } else if (rsInFile != null && rsInDB != null) {
+            // both the SVE contains RS
+            if (!rsInFileValid && !rsInDBValid) {
+                // both the RS are invalid
+                return CATEGORY.BOTH_SVE_HAS_RS_NONE_VALID
+            } else if (rsInFileValid && rsInDBValid) {
+                //both the RS are valid
+                return CATEGORY.BOTH_SVE_HAS_RS_BOTH_VALID
+            } else if (!rsInFileValid || !rsInDBValid) {
+                // one RS is valid while the other is Invalid
+                return CATEGORY.BOTH_SVE_HAS_RS_ONE_VALID
+            }
+        } else if (rsInFile != null || rsInDB != null) {
+            // one of the SVE contains RS
+            if (!rsInFileValid && !rsInDBValid) {
+                // one of the SVE contains RS but that RS is not valid
+                return CATEGORY.ONE_SVE_HAS_RS_NONE_VALID
+            } else if (rsInFileValid || rsInDBValid) {
+                // one of the SVE contains a valid RS
+                return CATEGORY.ONE_SVE_HAS_RS_ONE_VALID
+            }
         }
     }
 
@@ -426,19 +264,6 @@ class SummariseHashCollision {
                 .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("seq").is(asm).and("accession").is(acc)), ssClass))
                 .flatten()
         return dbSVEList
-    }
-
-    void removeMergedSVE(List<SubmittedVariantEntity> mergeSVEList, Class ssClass) {
-        List<String> mergedSVEIds = mergeSVEList.stream()
-                .map(sve -> sve.getHashedMessage())
-                .collect(Collectors.toList())
-        List<String> mergedSVEAcc = mergeSVEList.stream()
-                .map(sve -> sve.getAccession())
-                .collect(Collectors.toList())
-
-        Query findQuery = query(where("_id").in(mergedSVEIds).and("accession").in(mergedSVEAcc))
-
-        dbEnv.mongoTemplate.remove(findQuery, ssClass)
     }
 
     SubmittedVariantEntity getRemediatedSVE(SubmittedVariantEntity submittedVariantEntity) {
@@ -463,6 +288,173 @@ class SummariseHashCollision {
         return svoe
     }
 
+
+    void remediateCategoryAtMostOneValidRS() {
+        String[] affectedAsmList = [
+                "GCA_000002285.2", "GCA_000002315.3", "GCA_000003055.5", "GCA_011100555.1", "GCA_000002035.3",
+                "GCA_000001635.6", "GCA_000349105.1", "GCA_016772045.1", "GCA_000003025.6", "GCA_000349185.1",
+                "GCA_000247795.2", "GCA_000473445.2",
+                "GCA_001433935.1"
+        ]
+        for (String assembly : affectedAsmList) {
+            logger.info("processing for assembly: " + assembly)
+            File asmHashCollisionFile = new File(baseDirPath + "/" + assembly + "/hash_collision.txt")
+            // read all the hash collision SVE from the file
+            List<SubmittedVariantEntity> sveInCollisionFile = Files.lines(asmHashCollisionFile.toPath())
+                    .flatMap(line -> getListOfSVEFromLine(line).stream())
+                    .collect(Collectors.toList())
+            logger.info("Number of sve in collision file: " + sveInCollisionFile.size())
+            // process all SVEs one by one
+            for (SubmittedVariantEntity sveInFile : sveInCollisionFile) {
+                logger.info("processing sve in file: " + gson.toJson(sveInFile))
+                SubmittedVariantEntity sveInDB = getSveForHash(getSVENewHash(sveInFile))
+                logger.info("processing sve in DB: " + gson.toJson(sveInDB))
+
+                Class sveInFileCollection = getCollectionOfSVE(sveInFile.getHashedMessage())
+                Class sveInDBCollection = getCollectionOfSVE(sveInDB.getHashedMessage())
+                logger.info("sveInFileCollection: " + sveInFileCollection)
+                logger.info("sveInDBCollection: " + sveInDBCollection)
+
+                Long rsInFile = sveInFile.getClusteredVariantAccession()
+                Long rsInDB = sveInDB.getClusteredVariantAccession()
+                logger.info("rsInFile: " + rsInFile)
+                logger.info("rsInDB: " + rsInDB)
+
+                List<ClusteredVariantEntity> cveInDBList = getCVEInDB(rsInFile, rsInDB)
+                logger.info("CVE list: " + gson.toJson(cveInDBList))
+
+                boolean rsInFileValid = checkIfValidRS(rsInFile, sveInFile.getReferenceSequenceAccession(), cveInDBList)
+                boolean rsInDBValid = checkIfValidRS(rsInDB, sveInDB.getReferenceSequenceAccession(), cveInDBList)
+                logger.info("rsInFile Valid: " + rsInFileValid)
+                logger.info("rsInDB Valid: " + rsInDBValid)
+
+                CATEGORY colCategory = getCollisionCategory(rsInFile, rsInDB, rsInFileValid, rsInDBValid)
+                logger.info("Collision Category: " + colCategory)
+
+                // check if only one valid rs is present among both collision SVEs
+                if (colCategory == CATEGORY.BOTH_SVE_HAS_RS_BOTH_VALID) {
+                    logger.info("Collision Category is having both RS Valid. skipping")
+                    continue
+                }
+
+                // assume we need to keep the sve in db and merge the sve in file (lowercase)
+                SubmittedVariantEntity sveToKeep = sveInDB
+                SubmittedVariantEntity sveToMerge = sveInFile
+                boolean sveToKeepRSValid = rsInDBValid
+                boolean sveToMergeRSValid = rsInFileValid
+                Boolean sveToKeepIsInFile = false
+
+                if (sveInFile.getRemappedFrom() == null && sveInDB.getRemappedFrom() == null) {
+                    // case 1: both are not remapped (take the one with lowest created date/accession)
+                    if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
+                        sveToKeep = sveInFile
+                        sveToMerge = sveInDB
+                        sveToKeepRSValid = rsInFileValid
+                        sveToMergeRSValid = rsInDBValid
+                        sveToKeepIsInFile = true
+                    } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
+                        if (sveInFile.getAccession() < sveInDB.getAccession()) {
+                            sveToKeep = sveInFile
+                            sveToMerge = sveInDB
+                            sveToKeepRSValid = rsInFileValid
+                            sveToMergeRSValid = rsInDBValid
+                            sveToKeepIsInFile = true
+                        }
+                    }
+                } else if (sveInFile.getRemappedFrom() != null && sveInDB.getRemappedFrom() != null) {
+                    // case 2: both are remapped check which sve accession is present in original assembly that gets the priority
+                    List<SubmittedVariantEntity> sveInFileOrgAsm = findSVEAccessionInOrgAssembly(sveInFile.getRemappedFrom(), sveInFile.getAccession())
+                    List<SubmittedVariantEntity> sveInDBOrgAsm = findSVEAccessionInOrgAssembly(sveInDB.getRemappedFrom(), sveInDB.getAccession())
+                    if (((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm != null && !sveInDBOrgAsm.isEmpty()))
+                            || ((sveInFileOrgAsm == null || sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()))) {
+                        // both sve accession are present in original assembly or both sve accession are not present in the original assembly
+                        // similar to case 1 - take the one with lower created date and sve accession
+                        if (sveInFile.getCreatedDate().isBefore(sveInDB.getCreatedDate())) {
+                            sveToKeep = sveInFile
+                            sveToMerge = sveInDB
+                            sveToKeepRSValid = rsInFileValid
+                            sveToMergeRSValid = rsInDBValid
+                            sveToKeepIsInFile = true
+                        } else if (sveInFile.getCreatedDate().isEqual(sveInDB.getCreatedDate())) {
+                            if (sveInFile.getAccession() < sveInDB.getAccession()) {
+                                sveToKeep = sveInFile
+                                sveToMerge = sveInDB
+                                sveToKeepRSValid = rsInFileValid
+                                sveToMergeRSValid = rsInDBValid
+                                sveToKeepIsInFile = true
+                            }
+                        }
+                    } else {
+                        // only one asm accession is present in original assembly, take the one that is present
+                        if ((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty())) {
+                            sveToKeep = sveInFile
+                            sveToMerge = sveInDB
+                            sveToKeepRSValid = rsInFileValid
+                            sveToMergeRSValid = rsInDBValid
+                            sveToKeepIsInFile = true
+                        }
+                    }
+                } else if (sveInFile.getRemappedFrom() == null || sveInDB.getRemappedFrom() == null) {
+                    // case 3: only one is remapped , non remapped one gets the priority
+                    if (sveInFile.getRemappedFrom() == null && sveInDB.getRemappedFrom() != null) {
+                        sveToKeep = sveInFile
+                        sveToMerge = sveInDB
+                        sveToKeepRSValid = rsInFileValid
+                        sveToMergeRSValid = rsInDBValid
+                        sveToKeepIsInFile = true
+                    }
+                }
+
+                logger.info("sve to keep: " + gson.toJson(sveToKeep))
+                logger.info("sve to merge: " + gson.toJson(sveToMerge))
+
+                Class sveToKeepCollection = getCollectionOfSVE(sveToKeep.getHashedMessage())
+                Class sveToMergeCollection = getCollectionOfSVE(sveToMerge.getHashedMessage())
+                logger.info("sve to keep collection: " + sveToKeepCollection)
+                logger.info("sve to merge collection: " + sveToMergeCollection)
+
+                // create a merge operation for SVE to merge
+                SubmittedVariantOperationEntity sveMergeOperation = getSVOEForMergeOperation(sveToMerge, sveToKeep.getAccession())
+                logger.info("SVOE Merge Collection Entry : " + gson.toJson(sveMergeOperation))
+                dbEnv.mongoTemplate.insert(Arrays.asList(sveMergeOperation), sveToMergeCollection == sveClass ? svoeClass : dbsnpSvoeClass)
+
+                // delete the merged SVE
+                logger.info("Delete Merged SVE : " + gson.toJson(sveToMerge))
+                Query mergedDeleteQuery = query(where("_id").is(sveToMerge.getHashedMessage()).and("accession").in(sveToMerge.getAccession()))
+                dbEnv.mongoTemplate.remove(mergedDeleteQuery, sveToMergeCollection)
+
+                if (sveToKeepIsInFile) {
+                    // delete the lowercase sve (will insert the remediated one)
+                    logger.info("Delete LowerCase SVE: " + gson.toJson(sveToKeep))
+                    Query lowerCaseDeleteQuery = query(where("_id").is(sveToKeep.getHashedMessage()).and("accession").in(sveToKeep.getAccession()))
+                    dbEnv.mongoTemplate.remove(lowerCaseDeleteQuery, sveToKeepCollection)
+
+                    // if SVE to keep does not have a valid RS but SVE to merge has, copy the valid RS to SVE to Keep
+                    if (sveToKeepRSValid == false && sveToMergeRSValid == true) {
+                        sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
+                    }
+
+                    // remediate and add the sve to the db
+                    SubmittedVariantEntity remediatedSVE = getRemediatedSVE(sveToKeep)
+                    logger.info("Remediated SVE: " + gson.toJson(remediatedSVE))
+                    dbEnv.mongoTemplate.insert(Arrays.asList(remediatedSVE), sveToKeepCollection)
+                } else {
+                    // if sve to keep is present in db but does not have a valid rs, then update the rs
+                    if (sveToKeepRSValid == false && sveToMergeRSValid == true) {
+                        logger.info("SVE for which RS needs to be updated: " + gson.toJson(sveToKeep))
+                        sveToKeep.setClusteredVariantAccession(sveToMerge.getClusteredVariantAccession())
+                        logger.info("SVE after RS update: " + gson.toJson(sveToKeep))
+
+                        Query updateFindQuery = query(where("_id").is(sveToKeep.getHashedMessage()))
+                        Update updateQuery = new Update().set("rs", sveToKeep.getClusteredVariantAccession())
+                        dbEnv.mongoTemplate.updateFirst(updateFindQuery, updateQuery, sveToKeepCollection)
+                    }
+
+                }
+            }
+        }
+    }
+
     void runSummary() {
         buildSummary()
         //printSummary()
@@ -475,12 +467,12 @@ class SummariseHashCollision {
 
 
 enum CATEGORY {
-    NO_SVE_HAS_RS,              // 0
-    ONE_SVE_HAS_RS_NONE_VALID,  // 0
-    ONE_SVE_HAS_RS_ONE_VALID,   // 23262
-    BOTH_SVE_HAS_RS_NONE_VALID, // 51
-    BOTH_SVE_HAS_RS_ONE_VALID,  // 26
-    BOTH_SVE_HAS_RS_BOTH_VALID  // 161
+    NO_SVE_HAS_RS,
+    ONE_SVE_HAS_RS_NONE_VALID,
+    ONE_SVE_HAS_RS_ONE_VALID,
+    BOTH_SVE_HAS_RS_NONE_VALID,
+    BOTH_SVE_HAS_RS_ONE_VALID,
+    BOTH_SVE_HAS_RS_BOTH_VALID
 }
 
 class CollisionSummary {
