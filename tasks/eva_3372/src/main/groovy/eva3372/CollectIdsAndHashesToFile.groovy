@@ -38,6 +38,7 @@ class CollectIdsAndHashesToFile {
                 if (!remappedSves.isEmpty()) {
                     def rsIdAndCveHash = remappedSves.collect{ new Tuple(it.clusteredVariantAccession, EVAObjectModelUtils.getClusteredVariantHash(it)) }
                     writeToFile(rsIdAndCveHash)
+                    numRecordsProcessed += remappedSves.size()
                     logger.info("${numRecordsProcessed} SS processed so far...")
                 }
             }
