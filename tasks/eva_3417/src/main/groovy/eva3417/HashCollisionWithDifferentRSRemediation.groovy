@@ -37,7 +37,7 @@ if (!options) {
     System.exit(1)
 }
 
-new SummariseHashCollision(options.envPropertiesFile, options.baseDirPath, options.summaryFilePath).runSummary()
+new SummariseHashCollision(options.envPropertiesFile, options.baseDirPath, options.summaryFilePath).runSummaryAndRemediate()
 
 class SummariseHashCollision {
     private EVADatabaseEnvironment dbEnv
@@ -231,7 +231,7 @@ class SummariseHashCollision {
         }
     }
 
-    CATEGORY getCollisionCategory(Long rsInFile, Long rsInDB, boolean rsInFileValid, boolean rsInDBValid) {
+    static CATEGORY getCollisionCategory(Long rsInFile, Long rsInDB, boolean rsInFileValid, boolean rsInDBValid) {
         if (rsInFile == null && rsInDB == null) {
             // none of the SVE contains any RS
             return CATEGORY.NO_SVE_HAS_RS
@@ -259,9 +259,9 @@ class SummariseHashCollision {
         }
     }
 
-    List<SubmittedVariantEntity> findSVEAccessionInOrgAssembly(String asm, Long acc) {
+    List<SubmittedVariantEntity> findSVEAccessionInOrigAssembly(SubmittedVariantEntity sve) {
         List<SubmittedVariantEntity> dbSVEList = [sveClass, dbsnpSveClass]
-                .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("seq").is(asm).and("accession").is(acc)), ssClass))
+                .collectMany(ssClass -> dbEnv.mongoTemplate.find(query(where("seq").is(sve.getRemappedFrom()).and("accession").is(sve.getAccession())), ssClass))
                 .flatten()
         return dbSVEList
     }
@@ -366,8 +366,8 @@ class SummariseHashCollision {
                     }
                 } else if (sveInFile.getRemappedFrom() != null && sveInDB.getRemappedFrom() != null) {
                     // case 2: both are remapped check which sve accession is present in original assembly that gets the priority
-                    List<SubmittedVariantEntity> sveInFileOrgAsm = findSVEAccessionInOrgAssembly(sveInFile.getRemappedFrom(), sveInFile.getAccession())
-                    List<SubmittedVariantEntity> sveInDBOrgAsm = findSVEAccessionInOrgAssembly(sveInDB.getRemappedFrom(), sveInDB.getAccession())
+                    List<SubmittedVariantEntity> sveInFileOrgAsm = findSVEAccessionInOrigAssembly(sveInFile)
+                    List<SubmittedVariantEntity> sveInDBOrgAsm = findSVEAccessionInOrigAssembly(sveInDB)
                     if (((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm != null && !sveInDBOrgAsm.isEmpty()))
                             || ((sveInFileOrgAsm == null || sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty()))) {
                         // both sve accession are present in original assembly or both sve accession are not present in the original assembly
@@ -388,7 +388,7 @@ class SummariseHashCollision {
                             }
                         }
                     } else {
-                        // only one asm accession is present in original assembly, take the one that is present
+                        // only one sve accession is present in original assembly, take the one that is present
                         if ((sveInFileOrgAsm != null && !sveInFileOrgAsm.isEmpty()) && (sveInDBOrgAsm == null || sveInDBOrgAsm.isEmpty())) {
                             sveToKeep = sveInFile
                             sveToMerge = sveInDB
@@ -458,7 +458,7 @@ class SummariseHashCollision {
         }
     }
 
-    void runSummary() {
+    void runSummaryAndRemediate() {
         buildSummary()
         //printSummary()
         writeSummaryToFile()
@@ -498,7 +498,7 @@ class CollisionSummary {
         this.rsInDB = sveInDB.getClusteredVariantAccession()
         this.rsInDBValid = checkIfValidRS(cveInDB, rsInDB, sveInDB.getReferenceSequenceAccession())
 
-        this.category = identifyCategory()
+        this.category = SummariseHashCollision.getCollisionCategory(rsInFile, rsInDB, rsInFileValid, rsInDBValid)
     }
 
     boolean checkIfValidRS(Map<Long, List<ClusteredVariantEntity>> cveInDB, Long rs, String asm) {
@@ -517,34 +517,6 @@ class CollisionSummary {
                 } else {
                     return false
                 }
-            }
-        }
-    }
-
-    CATEGORY identifyCategory() {
-        if (rsInFile == null && rsInDB == null) {
-            // none of the SVE contains any RS
-            return CATEGORY.NO_SVE_HAS_RS
-        } else if (rsInFile != null && rsInDB != null) {
-            // both the SVE contains RS
-            if (!rsInFileValid && !rsInDBValid) {
-                // both the RS are invalid
-                return CATEGORY.BOTH_SVE_HAS_RS_NONE_VALID
-            } else if (rsInFileValid && rsInDBValid) {
-                //both the RS are valid
-                return CATEGORY.BOTH_SVE_HAS_RS_BOTH_VALID
-            } else if (!rsInFileValid || !rsInDBValid) {
-                // one RS is valid while the other is Invalid
-                return CATEGORY.BOTH_SVE_HAS_RS_ONE_VALID
-            }
-        } else if (rsInFile != null || rsInDB != null) {
-            // one of the SVE contains RS
-            if (!rsInFileValid && !rsInDBValid) {
-                // one of the SVE contains RS but that RS is not valid
-                return CATEGORY.ONE_SVE_HAS_RS_NONE_VALID
-            } else if (rsInFileValid || rsInDBValid) {
-                // one of the SVE contains a valid RS
-                return CATEGORY.ONE_SVE_HAS_RS_ONE_VALID
             }
         }
     }
