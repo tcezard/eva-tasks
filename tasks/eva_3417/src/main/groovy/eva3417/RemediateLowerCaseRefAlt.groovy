@@ -31,6 +31,7 @@ import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 def cli = new CliBuilder()
 cli.envPropertiesFile(args: 1, "Production properties file for connecting to prod db", required: true)
 cli.hashcollisionFile(args: 2, "Path to the file to store hash collision ids", required: true)
+cli.assembly(args: 3, "assembly to remediate", required: true)
 
 def options = cli.parse(args)
 if (!options) {
@@ -39,18 +40,24 @@ if (!options) {
 }
 
 // call to remediate lowercase nucleotide
-new RemediateLowerCaseNucleotide(options.envPropertiesFile, options.hashcollisionFile).remediate()
+new RemediateLowerCaseNucleotide(options.envPropertiesFile, options.hashcollisionFile, options.assembly).remediate()
 
 class RemediateLowerCaseNucleotide {
     private String hashCollisionFilePath
     private EVADatabaseEnvironment dbEnv
+    private String assembly
     private Function<ISubmittedVariant, String> hashingFunction
     static def logger = LoggerFactory.getLogger(Application.class)
     private Gson gson
 
-    RemediateLowerCaseNucleotide(envPropertiesFile, hashcollisionFile) {
+    RemediateLowerCaseNucleotide(envPropertiesFile, hashcollisionFile, assembly) {
         this.dbEnv = createFromSpringContext(envPropertiesFile, Application.class)
         this.hashCollisionFilePath = hashcollisionFile
+        if(assembly==null || assembly.isEmpty()){
+            throw new RuntimeException("Assembly not provided")
+        }else{
+            this.assembly = assembly
+        }
         this.hashingFunction = new SubmittedVariantSummaryFunction().andThen(new SHA1HashingFunction())
         this.gson = new Gson()
     }
@@ -172,19 +179,27 @@ class RemediateLowerCaseNucleotide {
         }
 
         // discard SVEs
-        logger.info("Hash Collision Discard SVE List: " + gson.toJson(SVEToDiscardList))
-        discardSVEAndInsertOperations(SVEToDiscardList, ssClass)
+        if(!SVEToDiscardList.isEmpty()){
+            logger.info("Hash Collision Discard SVE List: " + gson.toJson(SVEToDiscardList))
+            discardSVEAndInsertOperations(SVEToDiscardList, ssClass)
+        }
 
         // merge SVEs
-        mergeSVEAndInsertOperations(SVEToMergeMap, ssClass)
+        if(!SVEToMergeMap.isEmpty()){
+            mergeSVEAndInsertOperations(SVEToMergeMap, ssClass)
+        }
 
         // Insert SVEs
-        logger.info("Hash Collision Insert SVE List: " + gson.toJson(SVEToInsertList))
-        insertSVEWithNewHash(SVEToInsertList, ssClass)
+        if(!SVEToInsertList.isEmpty()){
+            logger.info("Hash Collision Insert SVE List: " + gson.toJson(SVEToInsertList))
+            insertSVEWithNewHash(SVEToInsertList, ssClass)
+        }
 
         // delete the corrected SVEs
-        logger.info("Hash Collision Remove SVE List: " + gson.toJson(SVEToRemoveList))
-        removeImpactedSVE(SVEToRemoveList, ssClass)
+        if(!SVEToRemoveList.isEmpty()){
+            logger.info("Hash Collision Remove SVE List: " + gson.toJson(SVEToRemoveList))
+            removeImpactedSVE(SVEToRemoveList, ssClass)
+        }
 
     }
 
@@ -267,7 +282,8 @@ class RemediateLowerCaseNucleotide {
 
     void documentInFile(List<SubmittedVariantEntity> sveList) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.hashCollisionFilePath, true))) {
-            writer.write(sveList)
+            writer.write(gson.toJson(sveList))
+            writer.write("\n")
         } catch (IOException e) {
             e.printStackTrace()
         }
@@ -372,7 +388,7 @@ class RemediateLowerCaseNucleotide {
                     long totalProcessed = 0
                     long totalImpacted = 0
                     // read all the documents from SubmittedVariantEntity
-                    new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria(), dbEnv.mongoTemplate, ssClass).each {
+                    new RetryableBatchingCursor<SubmittedVariantEntity>(new Criteria("seq").is(this.assembly), dbEnv.mongoTemplate, ssClass).each {
                         sveBatchList ->
                             {
                                 logger.info("start: processing batch : " + LocalDateTime.now())
@@ -450,7 +466,9 @@ class RemediateLowerCaseNucleotide {
 
                                     // process sve with no hash collision
                                     logger.info("Impacted sve List (No Hash Collision): " + gson.toJson(noHashCollisionSVEList))
-                                    processNoHashCollision(noHashCollisionSVEList, ssClass)
+                                    if (!noHashCollisionSVEList.isEmpty()) {
+                                        processNoHashCollision(noHashCollisionSVEList, ssClass)
+                                    }
 
                                     // process sve with hash collision
                                     if (hashCollisionSVEList != null && !hashCollisionSVEList.isEmpty()) {
