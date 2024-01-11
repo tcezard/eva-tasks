@@ -8,7 +8,6 @@ import org.springframework.batch.item.ExecutionContext
 import org.springframework.batch.item.ItemProcessor
 import uk.ac.ebi.ampt2d.commons.accession.hashing.SHA1HashingFunction
 import uk.ac.ebi.eva.accession.core.EVAObjectModelUtils
-import uk.ac.ebi.eva.accession.core.model.ISubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.SubmittedVariant
 import uk.ac.ebi.eva.accession.core.model.eva.SubmittedVariantEntity
 import uk.ac.ebi.eva.accession.core.summary.SubmittedVariantSummaryFunction

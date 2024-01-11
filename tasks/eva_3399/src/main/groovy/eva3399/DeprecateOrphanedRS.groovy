@@ -28,7 +28,7 @@ class DeprecateOrphanedRS {
                 this.dbEnv.springApplicationContext.getBean("accessioningMonotonicInitRs", Long.class),
                 deprecationIdSuffix, "RS orphaned due to locus not used by any SS")
         def opsOfImpactedSS = [svoeClass, dbsnpSvoeClass].collect{new RetryableBatchingCursor<>(
-                where("_id").regex("EVA3399_UPD_LOCUS_${this.assembly}_.*"), this.dbEnv.mongoTemplate, it)}
+                where("_id").regex("^EVA3399_UPD_LOCUS_${this.assembly}_.*"), this.dbEnv.mongoTemplate, it)}
         opsOfImpactedSS.each{it.each{opsInBatch ->
             def ssOpsGroupedByRSHashes = opsInBatch.groupBy{
                 EVAObjectModelUtils.getClusteredVariantHash(it.inactiveObjects[0])}

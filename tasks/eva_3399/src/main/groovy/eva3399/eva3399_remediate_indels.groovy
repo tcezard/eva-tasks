@@ -1,5 +1,7 @@
 package eva3399
 
+import com.mongodb.ReadPreference
+import com.mongodb.WriteConcern
 import eva3399.*
 import groovy.cli.picocli.CliBuilder
 import uk.ac.ebi.eva.accession.clustering.Application as ClusteringApplication
@@ -37,6 +39,7 @@ if (!options) {
 }
 
 String assemblyToRemediate = options.assemblyAccession
+int taxonomyToRemediate = options.taxonomy.toInteger()
 String fastaDir = options.fastaDir
 def (customFastaFilePath, customAssemblyReportPath) = getCustomFastaAndAssemblyReportPaths(assemblyToRemediate, fastaDir)
 String outputDirForAssembly = "${options.remappingOutputDir}/${assemblyToRemediate}"
@@ -44,10 +47,9 @@ String rsReportPath = "${outputDirForAssembly}/rsReportFile"
 runProcess("mkdir -p ${outputDirForAssembly}")
 List<String> remappedAssemblies = allRemappedAssemblies.getOrDefault(assemblyToRemediate, [])
 // Is this assembly the current target assembly for the taxonomy?
-boolean isTargetAssembly = taxonomyTargetAssemblyMap[options.taxonomy].equals(assemblyToRemediate)
+boolean isTargetAssembly = taxonomyTargetAssemblyMap[taxonomyToRemediate].equals(assemblyToRemediate)
 Set<String> sourceAssemblies = allRemappedAssemblies.findAll{srcAsm, remappedAsms ->
     remappedAsms.contains(assemblyToRemediate)}.keySet()
-
 
 def prodExtractEnv = createFromSpringContext(options.prodPropertiesFile,
         RemappingExtractApplication.class,
@@ -73,6 +75,8 @@ def devEnv =
                 ["parameters.assemblyAccession": assemblyToRemediate, "parameters.fasta": customFastaFilePath,
                  "parameters.assemblyReportUrl": "file:" + customAssemblyReportPath,
                  "parameters.outputFolder"     : outputDirForAssembly])
+prodClusteringEnv.mongoTemplate.setWriteConcern(WriteConcern.MAJORITY)
+prodClusteringEnv.mongoTemplate.setReadPreference(ReadPreference.primary())
 def remediateIndels = new RemediateIndels(assemblyToRemediate, prodClusteringEnv, devEnv, isTargetAssembly)
 remediateIndels.runRemediation()
 
@@ -103,3 +107,5 @@ if(isTargetAssembly) {
 }
 
 new DeprecateOrphanedRS(assemblyToRemediate, prodClusteringEnv).deprecate()
+
+new RemediationQC(assemblyToRemediate, prodClusteringEnv, devEnv, isTargetAssembly).runQC()
