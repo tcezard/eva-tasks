@@ -42,7 +42,7 @@ class CreateMergeCandidates {
         is.eachLine{
             String[] sp_line =  it.split("\\t")
             def hash = sp_line.first()
-            def rsids = sp_line.tail().collect({it.toLong()}).toArray(Long[]::new)
+            def rsids = sp_line.tail().collect({it.toLong()})
             mergedCandidateOperations.add(createSingleMergeCandidate(hash, rsids))
             if (mergedCandidateOperations.size() == batchSize){
                 totalInsertedCount = insertOperations(mergedCandidateOperations, totalInsertedCount)
@@ -57,14 +57,14 @@ class CreateMergeCandidates {
         is.close()
     }
 
-    def insertOperations = {SubmittedVariantOperationEntity[] mergedCandidateOperations, int totalInsertedCount ->
+    def insertOperations = {ArrayList mergedCandidateOperations, int totalInsertedCount ->
         def insertedCount = devEnv.bulkInsertIgnoreDuplicates(mergedCandidateOperations, SubmittedVariantOperationEntity.class)
         totalInsertedCount = totalInsertedCount + insertedCount
         logger.info("Inserted ${totalInsertedCount} Merge candidate documents")
         return totalInsertedCount
     }
 
-    def createSingleMergeCandidate = { String hash, Long[] rsids ->
+    def createSingleMergeCandidate = { String hash, List<Long> rsids ->
         def evaAndDbsnpSveCursors = [sveClass, dbsnpSveClass].collect { collectionClass ->
             prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsids)), collectionClass)
         }
