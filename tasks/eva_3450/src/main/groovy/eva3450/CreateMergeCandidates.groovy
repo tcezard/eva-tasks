@@ -38,29 +38,31 @@ class CreateMergeCandidates {
         def is = new File(mergeCandidatesFile).newInputStream()
         logger.info("Create Merge candidate documents in batches of ${batchSize}")
         int totalInsertedCount = 0
+        int lineRead = 0
         def mergedCandidateOperations = []
         is.eachLine{
+            lineRead = lineRead + 1
             String[] sp_line =  it.split("\\t")
             def hash = sp_line.first()
             def rsids = sp_line.tail().collect({it.toLong()})
             mergedCandidateOperations.add(createSingleMergeCandidate(hash, rsids))
             if (mergedCandidateOperations.size() == batchSize){
-                totalInsertedCount = insertOperations(mergedCandidateOperations, totalInsertedCount)
+                totalInsertedCount = insertOperations(mergedCandidateOperations, totalInsertedCount, lineRead)
                 mergedCandidateOperations = [];
             }
         }
 
         if (mergedCandidateOperations.size() > 0){
-            totalInsertedCount = insertOperations(mergedCandidateOperations, totalInsertedCount)
+            totalInsertedCount = insertOperations(mergedCandidateOperations, totalInsertedCount, lineRead)
             mergedCandidateOperations = [];
         }
         is.close()
     }
 
-    def insertOperations = {ArrayList mergedCandidateOperations, int totalInsertedCount ->
+    def insertOperations = {ArrayList mergedCandidateOperations, int totalInsertedCount, int lineRead ->
         def insertedCount = devEnv.bulkInsertIgnoreDuplicates(mergedCandidateOperations, SubmittedVariantOperationEntity.class)
         totalInsertedCount = totalInsertedCount + insertedCount
-        logger.info("Inserted ${totalInsertedCount} Merge candidate documents")
+        logger.info("Read ${lineRead}, Inserted ${totalInsertedCount} Merge candidate documents")
         return totalInsertedCount
     }
 

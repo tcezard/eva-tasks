@@ -39,29 +39,31 @@ class CreateSplitCandidates {
         def is = new File(splitCandidatesFile).newInputStream()
         logger.info("Create Split candidate documents in batches of ${batchSize}")
         int totalInsertedCount = 0
+        int lineRead = 0
         def splitCandidateOperations = []
 
         is.eachLine{
+            lineRead = lineRead + 1
             String[] sp_line = it.split("\\t")
             def rsid = sp_line.first().toLong()
             def hashes = sp_line.tail()
             splitCandidateOperations.add(createSingleSplitCandidate(rsid, hashes))
             if (splitCandidateOperations.size() == batchSize){
-                totalInsertedCount = insertOperations(splitCandidateOperations, totalInsertedCount)
+                totalInsertedCount = insertOperations(splitCandidateOperations, totalInsertedCount, lineRead)
                 splitCandidateOperations = [];
             }
         }
         if (splitCandidateOperations.size() > 0){
-            totalInsertedCount = insertOperations(splitCandidateOperations, totalInsertedCount)
+            totalInsertedCount = insertOperations(splitCandidateOperations, totalInsertedCount, lineRead)
             splitCandidateOperations = [];
         }
         is.close()
 
     }
-    def insertOperations = {SubmittedVariantOperationEntity[] splitCandidateOperations, int totalInsertedCount ->
+    def insertOperations = {ArrayList splitCandidateOperations, int totalInsertedCount, int lineRead ->
         def insertedCount = devEnv.bulkInsertIgnoreDuplicates(splitCandidateOperations, SubmittedVariantOperationEntity.class)
         totalInsertedCount = totalInsertedCount + insertedCount
-        logger.info("Inserted ${totalInsertedCount} Split candidate documents")
+        logger.info("Read ${lineRead}, Inserted ${totalInsertedCount} Split candidate documents")
         return totalInsertedCount
     }
 
