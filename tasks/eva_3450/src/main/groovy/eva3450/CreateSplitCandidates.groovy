@@ -73,7 +73,6 @@ class CreateSplitCandidates {
         }
         def allSves = evaAndDbsnpSveCursors.each { cursor ->
             cursor.each { sves -> sves}}.flatten()
-        def hashSet = allSves.collect { SubmittedVariantEntity sve -> EVAObjectModelUtils.getClusteredVariantHash(sve) }.toSet()
         assertSplitIsValid(allSves, hashes)
         // create SPLIT_CANDIDATE operation
         def submittedVariantInactiveEntity = allSves.collect {new SubmittedVariantInactiveEntity(it)}

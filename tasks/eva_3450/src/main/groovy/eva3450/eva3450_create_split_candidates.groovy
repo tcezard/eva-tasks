@@ -33,7 +33,7 @@ if (this.getClass().getName().equals('eva3450.eva3450_create_split_candidates'))
     def devEnv = createFromSpringContext(options.devPropertiesFile, GenericApplication.class)
     def prodEnv = createFromSpringContext(options.prodPropertiesFile, GenericApplication.class)
 
-    new CreateMergeCandidates(options.assemblyAccession, options.rsSplitCandidateFile, prodEnv, devEnv, options.batchSize.toInteger()).process()
+    new CreateSplitCandidates(options.assemblyAccession, options.rsSplitCandidateFile, prodEnv, devEnv, options.batchSize.toInteger()).process()
 
 }
 
