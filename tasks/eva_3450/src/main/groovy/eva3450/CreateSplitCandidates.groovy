@@ -67,13 +67,13 @@ class CreateSplitCandidates {
     }
 
     def createBatchSplitCandidates = { List<String> rsidAndHashes ->
-        Map<Long, String[]> rsidsToHashes = rsidAndHashes.collectEntries {
+        Map<Long, String[]> rsidToHashes = rsidAndHashes.collectEntries {
             String[] sp_line = it.split("\\t")
             def rsid = sp_line.first().toLong()
             def hashes = sp_line.tail()
             return [ (rsid): hashes]
         }
-        def rsids = rsidsToHashes.keySet().toList()
+        def rsids = rsidToHashes.keySet().toList()
         def evaAndDbsnpSveCursors = [sveClass, dbsnpSveClass].collect { collectionClass ->
             prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsids)), collectionClass)
         }
@@ -87,13 +87,13 @@ class CreateSplitCandidates {
             rsidToSves[sve.clusteredVariantAccession].add(sve)
         }
         def splitCandidateOperations= rsids.collect {Long rsid ->
-            def sves = rsidToSves.get(rsid)
-            def hashes = rsidsToHashes.get(rsid)
-            if (! isSplitIsValid(sves, hashes, rsid)) {
+            def sves_to_split = rsidToSves.get(rsid)
+            def hashes = rsidToHashes.get(rsid)
+            if (! isSplitIsValid(sves_to_split, hashes, rsid)) {
                 return null
             }
             // create SPLIT_CANDIDATE operation
-            def submittedVariantInactiveEntity = allSves.collect {new SubmittedVariantInactiveEntity(it)}
+            def submittedVariantInactiveEntity = sves_to_split.collect {new SubmittedVariantInactiveEntity(it)}
             SubmittedVariantOperationEntity svoe = new SubmittedVariantOperationEntity()
             svoe.fill(
                     EventType.RS_SPLIT_CANDIDATES, rsid,
