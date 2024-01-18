@@ -67,11 +67,10 @@ class CreateMergeCandidates {
             return [ (hash): rsids]
         }
         def rsids = hashToRsids.values().toList().flatten()
-        def evaAndDbsnpSveCursors = [sveClass, dbsnpSveClass].collect { collectionClass ->
+        def allSves = [sveClass, dbsnpSveClass]
+                .collectMany( collectionClass ->
             prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsids)), collectionClass)
-        }
-        def allSves = evaAndDbsnpSveCursors.each { cursor ->
-            cursor.each { sves -> sves}}.flatten()
+                ).flatten()
         Map<String, SubmittedVariantEntity[]> hashToSves = new HashMap<>()
         allSves.each {SubmittedVariantEntity sve ->
             def hash = EVAObjectModelUtils.getClusteredVariantHash(sve)

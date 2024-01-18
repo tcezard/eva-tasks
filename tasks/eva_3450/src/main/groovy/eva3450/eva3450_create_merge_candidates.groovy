@@ -8,10 +8,8 @@ import uk.ac.ebi.eva.accession.core.GenericApplication
 import static uk.ac.ebi.eva.groovy.commons.EVADatabaseEnvironment.*
 
 
-// This script collects pending splits and merges from the given assembly in PROD.
-// If DEV environment is provided, will store them in
-// eva3372_accession_sharded.rsIdsWithCveHash and cveHashesWithRsId collections.
-// Otherwise will output intermediate results to file.
+// This script takes a list of duplicated rsids from a file formatted as Hash and multiple rs ids and create a
+// Candidate MERGE in the submitted variant Operation Entity collection
 def cli = new CliBuilder()
 cli.rsMergeCandidateFile(args: 1, "file containing the RS merge candidates (Single Hash multiple rs)", required: true)
 cli.assemblyAccession(args: 1, "Assembly accession where the submitted variant should be found", required: true)

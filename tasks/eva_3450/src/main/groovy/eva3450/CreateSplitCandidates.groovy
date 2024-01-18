@@ -74,11 +74,10 @@ class CreateSplitCandidates {
             return [ (rsid): hashes]
         }
         def rsids = rsidToHashes.keySet().toList()
-        def evaAndDbsnpSveCursors = [sveClass, dbsnpSveClass].collect { collectionClass ->
+        def allSves = [sveClass, dbsnpSveClass]
+                .collectMany( collectionClass ->
             prodEnv.mongoTemplate.find(query(where("seq").is(assembly).and("rs").in(rsids)), collectionClass)
-        }
-        def allSves = evaAndDbsnpSveCursors.each { cursor ->
-            cursor.each { sves -> sves}}.flatten()
+                ).flatten()
         Map<Long, SubmittedVariantEntity[]> rsidToSves = new HashMap<>()
         allSves.each {SubmittedVariantEntity sve ->
             if (! rsidToSves.containsKey(sve.clusteredVariantAccession) ){
