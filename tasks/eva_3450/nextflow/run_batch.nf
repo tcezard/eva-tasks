@@ -4,7 +4,7 @@ nextflow.enable.dsl=2
 
 def helpMessage() {
     log.info"""
-    Process a chunck of a Merge candidate
+    Process a chunk of merge or split candidates
 
     Inputs:
             --source_duplicate_file     File containing list of duplicate (split or merge)
@@ -65,7 +65,7 @@ process load_merge_candidate_variants {
 }
 
 process load_split_candidate_variants {
-    memory '16 GB'
+    memory '8 GB'
 
     input:
     path source_duplicate_file
