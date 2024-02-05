@@ -47,15 +47,15 @@ def get_assemblies_to_update(private_config_xml_file, source_env, target_env, as
 
 
 def copy_md5checksum_for_assemblies(private_config_xml_file, source_env, target_env, assemblies):
-    for asm in assemblies:
-        logger.info(f"Start updating MD5 checksum for assembly: {asm}")
-        src_query = f"""select insdc_accession, md5checksum from chromosome 
-                        where md5checksum is not null and assembly_insdc_accession='{asm}'"""
-        with get_contig_alias_connection_handle(private_config_xml_file, source_env) as source_db_conn:
-            for insdc_acc, md5checksum in get_all_results_for_query(source_db_conn, src_query):
-                target_query = f"""update chromosome set md5checksum='{md5checksum}' 
-                                where assembly_insdc_accession='{asm}' and insdc_accession='{insdc_acc}'"""
-                with get_contig_alias_connection_handle(private_config_xml_file, target_env) as target_db_conn:
+    with get_contig_alias_connection_handle(private_config_xml_file, source_env) as source_db_conn:
+        with get_contig_alias_connection_handle(private_config_xml_file, target_env) as target_db_conn:
+            for asm in assemblies:
+                logger.info(f"Start updating MD5 checksum for assembly: {asm}")
+                src_query = f"""select insdc_accession, md5checksum from chromosome 
+                                where md5checksum is not null and assembly_insdc_accession='{asm}'"""
+                for insdc_acc, md5checksum in get_all_results_for_query(source_db_conn, src_query):
+                    target_query = f"""update chromosome set md5checksum='{md5checksum}' 
+                                        where assembly_insdc_accession='{asm}' and insdc_accession='{insdc_acc}'"""
                     execute_query(target_db_conn, target_query)
 
 
