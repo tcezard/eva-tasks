@@ -24,7 +24,7 @@ def get_contig_alias_connection_handle(settings_xml_file, profile):
 
 def get_assemblies_to_update(private_config_xml_file, source_env, target_env, assembly_list):
     target_asm = set()
-    target_query = f"select distinct assembly_insdc_accession from chromosome"
+    target_query = f"select distinct assembly_insdc_accession from chromosome where md5checksum is null"
     with get_contig_alias_connection_handle(private_config_xml_file, target_env) as target_db_conn:
         for assembly in get_all_results_for_query(target_db_conn, target_query):
             target_asm.add(assembly[0])
