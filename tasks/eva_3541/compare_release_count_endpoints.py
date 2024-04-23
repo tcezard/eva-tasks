@@ -13,8 +13,8 @@ def compare_assembly_release_version(version):
     response = requests.get(v2_per_assembly.format(version=version))
     response.raise_for_status()
     assembly_data_v2 = response.json()
-    assembly_dict_v1 = dict( [(a.get('assemblyAccession'), a) for a in assembly_data_v1] )
-    assembly_dict_v2 = dict( [(a.get('assemblyAccession'), a) for a in assembly_data_v2] )
+    assembly_dict_v1 = dict([(a.get('assemblyAccession'), a) for a in assembly_data_v1])
+    assembly_dict_v2 = dict([(a.get('assemblyAccession'), a) for a in assembly_data_v2])
     assemblies = set(assembly_dict_v1) | set(assembly_dict_v2)
     for assembly_accession in assemblies:
         assembly_data_v1 = assembly_dict_v1.get(assembly_accession)
@@ -48,15 +48,19 @@ def compare_species_release_version(version):
     species_dict_v2 = dict([(a.get('taxonomyId'), a) for a in species_data_v2] )
     taxonomies = set(species_dict_v1) | set(species_dict_v2)
     for taxonomy in taxonomies:
+        scientific_name = None
         species_data_v1 = species_dict_v1.get(taxonomy)
         species_data_v2 = species_dict_v2.get(taxonomy)
+        if species_data_v2:
+            scientific_name = species_data_v2.get('scientificName')
+        elif species_data_v1:
+            scientific_name = species_data_v1.get('scientificName')
         if not species_data_v1:
-            print(f'For release {version}, species {taxonomy} is missing in version 1 of the endpoint ')
+            print(f'For release {version}, species {taxonomy} - {scientific_name} is missing in version 1 of the endpoint ')
             continue
         if not species_data_v2:
-            print(f'For release {version}, species {taxonomy} is missing in version 2 of the endpoint ')
+            print(f'For release {version}, species {taxonomy} - {scientific_name} is missing in version 2 of the endpoint ')
             continue
-        scientific_name = species_data_v2.get('scientificName')
 
         for metric in ['currentRs', 'mergedRs', 'deprecatedRs', 'mergedDeprecatedRs']:
             out = [
